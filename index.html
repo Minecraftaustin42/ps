@@ -4548,7 +4548,17 @@ let currentEditMode = 'translate';
             auto_door: { label: 'Door', type: 'block', color: '#7f8c8d', scale: { x: 1, y: 5, z: 3 }, smart: { kind: 'door', title: 'Auto Door', power: 90, range: 4, team: 'all', advanced: false } },
             shop_terminal: { label: 'Shop', type: 'block', color: '#27ae60', scale: { x: 2.5, y: 3, z: 2 }, smart: { kind: 'shop', title: 'Item Shop', power: 50, range: 5, team: 'all', advanced: false } },
             jump_pad: { label: 'Jump Pad', type: 'block', color: '#1abc9c', scale: { x: 3, y: 0.4, z: 3 }, smart: { kind: 'jumpPad', title: 'Jump Pad', power: 8, range: 2.8, team: 'all', advanced: false } },
-            teleporter: { label: 'Teleporter', type: 'block', color: '#9b59b6', scale: { x: 3, y: 0.5, z: 3 }, smart: { kind: 'teleporter', title: 'Teleporter', power: 0, range: 3, team: 'all', advanced: false } }
+            teleporter: { label: 'Teleporter', type: 'block', color: '#9b59b6', scale: { x: 3, y: 0.5, z: 3 }, smart: { kind: 'teleporter', title: 'Teleporter', power: 0, range: 3, team: 'all', advanced: false } },
+            heal_station: { label: 'Heal Station', type: 'block', color: '#2ecc71', scale: { x: 2, y: 2, z: 2 }, smart: { kind: 'healZone', title: 'Heal Station', power: 8, range: 4, team: 'all', advanced: false } },
+            damage_trap: { label: 'Damage Trap', type: 'block', color: '#c0392b', scale: { x: 3, y: 0.3, z: 3 }, smart: { kind: 'damageZone', title: 'Lava Trap', power: 10, range: 3.2, team: 'all', advanced: false } },
+            speed_boost: { label: 'Speed Zone', type: 'block', color: '#00cec9', scale: { x: 4, y: 0.3, z: 4 }, smart: { kind: 'speedZone', title: 'Boost Zone', power: 30, range: 4.2, team: 'all', advanced: false } },
+            low_gravity: { label: 'Low Gravity', type: 'block', color: '#74b9ff', scale: { x: 4, y: 0.3, z: 4 }, smart: { kind: 'lowGravity', title: 'Moon Zone', power: 50, range: 4.2, team: 'all', advanced: false } },
+            coin_pickup: { label: 'Coin Pickup', type: 'sphere', color: '#f1c40f', scale: { x: 1.2, y: 1.2, z: 1.2 }, smart: { kind: 'coinPickup', title: 'Coin Orb', power: 10, range: 2.4, team: 'all', advanced: false } },
+            moving_platform: { label: 'Moving Platform', type: 'block', color: '#95a5a6', scale: { x: 4, y: 0.6, z: 4 }, smart: { kind: 'movingPlatform', title: 'Lift Platform', power: 3, range: 8, team: 'all', advanced: false } },
+            bounce_ring: { label: 'Bounce Ring', type: 'cylinder', color: '#fd79a8', scale: { x: 3, y: 0.4, z: 3 }, smart: { kind: 'bounceRing', title: 'Bounce Ring', power: 14, range: 3, team: 'all', advanced: false } },
+            turret: { label: 'Auto Turret', type: 'block', color: '#34495e', scale: { x: 2, y: 2, z: 2 }, smart: { kind: 'turret', title: 'Defense Turret', power: 8, range: 14, team: 'all', advanced: false } },
+            music_zone: { label: 'Music Trigger', type: 'block', color: '#8e44ad', scale: { x: 3, y: 0.4, z: 3 }, smart: { kind: 'musicZone', title: 'Music Zone', power: 1, range: 4, team: 'all', advanced: false } },
+            shield_pad: { label: 'Shield Pad', type: 'block', color: '#0984e3', scale: { x: 2.5, y: 0.5, z: 2.5 }, smart: { kind: 'shieldPad', title: 'Shield Pad', power: 8, range: 3, team: 'all', advanced: false } }
         };
 
         const sanitizeSmartText = (value, fallback = '') => String(value || fallback).replace(/[^a-zA-Z0-9 _\-!?.]/g, '').trim().slice(0, 40);
@@ -5268,6 +5278,8 @@ if (item.type === 'button' && item.onClickEvent) {
         };
 
         const damagePlayer = (amount) => {
+            const now = Date.now();
+            if ((playerObj.shieldUntil || 0) > now) return;
             playerObj.health = Math.max(0, (playerObj.health || 100) - (parseFloat(amount) || 0));
             updatePlayerHealthHUD();
         };
@@ -5713,6 +5725,7 @@ if (e.code === 'Space') {
                 const oldTool = playerInventory[equippedToolIndex].mesh;
                 if(playerMesh) playerMesh.userData.rArmPivot.remove(oldTool);
                 oldTool.userData.isEquipped = false;
+                if (oldTool.userData.sculptEngine) oldTool.userData.sculptEngine.triggerEvent('unequip');
             }
 
             if (equippedToolIndex === idx) {
@@ -5732,6 +5745,7 @@ if (e.code === 'Space') {
                     newTool.scale.set(0.5, 0.5, 0.5); 
                 }
                 newTool.userData.isEquipped = true;
+                if (newTool.userData.sculptEngine) newTool.userData.sculptEngine.triggerEvent('equip');
             }
             renderPlayToolbar();
         };
@@ -6022,6 +6036,47 @@ animatePlay();
         };
 
 
+
+
+        const buildScriptContext = (mesh) => ({
+            mesh,
+            player: playerObj,
+            ui: uiRuntimeManager,
+            scene: playScene,
+            showModal,
+            damagePlayer,
+            stateStore: window.smartRuntime,
+            world: {
+                objects: () => playMeshes,
+                findById: (id) => playMeshes.find(m => m.userData && m.userData.id === id),
+                findByName: (name) => playMeshes.find(m => (m.userData && m.userData.id && (activeLevel.objects || []).find(o => o.id === m.userData.id && (o.name || '').toLowerCase() === String(name || '').toLowerCase()))),
+                spawnPart: (cfg = {}) => {
+                    const geo = cfg.type === 'sphere' ? new THREE.SphereGeometry(0.5, 18, 18) : (cfg.type === 'cylinder' ? new THREE.CylinderGeometry(0.5,0.5,1,18) : new THREE.BoxGeometry(1,1,1));
+                    const mat = getMaterialForType(cfg.material || 'Plastic', cfg.color || '#3498db');
+                    const part = new THREE.Mesh(geo, mat);
+                    part.position.set(cfg.x || mesh.position.x, cfg.y || mesh.position.y, cfg.z || mesh.position.z);
+                    part.userData = { id: crypto.randomUUID(), type: cfg.type || 'block', isTool: false, noCollide: !!cfg.noCollide };
+                    playScene.add(part);
+                    playMeshes.push(part);
+                    return part;
+                },
+                destroy: (target) => {
+                    if (!target) return;
+                    if (target.parent) target.parent.remove(target);
+                    playMeshes = playMeshes.filter(m => m !== target);
+                },
+                message: (msg, title = 'Script') => showModal(title, String(msg || ''))
+            },
+            effects: {
+                shoot: (color = '#ffff00', speed = 2.5, opts = {}) => {
+                    if (typeof window.__playShoot === 'function') window.__playShoot(color, speed, opts);
+                }
+            },
+            tools: {
+                equipped: () => equippedToolIndex >= 0 ? playerInventory[equippedToolIndex]?.mesh : null,
+                inventory: () => playerInventory
+            }
+        });
  const buildPlayScene = () => {
 
 if (window.playTerrainMesh) {
@@ -6062,7 +6117,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                if (objData.script && objData.script.trim() !== '') {
                         const scriptSource = objData.scriptJs || objData.script || '';
                     if (scriptSource.trim() !== '') {
-                        const engine = new JavaScriptBehaviorEngine(scriptSource, () => ({ mesh, player: playerObj, ui: uiRuntimeManager, showModal, damagePlayer }));
+                        const engine = new JavaScriptBehaviorEngine(scriptSource, () => buildScriptContext(mesh));
                         mesh.userData.sculptEngine = engine;
                         engine.triggerEvent('start');
                     }
@@ -6092,7 +6147,7 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
             if (objData.script && objData.script.trim() !== '') {
                         const scriptSource = objData.scriptJs || objData.script || '';
                     if (scriptSource.trim() !== '') {
-                        const engine = new JavaScriptBehaviorEngine(scriptSource, () => ({ mesh, player: playerObj, ui: uiRuntimeManager, showModal, damagePlayer }));
+                        const engine = new JavaScriptBehaviorEngine(scriptSource, () => buildScriptContext(mesh));
                         mesh.userData.sculptEngine = engine;
                         engine.triggerEvent('start');
                     }
@@ -6490,6 +6545,47 @@ const updateChatBubbles = () => {
                 if (cp) {
                     playerObj.x = cp.position.x; playerObj.y = cp.position.y + 4; playerObj.z = cp.position.z;
                 }
+            } else if (smart.kind === 'healZone') {
+                if (now - (mesh.userData.smartState.lastTick || 0) > 350) {
+                    mesh.userData.smartState.lastTick = now;
+                    playerObj.health = Math.min(100, playerObj.health + Math.max(1, smart.power || 5));
+                }
+            } else if (smart.kind === 'damageZone') {
+                if (now - (mesh.userData.smartState.lastTick || 0) > 400) {
+                    mesh.userData.smartState.lastTick = now;
+                    damagePlayer(Math.max(1, smart.power || 8));
+                }
+            } else if (smart.kind === 'speedZone') {
+                playerObj.speed = Math.max(playerObj.speed, 0.2 + Math.min(0.5, (smart.power || 20) / 100));
+            } else if (smart.kind === 'lowGravity') {
+                playerObj.vy += 0.06;
+            } else if (smart.kind === 'coinPickup' && interactPressed && !mesh.userData.smartState.claimed) {
+                mesh.userData.smartState.claimed = true;
+                window.playLeaderboard = window.playLeaderboard || {};
+                window.playLeaderboard.coins = (window.playLeaderboard.coins || 0) + Math.max(1, smart.power || 10);
+                if (mesh.material) mesh.material.opacity = 0.25, mesh.material.transparent = true;
+            } else if (smart.kind === 'movingPlatform') {
+                if (typeof mesh.userData.smartState.baseY !== 'number') mesh.userData.smartState.baseY = mesh.position.y;
+                mesh.position.y = mesh.userData.smartState.baseY + Math.sin(now * 0.002) * Math.max(0.5, Math.min(8, smart.power || 3));
+            } else if (smart.kind === 'bounceRing' && interactPressed) {
+                playerObj.vy = Math.max(playerObj.vy, Math.max(6, smart.power || 10));
+            } else if (smart.kind === 'turret') {
+                const fireRate = Math.max(250, 1200 - (smart.power || 8) * 50);
+                if (dist < (smart.range || 14) && now - (mesh.userData.smartState.lastFire || 0) > fireRate) {
+                    mesh.userData.smartState.lastFire = now;
+                    damagePlayer(Math.max(1, Math.floor((smart.power || 8) / 2)));
+                }
+            } else if (smart.kind === 'musicZone' && interactPressed && now - (window.smartRuntime.lastInteractAt || 0) > 800) {
+                window.smartRuntime.lastInteractAt = now;
+                showModal('Music Trigger', `${smart.title || 'Music Zone'} activated.`);
+            } else if (smart.kind === 'shieldPad' && interactPressed && now - (window.smartRuntime.lastInteractAt || 0) > 800) {
+                window.smartRuntime.lastInteractAt = now;
+                playerObj.shieldUntil = now + Math.max(2000, (smart.power || 8) * 1000);
+                showModal('Shield Activated', `Shield active for ${Math.round((playerObj.shieldUntil - now)/1000)}s.`);
+            }
+
+            if (mesh.userData.sculptEngine && interactPressed) {
+                mesh.userData.sculptEngine.triggerEvent('interact');
             }
         };
 
@@ -6928,7 +7024,10 @@ const animatePlay = () => {
                     playSound: async (soundId, volume = 0.5) => { if (!window.audioCache) window.audioCache = {}; const now = Date.now(); if (window.audioCache[soundId] && window.audioCache[soundId].lastPlayed) { if (now - window.audioCache[soundId].lastPlayed < 100) return; } if (!window.audioCache[soundId] || !window.audioCache[soundId].data) { try { const token = localStorage.getItem('ps_token'); const res = await fetch(API_BASE + `/sounds/${soundId}`, { headers: { 'Authorization': token } }); const data = await res.json(); window.audioCache[soundId] = { data: data.data, lastPlayed: 0 }; } catch(e) { return; } } window.audioCache[soundId].lastPlayed = now; const a = new Audio(window.audioCache[soundId].data); a.volume = volume; if (!window.activeAudioObjects) window.activeAudioObjects = []; window.activeAudioObjects.push(a); a.onended = () => { window.activeAudioObjects = window.activeAudioObjects.filter(x => x !== a); }; a.play().catch(e => {}); }
                 };
                 playCamera.getWorldDirection(ctx.cameraDir);
+                window.__playShoot = ctx.shoot;
                 if (playInput.justClicked && equippedToolIndex !== -1) {
+                    const eqTool = playerInventory[equippedToolIndex] ? playerInventory[equippedToolIndex].mesh : null;
+                    if (eqTool && eqTool.userData && eqTool.userData.sculptEngine) eqTool.userData.sculptEngine.triggerEvent('click');
                     ctx.shoot(playerObj.blasterColor || '#ffff00', playerObj.blasterSpeed || 2.5, {
                         damage: playerObj.blasterDamage || 20,
                         spread: playerObj.blasterSpread || 0,
