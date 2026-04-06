@@ -190,6 +190,11 @@
         .studio-toolbar-group { border:1px solid #d6dde5; border-radius:6px; background:#fff; padding:8px; min-width:190px; }
         .studio-toolbar-group h5 { margin:0 0 6px 0; font-size:12px; color:#2c3e50; text-transform:uppercase; letter-spacing:0.3px; }
         .studio-toolbar-actions { display:flex; gap:6px; flex-wrap:wrap; }
+        #studio-mobile-controls { display:none; position:absolute; left:0; right:0; bottom:10px; z-index:260; pointer-events:none; }
+        .studio-mobile-pill { background:rgba(0,0,0,0.62); color:#fff; padding:6px 10px; border-radius:16px; font-size:12px; font-weight:700; }
+        .studio-mobile-btn { pointer-events:auto; background:rgba(52,152,219,0.86); color:#fff; border:2px solid rgba(255,255,255,0.7); border-radius:14px; padding:6px 10px; font-size:12px; font-weight:700; min-width:66px; text-align:center; }
+        #studio-joystick-base { pointer-events:auto; width:120px; height:120px; border-radius:50%; background:rgba(0,0,0,0.38); border:2px solid rgba(255,255,255,0.28); position:relative; touch-action:none; }
+        #studio-joystick-stick { width:58px; height:58px; border-radius:50%; background:rgba(255,255,255,0.85); position:absolute; left:31px; top:31px; transition:transform .12s; }
         .dash-friends-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
 
         .landing-welcome { text-align:center; margin-bottom:18px; }
@@ -260,6 +265,7 @@
             .user-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 8px; }
             .modal-overlay { padding: 12px; }
             .modal-box { width: 100%; max-width: 96vw; padding: 16px; }
+            #studio-mobile-controls { display:block; }
         }
     </style>
 </head>
@@ -395,6 +401,10 @@
                 <button class="btn" style="background:#2ecc71; border-bottom-color:#27ae60;" onclick="citySelectNeighborhood('Greenridge')"> <strong>Greenridge</strong><br><span style="font-size:12px; font-weight:normal;">Peaceful, trees, suburban</span></button>
                 <button class="btn" style="background:#e67e22; border-bottom-color:#d35400;" onclick="citySelectNeighborhood('Sandfall')"> <strong>Sandfall</strong><br><span style="font-size:12px; font-weight:normal;">Dry, desert neighborhood</span></button>
                 <button class="btn" style="background:#7f8c8d; border-bottom-color:#2c3e50;" onclick="citySelectNeighborhood('Industrial District')"> <strong>Industrial District</strong><br><span style="font-size:12px; font-weight:normal;">Factories, roads, heavy industry</span></button>
+            </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
             <div id="city-returning-step" style="display:none; margin-top: 20px;">
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
@@ -1372,6 +1382,44 @@
                             <label style="font-size:12px; font-weight:bold;">Ambient Brightness:</label>
                             <input type="number" id="ws-brightness" class="form-control" value="0.65" step="0.1" onchange="updateWorldSettings()">
                         </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold;">Sun Intensity:</label>
+                            <input type="number" id="ws-sun-intensity" class="form-control" value="1.1" step="0.1" onchange="updateWorldSettings()">
+                        </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold;">Fog Distance:</label>
+                            <input type="number" id="ws-fog-distance" class="form-control" value="1600" step="50" onchange="updateWorldSettings()">
+                        </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold;">Graphics Quality:</label>
+                            <select id="ws-graphics-quality" class="form-control" onchange="updateWorldSettings()">
+                                <option value="low">Low</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High</option>
+                                <option value="ultra">Ultra</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold;">Exposure:</label>
+                            <input type="number" id="ws-exposure" class="form-control" value="1.0" step="0.1" onchange="updateWorldSettings()">
+                        </div>
+                    </div>
+
+                    <div id="studio-mobile-controls">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-end; padding:0 10px; gap:8px;">
+                            <div id="studio-joystick-base">
+                                <div id="studio-joystick-stick"></div>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+                                <div class="studio-mobile-pill">Best in landscape mode 📱↔️</div>
+                                <div style="display:flex; gap:6px; pointer-events:auto;">
+                                    <button class="studio-mobile-btn" onclick="setTransformMode('select')">Select</button>
+                                    <button class="studio-mobile-btn" onclick="setTransformMode('translate')">Move</button>
+                                    <button class="studio-mobile-btn" onclick="setTransformMode('rotate')">Rotate</button>
+                                    <button class="studio-mobile-btn" onclick="setTransformMode('scale')">Scale</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
@@ -2320,6 +2368,33 @@ checkDailyReward(); // <-- ADDED HERE
 
         // Interval cleanup references
         let grpWallSyncInterval = null;
+        const promptStudioAutosaveRecovery = () => {
+            if (autosaveRecoveryPrompted || currentEditGameId) return;
+            autosaveRecoveryPrompted = true;
+            let saved = null;
+            try {
+                saved = JSON.parse(localStorage.getItem('ps_autosave') || 'null');
+            } catch (e) { saved = null; }
+            if (!saved || !saved.edData) return;
+
+            const stamp = saved.savedAt ? new Date(saved.savedAt).toLocaleString() : 'recently';
+            showModal(
+                'Autosave Recovery',
+                `We found an autosave from ${stamp}. Recover it now?`,
+                'Recover',
+                () => {
+                    edData = saved.edData;
+                    if (saved.genre) document.getElementById('editor-genre').value = saved.genre;
+                    if (saved.title) document.getElementById('editor-title').value = saved.title;
+                    historyStack = []; historyIndex = -1;
+                    buildEditorScene();
+                    recordEdit(true);
+                    showModal('Recovered', 'Studio autosave restored.');
+                },
+                false,
+                true
+            );
+        };
 
         const navigate = (viewId) => {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -2367,7 +2442,7 @@ else if (viewId === 'groups') {
                 if (currentUser) document.getElementById('setting-username').value = currentUser.username;
            } else if (viewId === 'create') {
                 if (!currentEditGameId) {
-                    setTimeout(() => { initEditor(); window.dispatchEvent(new Event('resize')); populateGroupPublishDropdown(); }, 50);
+                    setTimeout(() => { initEditor(); window.dispatchEvent(new Event('resize')); populateGroupPublishDropdown(); promptStudioAutosaveRecovery(); }, 50);
                     document.getElementById('editor-save-btn').innerText = "Publish Game";
                     document.getElementById('btn-add-collab').style.display = "none";
                     document.getElementById('btn-versions').style.display = "none";
@@ -3678,6 +3753,54 @@ let customGizmo = null;
         };
 
 
+        const initStudioMobileControls = () => {
+            if (studioMobileState.initialized) return;
+            const isTouch = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || navigator.maxTouchPoints > 0;
+            if (!isTouch) return;
+            const base = document.getElementById('studio-joystick-base');
+            const stick = document.getElementById('studio-joystick-stick');
+            if (!base || !stick) return;
+
+            studioMobileState.initialized = true;
+            const resetStick = () => {
+                studioMobileState.active = false;
+                studioMobileState.x = 0;
+                studioMobileState.y = 0;
+                stick.style.transform = 'translate(0px, 0px)';
+            };
+
+            const updateFromTouch = (touch) => {
+                const rect = base.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                let dx = touch.clientX - cx;
+                let dy = touch.clientY - cy;
+                const radius = rect.width / 2 - 10;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                if (dist > radius) {
+                    dx = (dx / dist) * radius;
+                    dy = (dy / dist) * radius;
+                }
+                studioMobileState.active = true;
+                studioMobileState.x = dx / radius;
+                studioMobileState.y = dy / radius;
+                stick.style.transform = `translate(${dx}px, ${dy}px)`;
+            };
+
+            base.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (!e.touches[0]) return;
+                updateFromTouch(e.touches[0]);
+            }, { passive: false });
+            base.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (!e.touches[0]) return;
+                updateFromTouch(e.touches[0]);
+            }, { passive: false });
+            base.addEventListener('touchend', (e) => { e.preventDefault(); resetStick(); }, { passive: false });
+            base.addEventListener('touchcancel', (e) => { e.preventDefault(); resetStick(); }, { passive: false });
+        };
+
         const initEditor = () => {
             const container = document.getElementById('editor-container-3d');
             if (edRenderer) {
@@ -3708,11 +3831,13 @@ let customGizmo = null;
 
             const ambLight = new THREE.AmbientLight( 0xffffff, 1.0 );
             ambLight.isAmbientLight = true;
+            edAmbientLight = ambLight;
             edScene.add( ambLight );
             const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
             edScene.add(hemiLight); 
-            const dirLight = new THREE.DirectionalLight( 0xffffff, 0.5 );
+            const dirLight = new THREE.DirectionalLight( 0xffffff, 0.9 );
             dirLight.position.set( 1, 0.75, 0.5 ).normalize();
+            edDirectionalLight = dirLight;
             edScene.add( dirLight );
 
 edRenderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
@@ -3724,6 +3849,7 @@ window.EnvironmentEngine.generateClouds(edScene, '#ffffff');
             edRenderer.setPixelRatio( window.devicePixelRatio );
             resizeCanvas(edRenderer, edCamera, 'editor-container-3d');
             container.appendChild( edRenderer.domElement );
+            initStudioMobileControls();
 
             // Roblox Style Studio Camera Engine
             window.StudioCamera = {
@@ -4577,6 +4703,10 @@ let edData = {
         let edAnimationId = null;
 
 let edScene, edCamera, edRenderer, edControls; // Removed transformControl
+let edAmbientLight = null, edDirectionalLight = null;
+let playAmbientLight = null, playDirectionalLight = null;
+let autosaveRecoveryPrompted = false;
+const studioMobileState = { active: false, x: 0, y: 0, initialized: false };
 
         let raycaster, mouse;
         let editorMeshes = []; 
@@ -4712,7 +4842,7 @@ let currentEditMode = 'translate';
         // Auto-convert old grid games into the new freeform format
        // Auto-convert old grid games into the new freeform format
         const migrateLevelDataTo3D = (levelData) => {
-            let newData = { settings: { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
+            let newData = { settings: { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
             if (levelData.settings) newData.settings = levelData.settings;
             if (levelData.objects) { 
                 (levelData.objects || []).forEach(ensureSmartLogicDefaults);
@@ -4743,7 +4873,7 @@ let currentEditMode = 'translate';
                 if (historyStack.length > 30) historyStack.shift(); else historyIndex++;
             }
             if (!currentEditGameId) {
-                localStorage.setItem('ps_autosave', JSON.stringify({ edData, genre: document.getElementById('editor-genre').value, title: document.getElementById('editor-title').value }));
+                localStorage.setItem('ps_autosave', JSON.stringify({ edData, genre: document.getElementById('editor-genre').value, title: document.getElementById('editor-title').value, savedAt: Date.now() }));
             }
         };
 
@@ -5287,10 +5417,18 @@ document.addEventListener('keydown', (e) => {
             
             isEditingSettings = true; renderExplorer();
             
-if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65 };
+if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
+            if (typeof edData.settings.sunIntensity === 'undefined') edData.settings.sunIntensity = 1.1;
+            if (typeof edData.settings.fogDistance === 'undefined') edData.settings.fogDistance = 1600;
+            if (typeof edData.settings.graphicsQuality === 'undefined') edData.settings.graphicsQuality = 'medium';
+            if (typeof edData.settings.exposure === 'undefined') edData.settings.exposure = 1.0;
             document.getElementById('ws-gravity').value = edData.settings.gravity;
             document.getElementById('ws-skycolor').value = edData.settings.skyColor;
             document.getElementById('ws-brightness').value = edData.settings.brightness;
+            document.getElementById('ws-sun-intensity').value = edData.settings.sunIntensity;
+            document.getElementById('ws-fog-distance').value = edData.settings.fogDistance;
+            document.getElementById('ws-graphics-quality').value = edData.settings.graphicsQuality;
+            document.getElementById('ws-exposure').value = edData.settings.exposure;
             document.getElementById('world-settings-panel').style.display = 'block';
         };
 
@@ -5299,6 +5437,10 @@ if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', bri
             edData.settings.gravity = parseFloat(document.getElementById('ws-gravity').value) || 0.35;
             edData.settings.skyColor = document.getElementById('ws-skycolor').value;
             edData.settings.brightness = parseFloat(document.getElementById('ws-brightness').value) || 1.0;
+            edData.settings.sunIntensity = parseFloat(document.getElementById('ws-sun-intensity').value) || 1.1;
+            edData.settings.fogDistance = parseFloat(document.getElementById('ws-fog-distance').value) || 1600;
+            edData.settings.graphicsQuality = document.getElementById('ws-graphics-quality').value || 'medium';
+            edData.settings.exposure = parseFloat(document.getElementById('ws-exposure').value) || 1.0;
             applyWorldSettings(); recordEdit();
         };
 
@@ -5306,6 +5448,23 @@ if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', bri
             if (edScene && edData.settings) {
                 edScene.background = new THREE.Color(edData.settings.skyColor);
                 edScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = edData.settings.brightness; });
+                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.2, edData.settings.sunIntensity || 1.1);
+                const fogDistance = Math.max(200, edData.settings.fogDistance || 1600);
+                edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.2, fogDistance);
+                if (edRenderer) {
+                    const q = edData.settings.graphicsQuality || 'medium';
+                    const shadow = q === 'high' || q === 'ultra';
+                    edRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+                    edRenderer.toneMappingExposure = Math.max(0.4, Math.min(2.5, edData.settings.exposure || 1));
+                    edRenderer.outputEncoding = THREE.sRGBEncoding;
+                    edRenderer.physicallyCorrectLights = true;
+                    edRenderer.shadowMap.enabled = shadow;
+                    edRenderer.shadowMap.type = q === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+                    if (edDirectionalLight) {
+                        edDirectionalLight.castShadow = shadow;
+                        edDirectionalLight.shadow.mapSize.set(q === 'ultra' ? 2048 : 1024, q === 'ultra' ? 2048 : 1024);
+                    }
+                }
             }
         };
 
@@ -5585,7 +5744,7 @@ const promptClearEditor = () => {
         // --- Editor Core Engine ---
      const clearEditor = () => {
             currentEditGameId = null; 
-            edData = { settings: { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
+            edData = { settings: { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
@@ -5745,6 +5904,15 @@ mesh.userData = {
                         if (keys.d) edCamera.position.addScaledVector(right, moveSpeed);
                         if (keys.e) edCamera.position.y += moveSpeed;
                         if (keys.q) edCamera.position.y -= moveSpeed;
+                    }
+
+                    if (studioMobileState.active && window.StudioCamera) {
+                        window.StudioCamera.yaw -= studioMobileState.x * 0.045;
+                        window.StudioCamera.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, window.StudioCamera.pitch - studioMobileState.y * 0.02));
+                        window.StudioCamera.updateCamera();
+                        const forward = new THREE.Vector3();
+                        edCamera.getWorldDirection(forward); forward.y = 0; forward.normalize();
+                        edCamera.position.addScaledVector(forward, -studioMobileState.y * 0.55);
                     }
                 }
 
@@ -6183,6 +6351,26 @@ const loadPsworld = (event) => {
         };
 
 
+const applyPlayGraphicsSettings = (settings = {}) => {
+            if (!playScene || !playRenderer) return;
+            const quality = settings.graphicsQuality || 'medium';
+            const exposure = Math.max(0.4, Math.min(2.5, settings.exposure || 1));
+            const fogDistance = Math.max(200, settings.fogDistance || 1600);
+
+            playScene.fog = new THREE.Fog(settings.skyColor || '#87CEEB', fogDistance * 0.25, fogDistance);
+            playRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+            playRenderer.toneMappingExposure = exposure;
+            playRenderer.outputEncoding = THREE.sRGBEncoding;
+            playRenderer.physicallyCorrectLights = true;
+            playRenderer.shadowMap.enabled = quality === 'high' || quality === 'ultra';
+            playRenderer.shadowMap.type = quality === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+            if (playDirectionalLight) {
+                playDirectionalLight.intensity = Math.max(0.2, settings.sunIntensity || 1.1);
+                playDirectionalLight.castShadow = playRenderer.shadowMap.enabled;
+                playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 2048 : 1024, quality === 'ultra' ? 2048 : 1024);
+            }
+        };
+
 const startGame = () => {
             currentSessionStartTime = Date.now(); 
             currentSessionJumps = 0; 
@@ -6205,13 +6393,15 @@ const startGame = () => {
                 
                 const ambLight = new THREE.AmbientLight( 0xffffff, 1.0 );
                 ambLight.isAmbientLight = true;
+                playAmbientLight = ambLight;
                 playScene.add( ambLight );
                 
                 const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
                 playScene.add(hemiLight);
                 
-                const dirLight = new THREE.DirectionalLight( 0xffffff, 0.5 );
+                const dirLight = new THREE.DirectionalLight( 0xffffff, 0.9 );
                 dirLight.position.set( 1, 1, 0.5 ).normalize();
+                playDirectionalLight = dirLight;
                 playScene.add( dirLight );
 
                 playRenderer = new THREE.WebGLRenderer( { antialias: true } );
@@ -6229,9 +6419,10 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
 
             stopGameLoop(); setupMobileControls();
             
-            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0 };
+            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
             playScene.background = new THREE.Color(activeLevel.settings.skyColor);
             playScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = activeLevel.settings.brightness; });
+            applyPlayGraphicsSettings(activeLevel.settings);
             
             playerObj.x = activeLevel.spawn ? activeLevel.spawn.x : 0; 
             playerObj.y = activeLevel.spawn ? activeLevel.spawn.y + 3 : 10;
