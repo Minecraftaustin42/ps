@@ -356,6 +356,11 @@
             <div id="city-step-2" style="display:none; margin-top: 20px; display:flex; gap:10px; flex-direction:column;">
                 <button class="btn" style="background:#2ecc71; border-bottom-color:#27ae60;" onclick="citySelectNeighborhood('Greenridge')"> <strong>Greenridge</strong><br><span style="font-size:12px; font-weight:normal;">Peaceful, trees, suburban</span></button>
                 <button class="btn" style="background:#e67e22; border-bottom-color:#d35400;" onclick="citySelectNeighborhood('Sandfall')"> <strong>Sandfall</strong><br><span style="font-size:12px; font-weight:normal;">Dry, desert neighborhood</span></button>
+                <button class="btn" style="background:#7f8c8d; border-bottom-color:#2c3e50;" onclick="citySelectNeighborhood('Industrial District')"> <strong>Industrial District</strong><br><span style="font-size:12px; font-weight:normal;">Factories, roads, heavy industry</span></button>
+            </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
@@ -379,7 +384,7 @@
 
     <div id="inventory-modal" class="modal-overlay">
         <div class="modal-box" style="border: 4px solid #f39c12; background: #fdfdfd; max-width: 500px; width: 90%;">
-<h2 style="color: #2c3e50; margin-top:0;">My Inventory <span style="float:right; color:#27ae60; font-size:18px;"><span id="modal-bucks">0</span> Bucks</span></h2>
+<h2 style="color: #2c3e50; margin-top:0;">My Inventory <span style="float:right; color:#f39c12; font-size:18px;"><span id="modal-city-coins">0</span> Sculpt Coins</span></h2>
             <div id="inventory-list" style="margin-top: 20px; display:flex; flex-direction:column; gap:10px; max-height: 350px; overflow-y: auto;">
                 </div>
             <button class="btn btn-danger mt-20" style="width: 100%; font-size: 16px;" onclick="document.getElementById('inventory-modal').style.display='none'">Close</button>
@@ -441,7 +446,6 @@
         <div class="nav-links" id="nav-logged-in" style="display:none;">
             <input type="text" class="search-bar" id="nav-search" placeholder="Search Users..." onkeydown="if(event.key==='Enter') executeUserSearch()">
             <div class="sculpt-coins"><span id="nav-coins">0</span> SC</div>
-<div class="sculpt-coins" style="color: #2ecc71;"><span id="nav-bucks">0</span> Bucks</div>
 <div class="sculpt-coins" style="color: #3498db; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'" onclick="openOnlineModal()">
                 <span id="nav-online">1</span> Online
             </div>
@@ -6790,6 +6794,9 @@ const updateChatBubbles = () => {
                 window.smartRuntime.lastInteractAt = now;
                 playerObj.shieldUntil = now + Math.max(2000, (smart.power || 8) * 1000);
                 showModal('Shield Activated', `Shield active for ${Math.round((playerObj.shieldUntil - now)/1000)}s.`);
+            } else if (smart.kind === 'factoryDoor' && interactPressed && now - (window.smartRuntime.lastInteractAt || 0) > 800) {
+                window.smartRuntime.lastInteractAt = now;
+                startManufacturerJob(smart.power || 1);
             }
 
             if (mesh.userData.sculptEngine && interactPressed) {
@@ -7736,20 +7743,29 @@ const groupAsAircraft = () => {
         let cityGlobalData = null;
         let selectedCityPlot = null;
         let chosenNeighborhood = null;
+        let activeCityDistrict = null;
+        const cityDistricts = [
+            { name: 'Greenridge', desc: 'Peaceful, trees, suburban', color: '#2ecc71' },
+            { name: 'Sandfall', desc: 'Dry, desert neighborhood', color: '#e67e22' },
+            { name: 'Industrial District', desc: 'Factories, jobs, busy roads', color: '#7f8c8d' }
+        ];
+        const manufacturerJobState = {
+            active: false,
+            startTime: 0,
+            products: 0,
+            packaged: 0,
+            step: 'collect',
+            stepStartedAt: 0,
+            activeMs: 0
+        };
 
    const finishCityWelcome = async () => {
             document.getElementById('city-intro-overlay').style.display = 'none';
             try {
-                // Grant the +50 SculptCoins and +500 Bucks Reward!
-                const res = await apiCall('/city/sync', 'POST', { coinsToAdd: 50, bucksToAdd: 500 });
+                const res = await apiCall('/city/sync', 'POST', { coinsToAdd: 550, tutorialComplete: true });
                 document.getElementById('nav-coins').innerText = res.coins;
-                
-                if (res.cityData) {
-                    cityGlobalData.cityData.bucks = res.cityData.bucks;
-                    document.getElementById('nav-bucks').innerText = res.cityData.bucks;
-                }
-                
-                showModal('Tutorial Complete!', 'You earned +50 SculptCoins and +500 Bucks for completing the tour!');
+                if (res.cityData) cityGlobalData.cityData = res.cityData;
+                showModal('Tutorial Complete!', 'You earned +550 Sculpt Coins for completing the tour!');
             } catch(e) {}
         };
 
@@ -7759,11 +7775,22 @@ const groupAsAircraft = () => {
             document.getElementById('city-loading-screen').style.display = 'flex';
             try {
                 cityGlobalData = await apiCall('/city/info');
-                
-                // Sync Bucks to UI!
                 if (cityGlobalData.cityData) {
-                    document.getElementById('nav-bucks').innerText = cityGlobalData.cityData.bucks || 0;
-                    startCityGame(cityGlobalData.cityData.neighborhood);
+                    if (cityGlobalData.cityData.tutorialComplete) {
+                        document.getElementById('city-loading-screen').style.display = 'none';
+                        document.getElementById('city-intro-overlay').style.display = 'flex';
+                        document.getElementById('city-dialogue-text').innerText = "Welcome back to Sculpt City! Choose a sculpt city district to teleport to below!";
+                        document.getElementById('city-step-1').style.display = 'none';
+                        document.getElementById('city-step-2').style.display = 'none';
+                        document.getElementById('city-step-3').style.display = 'none';
+                        document.getElementById('city-step-4').style.display = 'none';
+                        document.getElementById('city-step-5').style.display = 'none';
+                        document.getElementById('city-returning-step').style.display = 'block';
+                        document.getElementById('city-district-search').value = '';
+                        renderDistrictButtons('');
+                    } else {
+                        startCityGame(cityGlobalData.cityData.neighborhood);
+                    }
                 } else {
                     document.getElementById('city-loading-screen').style.display = 'none';
                     document.getElementById('city-intro-overlay').style.display = 'flex';
@@ -7771,6 +7798,7 @@ const groupAsAircraft = () => {
                     document.getElementById('city-step-1').style.display = 'block';
                     document.getElementById('city-step-2').style.display = 'none';
                     document.getElementById('city-step-3').style.display = 'none';
+                    document.getElementById('city-returning-step').style.display = 'none';
                 }
             } catch(e) { 
                 console.error("Sculpt City Load Error:", e);
@@ -7779,11 +7807,36 @@ const groupAsAircraft = () => {
             }
         };
 
+        const renderDistrictButtons = (term = '') => {
+            const list = document.getElementById('city-district-buttons');
+            if (!list) return;
+            const lowered = String(term || '').toLowerCase().trim();
+            const filtered = cityDistricts.filter(d => d.name.toLowerCase().includes(lowered));
+            list.innerHTML = filtered.length ? '' : `<div style="font-weight:600; color:#7f8c8d;">No matching districts found.</div>`;
+            filtered.forEach(d => {
+                const btn = document.createElement('button');
+                btn.className = 'btn';
+                btn.style.background = d.color;
+                btn.style.borderBottomColor = '#2c3e50';
+                btn.innerHTML = `<strong>${d.name}</strong><br><span style="font-size:12px; font-weight:normal;">${d.desc}</span>`;
+                btn.onclick = () => cityTeleportToDistrict(d.name);
+                list.appendChild(btn);
+            });
+        };
+
+        const cityTeleportToDistrict = (districtName) => {
+            document.getElementById('city-intro-overlay').style.display = 'none';
+            document.getElementById('city-loading-screen').style.display = 'flex';
+            setTimeout(() => startCityGame(districtName), 150);
+        };
+        window.renderDistrictButtons = renderDistrictButtons;
+
 
         const cityShowNeighborhoods = () => {
             document.getElementById('city-dialogue-text').innerText = "Pick a neighborhood to start in: (You can have multiple houses and live in multiple neighborhoods as you progress!)";
             document.getElementById('city-step-1').style.display = 'none';
             document.getElementById('city-step-2').style.display = 'flex';
+            document.getElementById('city-returning-step').style.display = 'none';
         };
         
         
@@ -7796,14 +7849,14 @@ const groupAsAircraft = () => {
         // ==========================================
         let cityInventory = [
             { id: 'sedan_1', name: 'Classic Sedan', type: 'vehicle', category: 'Vehicles', cost: 0 },
-            { id: 'pickup_1', name: 'Pickup Truck', type: 'vehicle', category: 'Vehicles', cost: 1100 }
+            { id: 'pickup_1', name: 'Pickup Truck', type: 'vehicle', category: 'Vehicles', cost: 150 }
         ];
         let equippedVehicleId = null;
         window.activeSpawnedVehicle = null;
 
         const openInventory = () => {
             document.getElementById('inventory-modal').style.display = 'flex';
-            document.getElementById('modal-bucks').innerText = cityGlobalData.cityData.bucks || 0;
+            document.getElementById('modal-city-coins').innerText = currentUser?.coins || 0;
             renderInventoryUI();
         };
 
@@ -7831,7 +7884,7 @@ const groupAsAircraft = () => {
                     btn.onclick = () => toggleEquipItem(item.id);
                 } else {
                     btn.className = 'btn btn-warning';
-                    btn.innerText = `Buy: ${item.cost} Bucks`;
+                    btn.innerText = `Buy: ${item.cost} Sculpt Coins`;
                     btn.onclick = () => buyCityVehicle(item.id, item.cost);
                 }
 
@@ -7840,12 +7893,13 @@ const groupAsAircraft = () => {
         };
 
         const buyCityVehicle = async (vehicleId, cost) => {
-            if ((cityGlobalData.cityData.bucks || 0) < cost) return showModal('Transaction Failed', 'You do not have enough Bucks!');
+            if ((currentUser?.coins || 0) < cost) return showModal('Transaction Failed', 'You do not have enough Sculpt Coins!');
             try {
                 const res = await apiCall('/city/sync', 'POST', { vehicleToBuy: vehicleId, cost: cost });
                 cityGlobalData.cityData = res.cityData;
-                document.getElementById('nav-bucks').innerText = cityGlobalData.cityData.bucks;
-                document.getElementById('modal-bucks').innerText = cityGlobalData.cityData.bucks;
+                currentUser.coins = res.coins;
+                updateNav();
+                document.getElementById('modal-city-coins').innerText = res.coins;
                 renderInventoryUI();
             } catch(e) {}
         };
@@ -8024,45 +8078,76 @@ const groupAsAircraft = () => {
 
             return objs;
         };
+        const generateIndustrialDistrict = () => {
+            const objs = [];
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:0, y:-2.1, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2800, y:4, z:2800}, color: '#2f3b46', material: 'Slate' });
+
+            for (let x = -8; x <= 8; x++) {
+                for (let z = -8; z <= 8; z++) {
+                    const isRoad = x % 2 === 0 || z % 2 === 0;
+                    objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:x*70, y:-2, z:z*70}, rotation:{x:0,y:0,z:0}, scale:{x:58, y:4, z:58}, color: isRoad ? '#3d4954' : '#6f7b84', material: isRoad ? 'Slate' : 'Concrete' });
+                    if (isRoad) {
+                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:x*70, y:-0.05, z:z*70}, rotation:{x:0,y:0,z:0}, scale:{x:50, y:0.1, z:2}, color: '#f1c40f', material: 'Neon', noCollide: true });
+                    }
+                }
+            }
+
+            const factoryPlotCenters = [
+                [-210, -210], [0, -210], [210, -210],
+                [-210, 0], [0, 0], [210, 0],
+                [-210, 210], [0, 210], [210, 210]
+            ];
+
+            const addFactoryVariant = (cx, cz, variant, idx) => {
+                const wall = variant === 0 ? '#8e9aa6' : (variant === 1 ? '#9ba7b3' : '#7d8794');
+                const roof = variant === 0 ? '#4c5663' : (variant === 1 ? '#565f6b' : '#3f4752');
+                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:8, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:52, y:16, z:40}, color: wall, material: 'Concrete' });
+                objs.push({ id: crypto.randomUUID(), type: 'wedge', position: {x:cx, y:17, z:cz}, rotation:{x:0,y:Math.PI/2,z:0}, scale:{x:56, y:7, z:44}, color: roof, material: 'Slate' });
+                objs.push({ id: crypto.randomUUID(), type: 'cylinder', position: {x:cx - 18, y:17, z:cz - 12}, rotation:{x:0,y:0,z:0}, scale:{x:2.5, y:20, z:2.5}, color: '#5d6875', material: 'Metal' });
+                objs.push({ id: crypto.randomUUID(), type: 'cylinder', position: {x:cx + 18, y:16, z:cz - 12}, rotation:{x:0,y:0,z:0}, scale:{x:2.2, y:18, z:2.2}, color: '#5d6875', material: 'Metal' });
+                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:3.5, z:cz + 20.2}, rotation:{x:0,y:0,z:0}, scale:{x:8, y:7, z:0.6}, color: '#2c3e50', material: 'Metal', smart: { kind: 'factoryDoor', title: `Factory ${idx + 1} Entrance`, power: idx + 1, range: 7, team: 'all', advanced: false } });
+                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:1.2, z:cz + 28}, rotation:{x:0,y:0,z:0}, scale:{x:16, y:0.3, z:12}, color: '#95a5a6', material: 'Concrete' });
+            };
+
+            factoryPlotCenters.forEach((p, idx) => addFactoryVariant(p[0], p[1], idx % 3, idx));
+            return objs;
+        };
+
         const startCityGame = (neighborhood, isFirstTime = false) => {
             isCityMode = true;
+            activeCityDistrict = neighborhood;
+            const isIndustrial = neighborhood === 'Industrial District';
             const isGrass = neighborhood === 'Greenridge';
-            const groundColor = isGrass ? '#55aa55' : '#f1c40f'; 
-            
-            let cityObjects = [];
-            
-            // Lower Asphalt slightly to avoid Material Z-Fighting overlapping!
-            // FIX: Use realistic SLATE texture for the massive asphalt road foundation!
-            cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:0, y:-2.1, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2000, y:4, z:2000}, color: '#34495e', material: 'Slate' });
+            let cityObjects = isIndustrial ? generateIndustrialDistrict() : [];
 
-            for (let x = -5; x <= 5; x++) {
-                for (let z = -5; z <= 5; z++) {
-                    // FIX: Plots use GRASS or the brand new SAND material so they have highly realistic ground textures!
-                    cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:x*50, y:-2, z:z*50}, rotation:{x:0,y:0,z:0}, scale:{x:40, y:4, z:40}, color: groundColor, material: isGrass ? 'Grass' : 'Sand' });
+            if (!isIndustrial) {
+                const groundColor = isGrass ? '#55aa55' : '#f1c40f';
+                cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:0, y:-2.1, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2000, y:4, z:2000}, color: '#34495e', material: 'Slate' });
+                for (let x = -5; x <= 5; x++) {
+                    for (let z = -5; z <= 5; z++) {
+                        cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:x*50, y:-2, z:z*50}, rotation:{x:0,y:0,z:0}, scale:{x:40, y:4, z:40}, color: groundColor, material: isGrass ? 'Grass' : 'Sand' });
+                    }
                 }
-            }
-            for (let i = -5; i <= 5; i++) {
-                for (let j = -10; j <= 10; j++) {
-                    // Stripes rest perfectly on the lowered asphalt
-                    cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:i*50 + 25, y:-0.05, z:j*25}, rotation:{x:0,y:0,z:0}, scale:{x:0.5, y:0.1, z:8}, color: '#f1c40f', material: 'Neon', noCollide: true });
-                    cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:j*25, y:-0.05, z:i*50 + 25}, rotation:{x:0,y:0,z:0}, scale:{x:8, y:0.1, z:0.5}, color: '#f1c40f', material: 'Neon', noCollide: true });
+                for (let i = -5; i <= 5; i++) {
+                    for (let j = -10; j <= 10; j++) {
+                        cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:i*50 + 25, y:-0.05, z:j*25}, rotation:{x:0,y:0,z:0}, scale:{x:0.5, y:0.1, z:8}, color: '#f1c40f', material: 'Neon', noCollide: true });
+                        cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:j*25, y:-0.05, z:i*50 + 25}, rotation:{x:0,y:0,z:0}, scale:{x:8, y:0.1, z:0.5}, color: '#f1c40f', material: 'Neon', noCollide: true });
+                    }
                 }
+                const relevantPlots = cityGlobalData.plots.filter(p => p.neighborhood === neighborhood);
+                relevantPlots.forEach(p => {
+                    const houseBlocks = generateStarterHouse(p.plotX, p.plotZ, neighborhood, p.username || currentUser.username);
+                    cityObjects = cityObjects.concat(houseBlocks);
+                });
             }
 
-            const relevantPlots = cityGlobalData.plots.filter(p => p.neighborhood === neighborhood);
-            relevantPlots.forEach(p => {
-                const houseBlocks = generateStarterHouse(p.plotX, p.plotZ, neighborhood, p.username || currentUser.username);
-                cityObjects = cityObjects.concat(houseBlocks);
-            });
-
-           // FIX: Use a muted 2016 Sky Blue and lower the brightness significantly!
             activeLevel = {
-                settings: { 
-                    gravity: 0.35, 
-                    skyColor: isGrass ? '#5b88a5' : '#a37b45', // Deep retro blue vs dull desert
-                    brightness: 0.65 // Dimmed to create harsher, older-looking shadows
+                settings: {
+                    gravity: 0.35,
+                    skyColor: isIndustrial ? '#71808f' : (isGrass ? '#5b88a5' : '#a37b45'),
+                    brightness: isIndustrial ? 0.6 : 0.65
                 },
-                spawn: { x: cityGlobalData.cityData.plotX * 50, y: 2, z: (cityGlobalData.cityData.plotZ * 50) + 15 }, 
+                spawn: isIndustrial ? { x: 0, y: 2, z: 380 } : { x: cityGlobalData.cityData.plotX * 50, y: 2, z: (cityGlobalData.cityData.plotZ * 50) + 15 },
                 objects: cityObjects
             };
             document.getElementById('play-title').innerText = `${neighborhood} (Sculpt City)`;
@@ -8098,6 +8183,9 @@ const groupAsAircraft = () => {
     
         const exitSculptCity = () => {
             isCityMode = false;
+            manufacturerJobState.active = false;
+            const panel = document.getElementById('manufacturer-job-ui');
+            if (panel) panel.remove();
             stopGameLoop();
             
             document.getElementById('play-likes').parentElement.style.display = 'flex';
@@ -8127,6 +8215,84 @@ const groupAsAircraft = () => {
         const openCityHelp = () => {
             document.getElementById('city-help-modal').style.display = 'flex';
         };
+
+        const startManufacturerJob = (factoryId = 1) => {
+            manufacturerJobState.active = true;
+            manufacturerJobState.startTime = Date.now();
+            manufacturerJobState.products = 0;
+            manufacturerJobState.packaged = 0;
+            manufacturerJobState.step = 'collect';
+            manufacturerJobState.stepStartedAt = Date.now();
+            manufacturerJobState.activeMs = 0;
+
+            const panel = document.createElement('div');
+            panel.id = 'manufacturer-job-ui';
+            panel.style.cssText = 'position:absolute;top:20px;left:20px;z-index:65;background:rgba(255,255,255,0.95);border:2px solid #2c3e50;border-radius:8px;padding:12px;min-width:260px;';
+            panel.innerHTML = `
+                <h4 style="margin:0 0 8px 0;color:#2c3e50;">Manufacturer Shift</h4>
+                <p id="manufacturer-step" style="margin:0 0 8px 0;font-weight:700;color:#34495e;">Step 1: Build Product</p>
+                <button class="btn btn-success btn-sm" id="manufacturer-action-btn" style="width:100%;margin-bottom:8px;">Build Product</button>
+                <div style="font-size:12px;color:#555;margin-bottom:8px;">Products Completed: <span id="manufacturer-products">0</span></div>
+                <button class="btn btn-danger btn-sm" style="width:100%;" onclick="endManufacturerShift()">End Shift / Leave</button>
+            `;
+            document.querySelector('#play-container-3d').appendChild(panel);
+
+            document.getElementById('manufacturer-action-btn').onclick = () => {
+                if (!manufacturerJobState.active) return;
+                const now = Date.now();
+                if (now - manufacturerJobState.stepStartedAt > 25000) return showModal('Shift Paused', 'You were inactive too long. Stay active to earn Sculpt Coins.');
+                manufacturerJobState.activeMs += Math.min(6000, now - manufacturerJobState.stepStartedAt);
+                if (manufacturerJobState.step === 'collect') {
+                    manufacturerJobState.step = 'package';
+                    manufacturerJobState.stepStartedAt = now;
+                    document.getElementById('manufacturer-step').innerText = 'Step 2: Package Product';
+                    document.getElementById('manufacturer-action-btn').innerText = 'Package Product';
+                } else {
+                    manufacturerJobState.step = 'collect';
+                    manufacturerJobState.stepStartedAt = now;
+                    manufacturerJobState.products += 1;
+                    manufacturerJobState.packaged += 1;
+                    document.getElementById('manufacturer-step').innerText = 'Step 1: Build Product';
+                    document.getElementById('manufacturer-action-btn').innerText = 'Build Product';
+                    document.getElementById('manufacturer-products').innerText = manufacturerJobState.products;
+                }
+            };
+
+            activeLevel.spawn = { x: 0, y: 2, z: 0, scale: { x: 4, y: 1, z: 4 } };
+            activeLevel.objects = [
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:-0.5, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:1, z:48}, color:'#a9b4bf', material:'Concrete' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:3, z:-23}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:7, z:2}, color:'#6c7784', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:3, z:23}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:7, z:2}, color:'#6c7784', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:-23, y:3, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:7, z:48}, color:'#6c7784', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:23, y:3, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:7, z:48}, color:'#6c7784', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:6.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:1, z:48}, color:'#4e5966', material:'Slate' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:1.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:26, y:1.1, z:4}, color:'#2d3436', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:-10, y:2.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:1.2, z:4}, color:'#95a5a6', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:10, y:2.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:1.2, z:4}, color:'#95a5a6', material:'Metal' }
+            ];
+            buildPlayScene();
+            playerObj.x = 0; playerObj.y = 2; playerObj.z = 8;
+            showModal('Manufacturer Shift Started', `Factory ${factoryId}: complete the 2-step process to earn +5 Sculpt Coins per product.`);
+        };
+
+        const endManufacturerShift = async () => {
+            if (!manufacturerJobState.active) return;
+            manufacturerJobState.active = false;
+            const panel = document.getElementById('manufacturer-job-ui');
+            if (panel) panel.remove();
+            const activeEnough = manufacturerJobState.activeMs >= manufacturerJobState.products * 1200;
+            const earned = activeEnough ? (manufacturerJobState.products * 5) : 0;
+            if (earned > 0) {
+                try {
+                    const res = await apiCall('/city/sync', 'POST', { coinsToAdd: earned });
+                    if (currentUser) currentUser.coins = res.coins;
+                    updateNav();
+                } catch (e) {}
+            }
+            startCityGame('Industrial District');
+            showModal('Shift Ended', `You manufactured ${manufacturerJobState.products} products and earned ${earned} Sculpt Coins this shift.`);
+        };
+        window.endManufacturerShift = endManufacturerShift;
 
 
 // ==========================================
