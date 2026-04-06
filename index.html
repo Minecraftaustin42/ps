@@ -420,6 +420,10 @@
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
                 <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -6092,6 +6096,7 @@ playerObj = {
         
         let playMeshes = []; 
         let playColliders = []; 
+        let lastPlayFrameAt = performance.now();
         let otherPlayerMeshes = {}; 
         let playSyncInterval = null;
         let isPlayActive = false;
@@ -6566,6 +6571,17 @@ animatePlay();
         const buildScriptContext = (mesh) => ({
             mesh,
             player: playerObj,
+            time: () => performance.now() / 1000,
+            deltaTime: () => Math.max(0.001, Math.min(0.06, (window.playDeltaMs || 16) / 1000)),
+            part: {
+                setPosition: (x, y, z) => mesh.position.set(Number(x) || 0, Number(y) || 0, Number(z) || 0),
+                move: (dx = 0, dy = 0, dz = 0) => mesh.position.add(new THREE.Vector3(Number(dx) || 0, Number(dy) || 0, Number(dz) || 0)),
+                setRotation: (x = 0, y = 0, z = 0) => mesh.rotation.set(Number(x) || 0, Number(y) || 0, Number(z) || 0),
+                rotate: (dx = 0, dy = 0, dz = 0) => { mesh.rotation.x += Number(dx) || 0; mesh.rotation.y += Number(dy) || 0; mesh.rotation.z += Number(dz) || 0; },
+                setScale: (x = 1, y = 1, z = 1) => mesh.scale.set(Math.max(0.05, Number(x) || 1), Math.max(0.05, Number(y) || 1), Math.max(0.05, Number(z) || 1)),
+                setColor: (hex = '#3498db') => { if (mesh.material && mesh.material.color) mesh.material.color.set(String(hex)); },
+                lookAtPlayer: () => mesh.lookAt(new THREE.Vector3(playerObj.x, playerObj.y + 2, playerObj.z))
+            },
             ui: uiRuntimeManager,
             scene: playScene,
             showModal,
@@ -6620,7 +6636,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     group.position.set(objData.position.x, objData.position.y, objData.position.z);
                     group.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     group.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-                    group.userData = { id: objData.id, type: 'vehicle', compiledScript: null, vSpeed: 0.5, vTurn: 0.03 };
+                    group.userData = { id: objData.id, type: 'vehicle', compiledScript: null, vSpeed: 0.5, vTurn: 0.03, isAnchored: objData.isAnchored !== false };
 
                     (objData.children || []).forEach(cData => {
                         let geo, mat;
@@ -6639,13 +6655,11 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         playMeshes.push(childMesh); // Push children to playMeshes so seats can be detected!
                     });
 
-               if (objData.script && objData.script.trim() !== '') {
-                        const scriptSource = objData.scriptJs || objData.script || '';
-                    if (scriptSource.trim() !== '') {
-                        const engine = new JavaScriptBehaviorEngine(scriptSource, () => buildScriptContext(mesh));
-                        mesh.userData.sculptEngine = engine;
+                    const vehicleScriptSource = objData.scriptJs || objData.script || '';
+                    if (vehicleScriptSource.trim() !== '') {
+                        const engine = new JavaScriptBehaviorEngine(vehicleScriptSource, () => buildScriptContext(group));
+                        group.userData.sculptEngine = engine;
                         engine.triggerEvent('start');
-                    }
                     }
                     playScene.add(group); playMeshes.push(group);
 
@@ -6667,15 +6681,13 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: (objData.noCollide || objData.canCollide === false), smart: objData.smart || null, smartState: {} };
+mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: (objData.noCollide || objData.canCollide === false), isAnchored: objData.isAnchored !== false, smart: objData.smart || null, smartState: {} };
                     
-            if (objData.script && objData.script.trim() !== '') {
-                        const scriptSource = objData.scriptJs || objData.script || '';
+                    const scriptSource = objData.scriptJs || objData.script || '';
                     if (scriptSource.trim() !== '') {
                         const engine = new JavaScriptBehaviorEngine(scriptSource, () => buildScriptContext(mesh));
                         mesh.userData.sculptEngine = engine;
                         engine.triggerEvent('start');
-                    }
                     }
 
                     if (objData.type === 'tool') { playerInventory.push({ data: objData, mesh: mesh }); playMeshes.push(mesh); } 
@@ -7124,8 +7136,51 @@ const updateChatBubbles = () => {
             });
         };
 
+        const updateDynamicObjectPhysics = () => {
+            if (!activeLevel || !playScene) return;
+            const gravityStrength = Math.max(0.02, (activeLevel.settings?.gravity || 0.35) * 0.06);
+            const playerPos = new THREE.Vector3(playerObj.x, playerObj.y + 2, playerObj.z);
+            const staticMeshes = playMeshes.filter(m => m?.isMesh && !m.userData?.isTool && !m.userData?.noCollide && m.userData?.isAnchored !== false);
+            const dynamicMeshes = playMeshes.filter(m => m?.isMesh && !m.userData?.isTool && !m.userData?.noCollide && m.userData?.isAnchored === false && !['seat', 'aircraftSeat'].includes(m.userData?.type));
+
+            dynamicMeshes.forEach(mesh => {
+                if (!mesh.userData.physicsVel) mesh.userData.physicsVel = new THREE.Vector3(0, 0, 0);
+                const vel = mesh.userData.physicsVel;
+                vel.y -= gravityStrength;
+                vel.multiplyScalar(0.992);
+
+                const pushDir = mesh.position.clone().sub(playerPos);
+                pushDir.y = 0;
+                const dist = pushDir.length();
+                if (dist > 0 && dist < 3.2) {
+                    pushDir.normalize();
+                    vel.x += pushDir.x * 0.03;
+                    vel.z += pushDir.z * 0.03;
+                }
+
+                mesh.position.add(vel);
+
+                const halfY = new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3()).y / 2;
+                if (mesh.position.y < -120) {
+                    mesh.position.y = 30;
+                    vel.set(0, 0, 0);
+                }
+
+                const ray = new THREE.Raycaster(new THREE.Vector3(mesh.position.x, mesh.position.y + 2, mesh.position.z), new THREE.Vector3(0, -1, 0), 0, 6);
+                const hits = ray.intersectObjects(staticMeshes, true);
+                if (hits.length > 0 && vel.y <= 0) {
+                    const floorY = hits[0].point.y + halfY + 0.03;
+                    if (mesh.position.y < floorY + 0.3) {
+                        mesh.position.y = floorY;
+                        vel.y = 0;
+                    }
+                }
+            });
+        };
+
     const updatePhysics3D = () => {
             if (playerObj.seatCooldown > 0) playerObj.seatCooldown--;
+            updateDynamicObjectPhysics();
 
             // --- ADVANCED VEHICLE & AIRCRAFT PHYSICS ---
             if (playerObj.sitting && playerObj.vehicleSeat) {
@@ -7511,6 +7566,9 @@ const updateChatBubbles = () => {
 const animatePlay = () => {
             if (document.getElementById('view-play').classList.contains('active')) {
                 playAnimationId = requestAnimationFrame(animatePlay);
+                const nowPerf = performance.now();
+                window.playDeltaMs = nowPerf - lastPlayFrameAt;
+                lastPlayFrameAt = nowPerf;
 
                 const time = Date.now() * 0.001; let hitboxesNeedUpdate = false;
                 
