@@ -185,6 +185,13 @@
 
 
 
+        
+        .studio-toolbar-grid { display:flex; gap:10px; flex-wrap:wrap; align-items:stretch; }
+        .studio-toolbar-group { border:1px solid #d6dde5; border-radius:6px; background:#fff; padding:8px; min-width:190px; }
+        .studio-toolbar-group h5 { margin:0 0 6px 0; font-size:12px; color:#2c3e50; text-transform:uppercase; letter-spacing:0.3px; }
+        .studio-toolbar-actions { display:flex; gap:6px; flex-wrap:wrap; }
+        .dash-friends-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
+
         @media(max-width: 768px) {
             .play-sidebar { height: auto; max-height: 300px; }
         }
@@ -852,6 +859,11 @@
             </div>
             
             <div class="card mt-20">
+                <h2 class="card-title">Friends Activity & Friendship Levels</h2>
+                <div id="dashboard-friends-grid" class="dash-friends-grid"></div>
+            </div>
+
+            <div class="card mt-20">
                 <h2 class="card-title">Saved Games</h2>
                 <div id="saved-games-grid" class="game-grid"></div>
             </div>
@@ -1064,50 +1076,57 @@
                 </div>
             </div>
 
-<div class="toolbar" style="background: #fdfdfd; margin-top: -10px; flex-wrap: wrap;">
-                <span style="font-weight: 600; color:#2c3e50;">Insert Part:</span>
-                <button class="tool-btn" onclick="addPart('block')">Cube</button>
-                <button class="tool-btn" onclick="addPart('sphere')">Sphere</button>
-                <button class="tool-btn" onclick="addPart('cylinder')">Cylinder</button>
-                <button class="tool-btn" onclick="addPart('cone')">Cone</button>
-                <button class="tool-btn" onclick="addPart('triangle')">Triangle</button>
-                <button class="tool-btn" onclick="addPart('wedge')">Wedge</button>
-                <button class="tool-btn" onclick="addPart('ladder')">Ladder</button>
-                <button class="tool-btn" style="color: #f39c12; font-weight:bold;" onclick="addPart('spawn')">Spawn</button>
-                <button class="tool-btn" style="color: #e74c3c; font-weight:bold;" onclick="addPart('seat')">Seat</button>
-                <button class="tool-btn" style="color: #9b59b6; font-weight:bold;" onclick="addPart('aircraftSeat')">Air Seat</button>
-                <button class="tool-btn" style="color: #9b59b6; font-weight:bold;" onclick="addPart('tool')">Tool</button>
-                <button class="tool-btn" style="color:#1abc9c; font-weight:bold;" onclick="toggleSmartObjectSidebar()">Smart Objects</button>
-                <button class="tool-btn" style="color: #27ae60; font-weight:bold; margin-left:10px;" onclick="toggleTerrainEditor()">Terrain</button>
-                <button class="btn btn-sm btn-warning" style="margin-left: 10px;" onclick="groupAsVehicle()">Group Vehicle</button>
-
-<button class="btn btn-sm btn-success" style="margin-left: 5px; background-color: #27ae60;" onclick="openToolbox()">Toolbox</button>
-
-<button class="btn btn-sm btn-primary" style="margin-left: 5px;" onclick="promptUploadModel()">Publish Model</button>
-
-                <button class="btn btn-sm btn-info" style="margin-left: 5px;" onclick="groupAsAircraft()">Group Aircraft</button>
-
-                <span style="color: #ccc; margin: 0 10px;">|</span>
-                
-                <span style="font-weight: 600; color:#2c3e50;">Edit Tool:</span>
-                <button class="tool-btn" id="mode-select" onclick="setTransformMode('select')">Select Tool</button>
-                <button class="tool-btn active" id="mode-translate" onclick="setTransformMode('translate')">Move</button>
-                <button class="tool-btn" id="mode-rotate" onclick="setTransformMode('rotate')">Rotate</button>
-                <button class="tool-btn" id="mode-scale" onclick="setTransformMode('scale')">Scale</button>
-
-                <span style="color: #ccc; margin: 0 10px;">|</span>
-
-                <span style="font-weight: 600; color:#2c3e50; font-size: 13px;">Snapping:</span>
-                <label style="font-size: 12px; margin-left: 5px;">Move: <input type="number" id="snap-move" value="1" style="width:40px; padding: 2px;"></label>
-                <label style="font-size: 12px; margin-left: 5px;">Rot: <input type="number" id="snap-rot" value="15" style="width:40px; padding: 2px;"></label>
-                <label style="font-size: 12px; margin-left: 5px;">Scale: <input type="number" id="snap-scale" value="1" style="width:40px; padding: 2px;"></label>
-
-                <span style="color: #ccc; margin: 0 10px;">|</span>
-
-                <button class="tool-btn" id="btn-multi-select" onclick="toggleMultiSelect()">Multi-Select: OFF</button>
-                <button class="tool-btn btn-info" style="margin-left: 5px;" onclick="duplicateSelectedParts()">Duplicate</button>
-                <button class="btn btn-sm btn-danger" style="margin-left: 5px;" onclick="deleteSelectedParts()">Delete</button>
-                <button class="tool-btn btn-danger" style="margin-left: auto;" onclick="promptClearEditor()">Clear World</button>
+<div class="toolbar" style="background: #fdfdfd; margin-top: -10px;">
+                <div class="studio-toolbar-grid">
+                    <div class="studio-toolbar-group">
+                        <h5>Build Parts</h5>
+                        <div class="studio-toolbar-actions">
+                            <button class="tool-btn" onclick="addPart('block')">Cube</button>
+                            <button class="tool-btn" onclick="addPart('sphere')">Sphere</button>
+                            <button class="tool-btn" onclick="addPart('cylinder')">Cylinder</button>
+                            <button class="tool-btn" onclick="addPart('cone')">Cone</button>
+                            <button class="tool-btn" onclick="addPart('triangle')">Triangle</button>
+                            <button class="tool-btn" onclick="addPart('wedge')">Wedge</button>
+                            <button class="tool-btn" onclick="addPart('ladder')">Ladder</button>
+                            <button class="tool-btn" style="color:#f39c12;font-weight:bold;" onclick="addPart('spawn')">Spawn</button>
+                        </div>
+                    </div>
+                    <div class="studio-toolbar-group">
+                        <h5>Gameplay</h5>
+                        <div class="studio-toolbar-actions">
+                            <button class="tool-btn" style="color:#e74c3c;font-weight:bold;" onclick="addPart('seat')">Seat</button>
+                            <button class="tool-btn" style="color:#9b59b6;font-weight:bold;" onclick="addPart('aircraftSeat')">Air Seat</button>
+                            <button class="tool-btn" style="color:#9b59b6;font-weight:bold;" onclick="addPart('tool')">Tool</button>
+                            <button class="tool-btn" style="color:#1abc9c;font-weight:bold;" onclick="toggleSmartObjectSidebar()">Smart Objects</button>
+                            <button class="tool-btn" style="color:#27ae60;font-weight:bold;" onclick="toggleTerrainEditor()">Terrain</button>
+                            <button class="btn btn-sm btn-warning" onclick="groupAsVehicle()">Group Vehicle</button>
+                            <button class="btn btn-sm btn-info" onclick="groupAsAircraft()">Group Aircraft</button>
+                        </div>
+                    </div>
+                    <div class="studio-toolbar-group">
+                        <h5>Edit Tools</h5>
+                        <div class="studio-toolbar-actions">
+                            <button class="tool-btn" id="mode-select" onclick="setTransformMode('select')">Select</button>
+                            <button class="tool-btn active" id="mode-translate" onclick="setTransformMode('translate')">Move</button>
+                            <button class="tool-btn" id="mode-rotate" onclick="setTransformMode('rotate')">Rotate</button>
+                            <button class="tool-btn" id="mode-scale" onclick="setTransformMode('scale')">Scale</button>
+                            <button class="tool-btn" id="btn-multi-select" onclick="toggleMultiSelect()">Multi-Select: OFF</button>
+                            <button class="tool-btn btn-info" onclick="duplicateSelectedParts()">Duplicate</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteSelectedParts()">Delete</button>
+                        </div>
+                    </div>
+                    <div class="studio-toolbar-group">
+                        <h5>Assets & Snapping</h5>
+                        <div class="studio-toolbar-actions">
+                            <button class="btn btn-sm btn-success" style="background-color:#27ae60;" onclick="openToolbox()">Toolbox</button>
+                            <button class="btn btn-sm btn-primary" onclick="promptUploadModel()">Publish Model</button>
+                            <label style="font-size:12px;">Move <input type="number" id="snap-move" value="1" style="width:48px; padding:2px;"></label>
+                            <label style="font-size:12px;">Rot <input type="number" id="snap-rot" value="15" style="width:48px; padding:2px;"></label>
+                            <label style="font-size:12px;">Scale <input type="number" id="snap-scale" value="1" style="width:48px; padding:2px;"></label>
+                            <button class="tool-btn btn-danger" onclick="promptClearEditor()">Clear World</button>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <div class="studio-layout">
@@ -1961,7 +1980,8 @@ const toggleMultiSelect = () => {
             if (!currentUser) return showModal('Hold up!', 'You need to be logged in to save games.');
             try {
                 await apiCall(`/games/${gameId}/bookmark`, 'POST');
-                loadDashboardGames(); // refresh dashboard views
+                loadDashboardGames();
+                loadDashboardFriends(); // refresh dashboard views
             } catch (e) {}
         };
         
@@ -4208,6 +4228,48 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
         };
 
         // --- Dashboard & Library ---
+        const loadDashboardFriends = async () => {
+            const grid = document.getElementById('dashboard-friends-grid');
+            if (!grid) return;
+            grid.innerHTML = '<p style="color:#7f8c8d;">Loading friends...</p>';
+            try {
+                const friends = await apiCall('/friends');
+                if (!friends || friends.length === 0) {
+                    grid.innerHTML = '<p style="color:#7f8c8d;">No friends yet. Add friends to track friendship levels and join games.</p>';
+                    return;
+                }
+                grid.innerHTML = '';
+                friends.forEach(f => {
+                    const level = f.friendshipLevel || Math.floor((f.friendshipXp || 0) / 100);
+                    const currentLevelXp = (f.friendshipXp || 0) % 100;
+                    const toNext = 100 - currentLevelXp;
+                    const nextRewardAt = (Math.floor(level / 10) + 1) * 10;
+                    const status = f.inGame ? `<div style="color:#27ae60; font-size:12px; margin-top:4px;">In game: <strong>${f.gameName}</strong></div>` : `<div style="color:#95a5a6; font-size:12px; margin-top:4px;">Not currently in game</div>`;
+                    const joinBtn = f.inGame ? `<button class="btn btn-sm btn-success" onclick="loadGame('${f.gameId}')">Join Game</button>` : '';
+                    const card = document.createElement('div');
+                    card.className = 'game-card';
+                    card.style.textAlign = 'left';
+                    card.innerHTML = `
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <img src="${f.headshot}" alt="${f.username} headshot" style="width:52px; height:52px; border-radius:10px; border:1px solid #dfe6e9; background:#fff;">
+                            <div>
+                                <div style="font-weight:700; color:#2c3e50;">${f.username}</div>
+                                <div style="font-size:12px; color:${f.isOnline ? '#2ecc71' : '#95a5a6'};">${f.isOnline ? 'Online' : 'Offline'}</div>
+                            </div>
+                        </div>
+                        ${status}
+                        <div style="margin-top:8px; font-size:12px;"><strong>Friendship Level ${level}</strong> • XP ${currentLevelXp}/100</div>
+                        <div style="height:8px; border-radius:4px; background:#ecf0f1; margin-top:4px; overflow:hidden;"><div style="height:100%; width:${Math.max(0,Math.min(100,currentLevelXp))}%; background:#3498db;"></div></div>
+                        <div style="margin-top:6px; font-size:11px; color:#8e44ad;">Next +75 SC reward at level ${nextRewardAt}. (${toNext} XP to next level)</div>
+                        <div style="display:flex; gap:6px; margin-top:8px;">${joinBtn}<button class="btn btn-sm btn-info" onclick="loadProfile('${f.username}'); navigate('profile');">Profile</button></div>
+                    `;
+                    grid.appendChild(card);
+                });
+            } catch (e) {
+                grid.innerHTML = '<p style="color:#e74c3c;">Failed to load friend activity.</p>';
+            }
+        };
+
         const loadDashboardGames = async () => {
             try {
                 const myData = await apiCall('/me');
@@ -5614,6 +5676,7 @@ playerObj = {
         let playerInventory = [];
         let equippedToolIndex = -1;
         let playInput = { justClicked: false, justJumped: false, justInteract: false };
+        let playAimNdc = { x: 0, y: 0 };
 
         const keys = { w: false, a: false, s: false, d: false, q: false, e: false, space: false };
 
@@ -5622,8 +5685,22 @@ playerObj = {
        // Capture Mouse Clicks for Guns/Tools
         window.addEventListener('pointerdown', (e) => {
             if (document.getElementById('view-play').classList.contains('active') && e.button === 0) {
+                const playEl = document.getElementById('play-container-3d');
+                if (playEl) {
+                    const rect = playEl.getBoundingClientRect();
+                    playAimNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                    playAimNdc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+                }
                 playInput.justClicked = true;
             }
+        });
+        window.addEventListener('pointermove', (e) => {
+            if (!document.getElementById('view-play').classList.contains('active')) return;
+            const playEl = document.getElementById('play-container-3d');
+            if (!playEl) return;
+            const rect = playEl.getBoundingClientRect();
+            playAimNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            playAimNdc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
         });
 
     window.addEventListener('keydown', e => { 
@@ -7005,14 +7082,17 @@ const animatePlay = () => {
                         playerObj.lastShotAt = now;
                         const bullet = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), new THREE.MeshBasicMaterial({color: colorHex}));
                         bullet.position.set(playerObj.x, playerObj.y + 4, playerObj.z);
-                        let dirX = Math.sin(playerObj.rotY);
-                        let dirZ = Math.cos(playerObj.rotY);
+                        const aimRay = new THREE.Raycaster();
+                        aimRay.setFromCamera(new THREE.Vector2(playAimNdc.x, playAimNdc.y), playCamera);
+                        let dirX = aimRay.ray.direction.x;
+                        let dirZ = aimRay.ray.direction.z;
                         const spread = parseFloat(options.spread || playerObj.blasterSpread || 0);
                         dirX += (Math.random() - 0.5) * spread;
                         dirZ += (Math.random() - 0.5) * spread;
                         const len = Math.max(0.0001, Math.sqrt(dirX*dirX + dirZ*dirZ));
                         dirX /= len; dirZ /= len;
                         bullet.position.x += dirX * 3; bullet.position.z += dirZ * 3;
+                        if (Math.abs(dirX) + Math.abs(dirZ) > 0.001) playerObj.rotY = Math.atan2(dirX, dirZ);
                         bullet.userData.velocity = new THREE.Vector3(dirX * speed, 0, dirZ * speed);
                         bullet.userData.lifetime = parseFloat(options.lifetime || playerObj.blasterLifetime || 100);
                         bullet.userData.damage = parseFloat(options.damage || playerObj.blasterDamage || 20);

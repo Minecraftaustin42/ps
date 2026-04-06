@@ -50,6 +50,7 @@ if (!db.sounds) db.sounds = [];
             if (!u.followers) u.followers = []; 
 if (typeof u.createdAt === 'undefined') u.createdAt = 0;
             if (!u.friends) u.friends = [];
+            u.friends = (u.friends || []).map(f => (typeof f === 'string' ? { id: f, addedAt: Date.now(), xp: 0, level: 0, rewardTier: 0, lastXpAt: 0 } : { ...f, xp: f.xp || 0, level: f.level || 0, rewardTier: f.rewardTier || 0, lastXpAt: f.lastXpAt || 0 }));
             if (!u.friendRequests) u.friendRequests = [];
             if (!u.color) u.color = '#e74c3c';
 if (!u.toolboxInventory) u.toolboxInventory = [];
@@ -300,6 +301,75 @@ const inviteCooldowns = {};
 
 const isUserOnline = (userId) => {
     return onlineUsers[userId] && (Date.now() - onlineUsers[userId] < 15000);
+};
+
+
+const getFriendLink = (user, friendId) => {
+    if (!user || !Array.isArray(user.friends)) return null;
+    return user.friends.find(f => f.id === friendId) || null;
+};
+
+const ensureFriendLink = (user, friendId) => {
+    if (!user.friends) user.friends = [];
+    let link = user.friends.find(f => f.id === friendId);
+    if (!link) {
+        link = { id: friendId, addedAt: Date.now(), xp: 0, level: 0, rewardTier: 0, lastXpAt: 0 };
+        user.friends.push(link);
+    }
+    if (typeof link.xp !== 'number') link.xp = 0;
+    if (typeof link.level !== 'number') link.level = Math.floor(link.xp / 100);
+    if (typeof link.rewardTier !== 'number') link.rewardTier = Math.floor(link.level / 10);
+    if (typeof link.lastXpAt !== 'number') link.lastXpAt = 0;
+    return link;
+};
+
+const grantFriendshipXp = (userId, friendId, amount = 5) => {
+    const user = db.users.find(u => u.id === userId);
+    const friend = db.users.find(u => u.id === friendId);
+    if (!user || !friend) return;
+
+    const now = Date.now();
+    const linkA = ensureFriendLink(user, friendId);
+    const linkB = ensureFriendLink(friend, userId);
+
+    if (now - linkA.lastXpAt < 30000) return; // throttle
+
+    linkA.xp += amount;
+    linkB.xp += amount;
+    linkA.level = Math.floor(linkA.xp / 100);
+    linkB.level = Math.floor(linkB.xp / 100);
+    linkA.lastXpAt = now;
+    linkB.lastXpAt = now;
+
+    const tierA = Math.floor(linkA.level / 10);
+    if (tierA > (linkA.rewardTier || 0)) {
+        user.coins = (user.coins || 0) + (tierA - (linkA.rewardTier || 0)) * 75;
+        linkA.rewardTier = tierA;
+    }
+    const tierB = Math.floor(linkB.level / 10);
+    if (tierB > (linkB.rewardTier || 0)) {
+        friend.coins = (friend.coins || 0) + (tierB - (linkB.rewardTier || 0)) * 75;
+        linkB.rewardTier = tierB;
+    }
+};
+
+const getFriendPresence = (friendId) => {
+    const now = Date.now();
+    for (const gameId in activePlayers) {
+        const p = activePlayers[gameId] && activePlayers[gameId][friendId];
+        if (p && (now - p.timestamp) < 5000) {
+            const g = db.games.find(game => game.id === gameId);
+            return { inGame: true, gameId, gameName: g ? g.title : 'Unknown Game' };
+        }
+    }
+    return { inGame: false, gameId: null, gameName: null };
+};
+
+const buildHeadshotDataUri = (username, color = '#e74c3c') => {
+    const safeName = String(username || '?').slice(0, 2).toUpperCase();
+    const safeColor = /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#e74c3c';
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='64' height='64' rx='12' fill='#1f2d3a'/><circle cx='32' cy='24' r='13' fill='${safeColor}'/><rect x='16' y='38' width='32' height='18' rx='9' fill='${safeColor}'/><text x='32' y='60' text-anchor='middle' fill='#fff' font-size='10' font-family='Arial'>${safeName}</text></svg>`;
+    return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 };
 
 const awardBadge = (userId, badgeName) => {
@@ -734,13 +804,22 @@ app.get("/api/friends", requireAuth, (req, res) => {
     const friends = user.friends.map(f => {
         const friendUser = db.users.find(u => u.id === f.id);
         if (!friendUser) return null;
-
+        const link = ensureFriendLink(user, friendUser.id);
+        const presence = getFriendPresence(friendUser.id);
         return {
             id: friendUser.id,
-            username: friendUser.username
+            username: friendUser.username,
+            isOnline: isUserOnline(friendUser.id),
+            color: friendUser.color || '#e74c3c',
+            headshot: buildHeadshotDataUri(friendUser.username, friendUser.color),
+            friendshipXp: link.xp || 0,
+            friendshipLevel: link.level || Math.floor((link.xp || 0) / 100),
+            nextLevelXp: ((Math.floor((link.xp || 0) / 100) + 1) * 100),
+            ...presence
         };
     }).filter(Boolean);
 
+    saveDB();
     res.json(friends);
 });
 
@@ -2466,6 +2545,7 @@ for (let uId in activePlayers[gameId]) {
     if (Date.now() - activePlayers[gameId][uId].timestamp < 3000) {
         if (uId !== req.userId && activePlayers[gameId][uId].sceneId === sceneId) {
             others.push({ userId: uId, ...activePlayers[gameId][uId] });
+            grantFriendshipXp(req.userId, uId, 5);
         }
     } else {
         // Remove timed-out player
