@@ -192,6 +192,20 @@
         .studio-toolbar-actions { display:flex; gap:6px; flex-wrap:wrap; }
         .dash-friends-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
 
+        .landing-welcome { text-align:center; margin-bottom:18px; }
+        .landing-welcome h1 { margin:0; font-size:32px; color:#2c3e50; letter-spacing:1px; }
+        .landing-welcome p { margin:8px 0 0 0; color:#556; }
+        .nostalgia-auth-wrap { position:relative; overflow:hidden; border-radius:10px; }
+        .nostalgia-auth-wrap::before { content:''; position:absolute; inset:0; background:linear-gradient(135deg,#dfe9f3,#ffffff,#fdf2d6); opacity:0.8; pointer-events:none; }
+        .nostalgia-characters { position:absolute; inset:0; pointer-events:none; z-index:1; }
+        .nostalgia-char { position:absolute; width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:30px; border:3px solid #fff; box-shadow:0 4px 12px rgba(0,0,0,0.15); }
+        .nostalgia-char.c1 { left:8px; top:10px; background:#3498db; }
+        .nostalgia-char.c2 { right:12px; top:20px; background:#9b59b6; }
+        .nostalgia-char.c3 { left:18px; bottom:18px; background:#2ecc71; }
+        .nostalgia-char.c4 { right:20px; bottom:14px; background:#f39c12; }
+        .nostalgia-auth-content { position:relative; z-index:2; padding:16px; }
+
+
         @media(max-width: 768px) {
             .play-sidebar { height: auto; max-height: 300px; }
         }
@@ -477,18 +491,30 @@
         
         <!-- Landing View -->
         <div id="view-landing" class="view active">
-            <div style="display: flex; gap: 30px; justify-content: center; flex-wrap: wrap;">
-                <div class="card" style="width: 100%; max-width: 400px;">
-                    <h2 class="card-title">Login</h2>
-                    <div class="form-group"><input type="text" id="login-user" class="form-control" placeholder="Username"></div>
-                    <div class="form-group"><input type="password" id="login-pass" class="form-control" placeholder="Password"></div>
-                    <button class="btn" onclick="login()">Log In</button>
+            <div class="landing-welcome">
+                <h1>PLAYSCULPT</h1>
+                <p>Build. Play. Create memories — just like the classic era.</p>
+            </div>
+            <div class="nostalgia-auth-wrap">
+                <div class="nostalgia-characters">
+                    <div class="nostalgia-char c1">🧱</div>
+                    <div class="nostalgia-char c2">🎮</div>
+                    <div class="nostalgia-char c3">🚗</div>
+                    <div class="nostalgia-char c4">🛠️</div>
                 </div>
-                <div class="card" style="width: 100%; max-width: 400px;">
-                    <h2 class="card-title">Sign Up</h2>
-                    <div class="form-group"><input type="text" id="signup-user" class="form-control" placeholder="Choose a Username"></div>
-                    <div class="form-group"><input type="password" id="signup-pass" class="form-control" placeholder="Create a Password"></div>
-                    <button class="btn btn-success" onclick="signup()">Create Account</button>
+                <div class="nostalgia-auth-content" style="display:flex; gap: 24px; justify-content:center; flex-wrap:wrap;">
+                    <div class="card" style="width: 100%; max-width: 360px; margin-bottom:0;">
+                        <h2 class="card-title">Welcome Back</h2>
+                        <div class="form-group"><input type="text" id="login-user" class="form-control" placeholder="Username"></div>
+                        <div class="form-group"><input type="password" id="login-pass" class="form-control" placeholder="Password"></div>
+                        <button class="btn" style="width:100%;" onclick="login()">Log In</button>
+                    </div>
+                    <div class="card" style="width: 100%; max-width: 360px; margin-bottom:0;">
+                        <h2 class="card-title">Join PlaySculpt</h2>
+                        <div class="form-group"><input type="text" id="signup-user" class="form-control" placeholder="Choose a Username"></div>
+                        <div class="form-group"><input type="password" id="signup-pass" class="form-control" placeholder="Create a Password"></div>
+                        <button class="btn btn-success" style="width:100%;" onclick="signup()">Create Account</button>
+                    </div>
                 </div>
             </div>
         </div>

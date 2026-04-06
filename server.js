@@ -1082,8 +1082,9 @@ app.post('/api/users/:username/friend-request', requireAuth, (req, res) => {
 
     if (!targetUser.friends.find(f => f.id === req.userId) && !targetUser.friendRequests.includes(req.userId)) {
         targetUser.friendRequests.push(req.userId);
-        createNotification(targetUserId, "friend_request", {
-    from: req.userId
+        const sender = db.users.find(u => u.id === req.userId);
+        createNotification(targetUser.id, "friend_request", {
+    from: sender ? sender.username : req.userId
 });
         saveDB();
     }
