@@ -17,6 +17,7 @@ let db = {
     globalChat: [], toolboxItems: [], // NEW
     notifications: [],
     moderation: { bans: {}, ipBans: [], warnings: {} },  // <-- ADD THIS LINE
+    friendPetDaily: {}
 };
 
 let chatActivity = {}; // Tracks timestamps for spam { userId: [timestamps] }
@@ -37,6 +38,7 @@ if (fs.existsSync(DB_FILE)) {
 if (!db.datastores) db.datastores = {};
 if (!db.notifications) db.notifications = [];
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} }; // <-- ADD THIS LINE
+if (!db.friendPetDaily) db.friendPetDaily = {};
     try {
         const loaded = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
         db = { ...db, ...loaded };
@@ -313,13 +315,15 @@ const ensureFriendLink = (user, friendId) => {
     if (!user.friends) user.friends = [];
     let link = user.friends.find(f => f.id === friendId);
     if (!link) {
-        link = { id: friendId, addedAt: Date.now(), xp: 0, level: 0, rewardTier: 0, lastXpAt: 0 };
+        link = { id: friendId, addedAt: Date.now(), xp: 0, level: 0, rewardTier: 0, lastXpAt: 0, rewards: { lvl10: false, lvl20: false, lvl50: false, lvl100: false }, petUnlocked: false };
         user.friends.push(link);
     }
     if (typeof link.xp !== 'number') link.xp = 0;
     if (typeof link.level !== 'number') link.level = Math.floor(link.xp / 100);
     if (typeof link.rewardTier !== 'number') link.rewardTier = Math.floor(link.level / 10);
     if (typeof link.lastXpAt !== 'number') link.lastXpAt = 0;
+    if (!link.rewards) link.rewards = { lvl10: false, lvl20: false, lvl50: false, lvl100: false };
+    if (typeof link.petUnlocked !== 'boolean') link.petUnlocked = false;
     return link;
 };
 
@@ -341,16 +345,56 @@ const grantFriendshipXp = (userId, friendId, amount = 5) => {
     linkA.lastXpAt = now;
     linkB.lastXpAt = now;
 
-    const tierA = Math.floor(linkA.level / 10);
-    if (tierA > (linkA.rewardTier || 0)) {
-        user.coins = (user.coins || 0) + (tierA - (linkA.rewardTier || 0)) * 75;
-        linkA.rewardTier = tierA;
+    const applyMilestone = (lvl, coins, rewardKey, extra = null) => {
+        if (linkA.level >= lvl && !linkA.rewards[rewardKey]) {
+            user.coins = (user.coins || 0) + coins;
+            linkA.rewards[rewardKey] = true;
+            if (extra === 'pet') linkA.petUnlocked = true;
+            if (extra === 'spin') {
+                const spinReward = Math.random() < 0.5 ? 1500 : 2500;
+                user.coins += spinReward;
+                linkA.lastSpinReward = spinReward;
+            }
+        }
+        if (linkB.level >= lvl && !linkB.rewards[rewardKey]) {
+            friend.coins = (friend.coins || 0) + coins;
+            linkB.rewards[rewardKey] = true;
+            if (extra === 'pet') linkB.petUnlocked = true;
+            if (extra === 'spin') {
+                const reward = linkA.lastSpinReward || (Math.random() < 0.5 ? 1500 : 2500);
+                friend.coins += reward;
+                linkB.lastSpinReward = reward;
+            }
+        }
+    };
+
+    applyMilestone(10, 100, 'lvl10');
+    applyMilestone(20, 0, 'lvl20', 'pet');
+    applyMilestone(50, 1000, 'lvl50');
+    applyMilestone(100, 0, 'lvl100', 'spin');
+};
+
+const claimDailyPetReward = (userId, friendId, linkA, linkB) => {
+    if (!linkA.petUnlocked || !linkB.petUnlocked) return null;
+    const levelGate = Math.min(linkA.level || 0, linkB.level || 0);
+    if (levelGate < 20) return null;
+
+    const pair = [userId, friendId].sort().join(':');
+    const dayKey = new Date().toISOString().slice(0, 10);
+    const key = `${pair}_${dayKey}`;
+    if (!db.friendPetDaily[key]) {
+        db.friendPetDaily[key] = { amount: Math.floor(5 + Math.random() * 16), claimed: {} };
     }
-    const tierB = Math.floor(linkB.level / 10);
-    if (tierB > (linkB.rewardTier || 0)) {
-        friend.coins = (friend.coins || 0) + (tierB - (linkB.rewardTier || 0)) * 75;
-        linkB.rewardTier = tierB;
-    }
+    const entry = db.friendPetDaily[key];
+    if (entry.claimed[userId]) return null;
+
+    const user = db.users.find(u => u.id === userId);
+    if (!user) return null;
+    user.coins = (user.coins || 0) + entry.amount;
+    entry.claimed[userId] = true;
+
+    const bunnyLevel = Math.max(1, Math.floor((Math.min(linkA.xp || 0, linkB.xp || 0)) / 200));
+    return { amount: entry.amount, bunnyLevel, dayKey };
 };
 
 const getFriendPresence = (friendId) => {
@@ -777,9 +821,9 @@ app.post('/api/users/:username/message', requireAuth, (req, res) => {
     });
 
     saveDB();
-    createNotification(targetUserId, "message", {
-    from: req.userId,
-    text: messageText
+    createNotification(targetUser.id, "message", {
+    from: sender.username,
+    text: text.trim().substring(0, 500)
 });
     res.json({ message: 'Message sent!' });
 });
@@ -802,10 +846,22 @@ app.get("/api/friends", requireAuth, (req, res) => {
     }
 
     const friends = user.friends.map(f => {
-        const friendUser = db.users.find(u => u.id === f.id);
+        const friendId = typeof f === 'string' ? f : f.id;
+        const friendUser = db.users.find(u => u.id === friendId);
         if (!friendUser) return null;
         const link = ensureFriendLink(user, friendUser.id);
+        const friendLink = ensureFriendLink(friendUser, user.id);
         const presence = getFriendPresence(friendUser.id);
+        const petReward = claimDailyPetReward(user.id, friendUser.id, link, friendLink);
+
+        const milestones = [
+            { level: 10, title: '+100 Coins (Both)', unlocked: !!link.rewards?.lvl10 },
+            { level: 20, title: 'Shared Bunny Pet', unlocked: !!link.rewards?.lvl20 },
+            { level: 50, title: '+1,000 Coins (Both)', unlocked: !!link.rewards?.lvl50 },
+            { level: 100, title: 'Spin Reward (1,500 or 2,500)', unlocked: !!link.rewards?.lvl100 }
+        ];
+        const nextMilestone = milestones.find(m => !m.unlocked) || null;
+
         return {
             id: friendUser.id,
             username: friendUser.username,
@@ -815,6 +871,10 @@ app.get("/api/friends", requireAuth, (req, res) => {
             friendshipXp: link.xp || 0,
             friendshipLevel: link.level || Math.floor((link.xp || 0) / 100),
             nextLevelXp: ((Math.floor((link.xp || 0) / 100) + 1) * 100),
+            milestones,
+            nextMilestone,
+            sharedPet: link.petUnlocked ? { type: 'Bunny', bunnyLevel: Math.max(1, Math.floor((link.xp || 0) / 200)) } : null,
+            petReward,
             ...presence
         };
     }).filter(Boolean);

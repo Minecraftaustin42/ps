@@ -204,6 +204,8 @@
         .nostalgia-char.c3 { left:18px; bottom:18px; background:#2ecc71; }
         .nostalgia-char.c4 { right:20px; bottom:14px; background:#f39c12; }
         .nostalgia-auth-content { position:relative; z-index:2; padding:16px; }
+        .bunny-badge { display:inline-flex; align-items:center; gap:6px; background:#fff7f0; border:1px solid #f7c9a8; color:#a75a2d; border-radius:14px; padding:4px 8px; font-size:12px; font-weight:700; }
+        .bunny-icon { width:24px; height:24px; border-radius:50%; background:radial-gradient(circle at 35% 35%, #fff, #ffe8d5 70%); display:inline-flex; align-items:center; justify-content:center; border:1px solid #f6d3ba; }
 
 
         @media(max-width: 768px) {
@@ -2207,6 +2209,7 @@ checkDailyReward(); // <-- ADDED HERE
                 updateCoinsUI();
 loadSponsoredAssetsDashboard(); // Add this line!
                 loadDashboardGames();
+                loadDashboardFriends();
             } else if (viewId === 'library') {
                 loadLibrary();
             } 
@@ -4268,10 +4271,16 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                 friends.forEach(f => {
                     const level = f.friendshipLevel || Math.floor((f.friendshipXp || 0) / 100);
                     const currentLevelXp = (f.friendshipXp || 0) % 100;
-                    const toNext = 100 - currentLevelXp;
-                    const nextRewardAt = (Math.floor(level / 10) + 1) * 10;
+                    const toNextLevel = 100 - currentLevelXp;
                     const status = f.inGame ? `<div style="color:#27ae60; font-size:12px; margin-top:4px;">In game: <strong>${f.gameName}</strong></div>` : `<div style="color:#95a5a6; font-size:12px; margin-top:4px;">Not currently in game</div>`;
                     const joinBtn = f.inGame ? `<button class="btn btn-sm btn-success" onclick="loadGame('${f.gameId}')">Join Game</button>` : '';
+                    const progression = (f.milestones || []).map(m => {
+                        const badge = m.unlocked ? '✅' : '🔒';
+                        const remain = m.unlocked ? 'Unlocked' : `${Math.max(0, (m.level * 100) - (f.friendshipXp || 0))} XP left`;
+                        return `<div style="font-size:11px; padding:4px 0; border-top:1px dashed #eee;">${badge} <strong>Lv ${m.level}</strong> — ${m.title} <span style="color:#777;">(${remain})</span></div>`;
+                    }).join('');
+                    const bunny = f.sharedPet ? `<div class="bunny-badge" style="margin-top:6px;"><span class="bunny-icon">🐰</span> Shared Bunny Lv ${f.sharedPet.bunnyLevel}</div>` : '';
+
                     const card = document.createElement('div');
                     card.className = 'game-card';
                     card.style.textAlign = 'left';
@@ -4286,10 +4295,22 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                         ${status}
                         <div style="margin-top:8px; font-size:12px;"><strong>Friendship Level ${level}</strong> • XP ${currentLevelXp}/100</div>
                         <div style="height:8px; border-radius:4px; background:#ecf0f1; margin-top:4px; overflow:hidden;"><div style="height:100%; width:${Math.max(0,Math.min(100,currentLevelXp))}%; background:#3498db;"></div></div>
-                        <div style="margin-top:6px; font-size:11px; color:#8e44ad;">Next +75 SC reward at level ${nextRewardAt}. (${toNext} XP to next level)</div>
+                        <div style="margin-top:6px; font-size:11px; color:#8e44ad;">${toNextLevel} XP to next level.</div>
+                        ${bunny}
+                        <div style="margin-top:8px; background:#fafafa; border:1px solid #eee; border-radius:6px; padding:6px;">
+                            <div style="font-size:11px; font-weight:700; color:#2c3e50; margin-bottom:3px;">Progression Tree</div>
+                            ${progression}
+                        </div>
                         <div style="display:flex; gap:6px; margin-top:8px;">${joinBtn}<button class="btn btn-sm btn-info" onclick="loadProfile('${f.username}'); navigate('profile');">Profile</button></div>
                     `;
                     grid.appendChild(card);
+
+                    if (f.petReward && !window[`pet_popup_${f.id}_${f.petReward.dayKey}`]) {
+                        window[`pet_popup_${f.id}_${f.petReward.dayKey}`] = true;
+                        showModal('🐰 Bunny Reward!', `Your shared bunny with ${f.username} earned ${f.petReward.amount} Sculpt Coins today!
+
+Keep playing together for more daily rewards.`, 'Aww!');
+                    }
                 });
             } catch (e) {
                 grid.innerHTML = '<p style="color:#e74c3c;">Failed to load friend activity.</p>';
