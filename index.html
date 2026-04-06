@@ -10,7 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <style>
         /* 2016 Nostalgic CSS / Flat Design Era */
-        @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Audiowide&display=swap');
 
         body { font-family: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #e9ebee; margin: 0; padding: 0; color: #333; overflow-x: hidden; touch-action: manipulation; }
 
@@ -195,15 +195,27 @@
         .landing-welcome { text-align:center; margin-bottom:18px; }
         .landing-welcome h1 { margin:0; font-size:32px; color:#2c3e50; letter-spacing:1px; }
         .landing-welcome p { margin:8px 0 0 0; color:#556; }
-        .nostalgia-auth-wrap { position:relative; overflow:hidden; border-radius:10px; }
-        .nostalgia-auth-wrap::before { content:''; position:absolute; inset:0; background:linear-gradient(135deg,#dfe9f3,#ffffff,#fdf2d6); opacity:0.8; pointer-events:none; }
+        .nostalgia-auth-wrap { position:relative; overflow:hidden; border-radius:14px; min-height: 560px; background: linear-gradient(180deg, #76c7ff 0%, #a8e0ff 50%, #e8f7ff 100%); border: 1px solid #a6d8ff; box-shadow: 0 10px 30px rgba(18, 84, 131, 0.2); }
+        .nostalgia-auth-wrap::before { content:''; position:absolute; inset:0; background:linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,247,214,0.18)); pointer-events:none; z-index: 1; }
+        #auth-scene { position:absolute; inset:0; z-index:0; pointer-events:none; }
+        .landing-logo-wrap { position:relative; z-index:3; text-align:center; padding:34px 18px 8px 18px; }
+        .playsculpt-logo { margin:0; font-family: 'Audiowide', 'Open Sans', sans-serif; font-size: clamp(44px, 8vw, 98px); letter-spacing: 7px; color: #fff8de; text-transform: uppercase; text-shadow: 0 0 10px rgba(255, 221, 112, 0.5), 0 5px 0 #e39b19, 0 10px 24px rgba(0, 39, 73, 0.5); }
+        .landing-logo-sub { margin: 8px 0 0 0; color: #12486b; font-size: 15px; font-weight: 700; text-shadow: 0 1px 0 rgba(255,255,255,0.7); }
         .nostalgia-characters { position:absolute; inset:0; pointer-events:none; z-index:1; }
         .nostalgia-char { position:absolute; width:64px; height:64px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:30px; border:3px solid #fff; box-shadow:0 4px 12px rgba(0,0,0,0.15); }
         .nostalgia-char.c1 { left:8px; top:10px; background:#3498db; }
         .nostalgia-char.c2 { right:12px; top:20px; background:#9b59b6; }
         .nostalgia-char.c3 { left:18px; bottom:18px; background:#2ecc71; }
         .nostalgia-char.c4 { right:20px; bottom:14px; background:#f39c12; }
-        .nostalgia-auth-content { position:relative; z-index:2; padding:16px; }
+        .nostalgia-auth-content { position:relative; z-index:4; padding:18px; }
+        .auth-glass-card { background: rgba(255,255,255,0.9); border: 1px solid rgba(183, 220, 247, 0.95); backdrop-filter: blur(3px); box-shadow: 0 8px 20px rgba(0,0,0,0.12); }
+
+        .events-list { display:grid; gap:16px; }
+        .event-card { border: 1px solid #dce9f4; background: linear-gradient(180deg, #fff, #f8fcff); border-radius: 10px; padding: 18px; box-shadow: 0 4px 12px rgba(12,73,109,0.08); }
+        .event-card h3 { margin:0 0 8px 0; color:#1d4f75; }
+        .event-card p { margin:0; color:#425b70; line-height:1.5; }
+        .event-countdown { margin-top:12px; padding:10px 12px; border-radius:8px; background:#12486b; color:#fff; font-weight:700; display:inline-flex; gap:8px; align-items:center; animation:eventPulse 1.35s ease-in-out infinite; }
+        @keyframes eventPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(255,210,91,0.4); } 50% { transform: scale(1.04); box-shadow: 0 0 14px rgba(255,210,91,0.75); } }
         .bunny-badge { display:inline-flex; align-items:center; gap:6px; background:#fff7f0; border:1px solid #f7c9a8; color:#a75a2d; border-radius:14px; padding:4px 8px; font-size:12px; font-weight:700; }
         .bunny-icon { width:24px; height:24px; border-radius:50%; background:radial-gradient(circle at 35% 35%, #fff, #ffe8d5 70%); display:inline-flex; align-items:center; justify-content:center; border:1px solid #f6d3ba; }
 
@@ -450,8 +462,9 @@
             <a onclick="navigate('dashboard')">Dashboard</a>
 <a onclick="enterSculptCity()" style="color: #f1c40f;">Sculpt City</a>
             <a onclick="navigate('library')">Library</a>
-<a onclick="navigate('chat')" style="color: #2ecc71; font-weight: bold;">Global Chat</a>
+            <a onclick="navigate('chat')" style="color: #2ecc71; font-weight: bold;">Global Chat</a>
             <a onclick="navigate('groups')">Groups</a>
+            <a onclick="navigate('events')">Events</a>
 
             <a onclick="navigate('create')">Create</a>
             <a onclick="navigate('shop')">Shop</a>
@@ -498,6 +511,11 @@
                 <p>Build. Play. Create memories — just like the classic era.</p>
             </div>
             <div class="nostalgia-auth-wrap">
+                <div id="auth-scene"></div>
+                <div class="landing-logo-wrap">
+                    <h1 class="playsculpt-logo">Playsculpt</h1>
+                    <p class="landing-logo-sub">A cozy city to build, play, and shine.</p>
+                </div>
                 <div class="nostalgia-characters">
                     <div class="nostalgia-char c1">🧱</div>
                     <div class="nostalgia-char c2">🎮</div>
@@ -505,19 +523,26 @@
                     <div class="nostalgia-char c4">🛠️</div>
                 </div>
                 <div class="nostalgia-auth-content" style="display:flex; gap: 24px; justify-content:center; flex-wrap:wrap;">
-                    <div class="card" style="width: 100%; max-width: 360px; margin-bottom:0;">
+                    <div class="card auth-glass-card" style="width: 100%; max-width: 360px; margin-bottom:0;">
                         <h2 class="card-title">Welcome Back</h2>
                         <div class="form-group"><input type="text" id="login-user" class="form-control" placeholder="Username"></div>
                         <div class="form-group"><input type="password" id="login-pass" class="form-control" placeholder="Password"></div>
                         <button class="btn" style="width:100%;" onclick="login()">Log In</button>
                     </div>
-                    <div class="card" style="width: 100%; max-width: 360px; margin-bottom:0;">
+                    <div class="card auth-glass-card" style="width: 100%; max-width: 360px; margin-bottom:0;">
                         <h2 class="card-title">Join PlaySculpt</h2>
                         <div class="form-group"><input type="text" id="signup-user" class="form-control" placeholder="Choose a Username"></div>
                         <div class="form-group"><input type="password" id="signup-pass" class="form-control" placeholder="Create a Password"></div>
                         <button class="btn btn-success" style="width:100%;" onclick="signup()">Create Account</button>
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <div id="view-events" class="view">
+            <div class="card">
+                <h2 class="card-title">Upcoming Events</h2>
+                <div id="events-list" class="events-list"></div>
             </div>
         </div>
 
@@ -2190,6 +2215,63 @@ checkDailyReward(); // <-- ADDED HERE
             }
         };
 
+        const eventDefinitions = [
+            {
+                title: "Playsculpt Summer Event",
+                startsAt: "2026-06-01T00:00:00",
+                description: "Starts June 1st, 2026! Play games, earn Sun Tokens! Create games, earn Sun Tokens, and get boosted easily! Discover new games and get rewarded! New games rise faster, creators get featured, players earn more than ever. Stay tuned, it starts June 1st!"
+            },
+            {
+                title: "Playsculpt Grand Opening",
+                startsAt: "2026-04-11T00:00:00",
+                description: "Starts April 11th, marking the first day of Playsculpt being online, the grand opening! Enjoy sculpt coins boost for certain actions, and obtain limited time avatar items that might be rare in the future! The sculpt coins boost goes on for 1 week!"
+            }
+        ];
+        let eventCountdownInterval = null;
+
+        const renderEvents = () => {
+            const list = document.getElementById('events-list');
+            if (!list) return;
+
+            list.innerHTML = eventDefinitions.map((event, index) => `
+                <article class="event-card">
+                    <h3>${event.title}</h3>
+                    <p>${event.description}</p>
+                    <div class="event-countdown" data-event-index="${index}">
+                        ☀️ <span>Loading countdown...</span>
+                    </div>
+                </article>
+            `).join('');
+            startEventCountdowns();
+        };
+
+        const startEventCountdowns = () => {
+            const updateCountdowns = () => {
+                document.querySelectorAll('.event-countdown').forEach(el => {
+                    const event = eventDefinitions[Number(el.dataset.eventIndex)];
+                    if (!event) return;
+                    const diff = new Date(event.startsAt).getTime() - Date.now();
+                    const label = el.querySelector('span');
+                    if (!label) return;
+
+                    if (diff <= 0) {
+                        label.textContent = "Live now! 🎉";
+                        return;
+                    }
+
+                    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
+                    const minutes = Math.floor((diff / (1000 * 60)) % 60);
+                    const seconds = Math.floor((diff / 1000) % 60);
+                    label.textContent = `Starts in ${days}d ${hours}h ${minutes}m ${seconds}s`;
+                });
+            };
+
+            if (eventCountdownInterval) clearInterval(eventCountdownInterval);
+            updateCountdowns();
+            eventCountdownInterval = setInterval(updateCountdowns, 1000);
+        };
+
         // Interval cleanup references
         let grpWallSyncInterval = null;
 
@@ -2222,6 +2304,8 @@ else if (viewId === 'chat') {
 
 else if (viewId === 'groups') {
                 loadGroupsList();
+            } else if (viewId === 'events') {
+                renderEvents();
             } else if (viewId === 'shop') {
                 switchShopTab('market');
                 loadShop();
@@ -8606,15 +8690,107 @@ const toggleOutputPanel = () => {
             content.scrollTop = content.scrollHeight;
         };
 
-        
+        let authSceneRenderer = null;
+        let authSceneCamera = null;
+        let authSunMesh = null;
+        let authAnimationFrame = null;
+
+        const initAuthScene = () => {
+            const mount = document.getElementById('auth-scene');
+            if (!mount || authSceneRenderer || typeof THREE === 'undefined') return;
+
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x87CEEB);
+
+            authSceneCamera = new THREE.PerspectiveCamera(58, mount.clientWidth / mount.clientHeight, 0.1, 1000);
+            authSceneCamera.position.set(0, 13, 38);
+            authSceneCamera.lookAt(0, 4, 0);
+
+            authSceneRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            authSceneRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+            authSceneRenderer.setSize(mount.clientWidth, mount.clientHeight);
+            mount.appendChild(authSceneRenderer.domElement);
+
+            const ambient = new THREE.AmbientLight(0xffffff, 0.75);
+            scene.add(ambient);
+            const keyLight = new THREE.DirectionalLight(0xfff2cb, 1.1);
+            keyLight.position.set(20, 35, 20);
+            scene.add(keyLight);
+
+            const ground = new THREE.Mesh(
+                new THREE.PlaneGeometry(240, 180),
+                new THREE.MeshLambertMaterial({ color: 0x77c775 })
+            );
+            ground.rotation.x = -Math.PI / 2;
+            ground.position.y = -0.8;
+            scene.add(ground);
+
+            authSunMesh = new THREE.Mesh(
+                new THREE.SphereGeometry(3, 30, 30),
+                new THREE.MeshBasicMaterial({ color: 0xffe36e })
+            );
+            authSunMesh.position.set(24, 28, -38);
+            scene.add(authSunMesh);
+
+            for (let i = 0; i < 24; i++) {
+                const width = 3 + Math.random() * 2.7;
+                const depth = 3 + Math.random() * 2.2;
+                const height = 8 + Math.random() * 20;
+                const building = new THREE.Mesh(
+                    new THREE.BoxGeometry(width, height, depth),
+                    new THREE.MeshLambertMaterial({ color: i % 2 === 0 ? 0x5d7388 : 0x7f96ad })
+                );
+                building.position.set(-34 + i * 3.1, height / 2 - 0.8, -12 - (i % 3) * 6);
+                scene.add(building);
+            }
+
+            for (let i = 0; i < 14; i++) {
+                const houseHeight = 2.2 + Math.random() * 1.8;
+                const house = new THREE.Mesh(
+                    new THREE.BoxGeometry(3.2, houseHeight, 3.2),
+                    new THREE.MeshLambertMaterial({ color: 0xe6d6be })
+                );
+                house.position.set(-25 + i * 3.8, houseHeight / 2 - 0.8, 7 + (i % 2) * 4.2);
+                scene.add(house);
+
+                const roof = new THREE.Mesh(
+                    new THREE.ConeGeometry(2.4, 1.8, 4),
+                    new THREE.MeshLambertMaterial({ color: 0xbf553a })
+                );
+                roof.rotation.y = Math.PI / 4;
+                roof.position.set(house.position.x, houseHeight + 0.1, house.position.z);
+                scene.add(roof);
+            }
+
+            const animateAuthScene = () => {
+                authAnimationFrame = requestAnimationFrame(animateAuthScene);
+                const now = Date.now() * 0.001;
+                if (authSunMesh) authSunMesh.position.y = 28 + Math.sin(now * 0.6) * 0.5;
+                authSceneCamera.position.x = Math.sin(now * 0.12) * 2.6;
+                authSceneCamera.lookAt(0, 5, 0);
+                authSceneRenderer.render(scene, authSceneCamera);
+            };
+            animateAuthScene();
+        };
+
+        const resizeAuthScene = () => {
+            const mount = document.getElementById('auth-scene');
+            if (!mount || !authSceneRenderer || !authSceneCamera) return;
+            authSceneCamera.aspect = mount.clientWidth / mount.clientHeight;
+            authSceneCamera.updateProjectionMatrix();
+            authSceneRenderer.setSize(mount.clientWidth, mount.clientHeight);
+        };
 
         window.onload = async () => {
+            initAuthScene();
             await checkSession(); 
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('profile')) {
                 setTimeout(() => { loadProfile(urlParams.get('profile')); navigate('profile'); window.history.replaceState({}, document.title, window.location.pathname); }, 50);
             }
         };
+
+        window.addEventListener('resize', resizeAuthScene);
 
 
 
