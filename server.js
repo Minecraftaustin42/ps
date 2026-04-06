@@ -50,6 +50,7 @@ if (!db.sounds) db.sounds = [];
             if (!u.followers) u.followers = []; 
 if (typeof u.createdAt === 'undefined') u.createdAt = 0;
             if (!u.friends) u.friends = [];
+            u.friends = (u.friends || []).map(f => (typeof f === 'string' ? { id: f, addedAt: Date.now(), xp: 0, level: 0, rewardTier: 0, lastXpAt: 0 } : { ...f, xp: f.xp || 0, level: f.level || 0, rewardTier: f.rewardTier || 0, lastXpAt: f.lastXpAt || 0 }));
             if (!u.friendRequests) u.friendRequests = [];
             if (!u.color) u.color = '#e74c3c';
 if (!u.toolboxInventory) u.toolboxInventory = [];
@@ -192,6 +193,81 @@ const verifyPassword = (password, salt, hash) => {
     return hash === verifyHash;
 };
 
+
+const sanitizeText = (value, maxLen = 80) => String(value || '').replace(/[<>]/g, '').trim().slice(0, maxLen);
+const sanitizeNumber = (value, fallback, min, max) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.max(min, Math.min(max, num));
+};
+
+const sanitizeGameData = (gameData) => {
+    const safe = {
+        settings: {
+            gravity: sanitizeNumber(gameData?.settings?.gravity, 0.35, 0, 5),
+            skyColor: /^#[0-9a-fA-F]{6}$/.test(gameData?.settings?.skyColor || '') ? gameData.settings.skyColor : '#87CEEB',
+            brightness: sanitizeNumber(gameData?.settings?.brightness, 1, 0.1, 3)
+        },
+        spawn: gameData?.spawn ? {
+            x: sanitizeNumber(gameData.spawn.x, 0, -5000, 5000),
+            y: sanitizeNumber(gameData.spawn.y, 2, -5000, 5000),
+            z: sanitizeNumber(gameData.spawn.z, 0, -5000, 5000),
+            scale: {
+                x: sanitizeNumber(gameData.spawn.scale?.x, 4, 0.1, 200),
+                y: sanitizeNumber(gameData.spawn.scale?.y, 1, 0.1, 200),
+                z: sanitizeNumber(gameData.spawn.scale?.z, 4, 0.1, 200)
+            }
+        } : { x: 0, y: 2, z: 0, scale: { x: 4, y: 1, z: 4 } },
+        objects: [],
+        uiLayout: Array.isArray(gameData?.uiLayout) ? gameData.uiLayout.slice(0, 150) : []
+    };
+
+    const objects = Array.isArray(gameData?.objects) ? gameData.objects.slice(0, 2500) : [];
+    objects.forEach((obj) => {
+        if (!obj || typeof obj !== 'object') return;
+        const cleanObj = {
+            id: typeof obj.id === 'string' ? obj.id.slice(0, 80) : crypto.randomUUID(),
+            name: sanitizeText(obj.name || obj.type || 'Object', 48),
+            type: sanitizeText(obj.type || 'block', 24),
+            position: {
+                x: sanitizeNumber(obj.position?.x, 0, -10000, 10000),
+                y: sanitizeNumber(obj.position?.y, 0, -10000, 10000),
+                z: sanitizeNumber(obj.position?.z, 0, -10000, 10000)
+            },
+            rotation: {
+                x: sanitizeNumber(obj.rotation?.x, 0, -Math.PI * 4, Math.PI * 4),
+                y: sanitizeNumber(obj.rotation?.y, 0, -Math.PI * 4, Math.PI * 4),
+                z: sanitizeNumber(obj.rotation?.z, 0, -Math.PI * 4, Math.PI * 4)
+            },
+            scale: {
+                x: sanitizeNumber(obj.scale?.x, 1, 0.05, 500),
+                y: sanitizeNumber(obj.scale?.y, 1, 0.05, 500),
+                z: sanitizeNumber(obj.scale?.z, 1, 0.05, 500)
+            },
+            color: /^#[0-9a-fA-F]{6}$/.test(obj.color || '') ? obj.color : '#3498db',
+            material: sanitizeText(obj.material || 'Plastic', 24),
+            script: String(obj.script || '').slice(0, 12000),
+            isAnchored: obj.isAnchored !== false,
+            canCollide: obj.canCollide !== false,
+            noCollide: !!obj.noCollide
+        };
+
+        if (obj.smart && typeof obj.smart === 'object') {
+            cleanObj.smart = {
+                kind: sanitizeText(obj.smart.kind || 'custom', 24),
+                title: sanitizeText(obj.smart.title || cleanObj.name, 40),
+                power: sanitizeNumber(obj.smart.power, 0, 0, 1000),
+                range: sanitizeNumber(obj.smart.range, 4, 1, 30),
+                team: ['all', 'red', 'blue', 'neutral'].includes(obj.smart.team) ? obj.smart.team : 'all',
+                advanced: !!obj.smart.advanced
+            };
+        }
+        safe.objects.push(cleanObj);
+    });
+
+    return safe;
+};
+
 function createNotification(userId, type, data) {
     db.notifications.push({
         id: crypto.randomUUID(),
@@ -225,6 +301,75 @@ const inviteCooldowns = {};
 
 const isUserOnline = (userId) => {
     return onlineUsers[userId] && (Date.now() - onlineUsers[userId] < 15000);
+};
+
+
+const getFriendLink = (user, friendId) => {
+    if (!user || !Array.isArray(user.friends)) return null;
+    return user.friends.find(f => f.id === friendId) || null;
+};
+
+const ensureFriendLink = (user, friendId) => {
+    if (!user.friends) user.friends = [];
+    let link = user.friends.find(f => f.id === friendId);
+    if (!link) {
+        link = { id: friendId, addedAt: Date.now(), xp: 0, level: 0, rewardTier: 0, lastXpAt: 0 };
+        user.friends.push(link);
+    }
+    if (typeof link.xp !== 'number') link.xp = 0;
+    if (typeof link.level !== 'number') link.level = Math.floor(link.xp / 100);
+    if (typeof link.rewardTier !== 'number') link.rewardTier = Math.floor(link.level / 10);
+    if (typeof link.lastXpAt !== 'number') link.lastXpAt = 0;
+    return link;
+};
+
+const grantFriendshipXp = (userId, friendId, amount = 5) => {
+    const user = db.users.find(u => u.id === userId);
+    const friend = db.users.find(u => u.id === friendId);
+    if (!user || !friend) return;
+
+    const now = Date.now();
+    const linkA = ensureFriendLink(user, friendId);
+    const linkB = ensureFriendLink(friend, userId);
+
+    if (now - linkA.lastXpAt < 30000) return; // throttle
+
+    linkA.xp += amount;
+    linkB.xp += amount;
+    linkA.level = Math.floor(linkA.xp / 100);
+    linkB.level = Math.floor(linkB.xp / 100);
+    linkA.lastXpAt = now;
+    linkB.lastXpAt = now;
+
+    const tierA = Math.floor(linkA.level / 10);
+    if (tierA > (linkA.rewardTier || 0)) {
+        user.coins = (user.coins || 0) + (tierA - (linkA.rewardTier || 0)) * 75;
+        linkA.rewardTier = tierA;
+    }
+    const tierB = Math.floor(linkB.level / 10);
+    if (tierB > (linkB.rewardTier || 0)) {
+        friend.coins = (friend.coins || 0) + (tierB - (linkB.rewardTier || 0)) * 75;
+        linkB.rewardTier = tierB;
+    }
+};
+
+const getFriendPresence = (friendId) => {
+    const now = Date.now();
+    for (const gameId in activePlayers) {
+        const p = activePlayers[gameId] && activePlayers[gameId][friendId];
+        if (p && (now - p.timestamp) < 5000) {
+            const g = db.games.find(game => game.id === gameId);
+            return { inGame: true, gameId, gameName: g ? g.title : 'Unknown Game' };
+        }
+    }
+    return { inGame: false, gameId: null, gameName: null };
+};
+
+const buildHeadshotDataUri = (username, color = '#e74c3c') => {
+    const safeName = String(username || '?').slice(0, 2).toUpperCase();
+    const safeColor = /^#[0-9a-fA-F]{6}$/.test(color) ? color : '#e74c3c';
+    const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='64' height='64'><rect width='64' height='64' rx='12' fill='#1f2d3a'/><circle cx='32' cy='24' r='13' fill='${safeColor}'/><rect x='16' y='38' width='32' height='18' rx='9' fill='${safeColor}'/><text x='32' y='60' text-anchor='middle' fill='#fff' font-size='10' font-family='Arial'>${safeName}</text></svg>`;
+    return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 };
 
 const awardBadge = (userId, badgeName) => {
@@ -659,13 +804,22 @@ app.get("/api/friends", requireAuth, (req, res) => {
     const friends = user.friends.map(f => {
         const friendUser = db.users.find(u => u.id === f.id);
         if (!friendUser) return null;
-
+        const link = ensureFriendLink(user, friendUser.id);
+        const presence = getFriendPresence(friendUser.id);
         return {
             id: friendUser.id,
-            username: friendUser.username
+            username: friendUser.username,
+            isOnline: isUserOnline(friendUser.id),
+            color: friendUser.color || '#e74c3c',
+            headshot: buildHeadshotDataUri(friendUser.username, friendUser.color),
+            friendshipXp: link.xp || 0,
+            friendshipLevel: link.level || Math.floor((link.xp || 0) / 100),
+            nextLevelXp: ((Math.floor((link.xp || 0) / 100) + 1) * 100),
+            ...presence
         };
     }).filter(Boolean);
 
+    saveDB();
     res.json(friends);
 });
 
@@ -1661,12 +1815,13 @@ app.post('/api/games/:id/publish', requireAuth, (req, res) => {
     if (!canEdit) return res.status(403).json({ error: 'Not authorized.' });
 
     const { gameData, genre } = req.body;
-    game.gameData = gameData;
+    const safeGameData = sanitizeGameData(gameData || {});
+    game.gameData = safeGameData;
     if (genre) game.genre = genre;
     game.lastEditTime = Date.now();
 
     if (!game.versions) game.versions = [];
-    game.versions.push({ versionId: game.versions.length + 1, timestamp: Date.now(), gameData: JSON.parse(JSON.stringify(gameData)) });
+    game.versions.push({ versionId: game.versions.length + 1, timestamp: Date.now(), gameData: JSON.parse(JSON.stringify(safeGameData)) });
 
     saveDB();
     res.json({ success: true, versionId: game.versions.length });
@@ -1772,6 +1927,8 @@ app.get('/api/games/trending', (req, res) => {
 app.post('/api/games', requireAuth, (req, res) => {
     const { title, gameData, genre, groupId, icon, thumbnails } = req.body;
     if (!title || !gameData) return res.status(400).json({ error: 'Missing game data.' });
+    const safeGameData = sanitizeGameData(gameData);
+    const safeTitle = sanitizeText(title, 80);
     
     const user = db.users.find(u => u.id === req.userId);
     let authorName = user.username;
@@ -1784,10 +1941,10 @@ app.post('/api/games', requireAuth, (req, res) => {
     }
 
     const newGame = {
-        id: crypto.randomUUID(), title, authorId: user.id, authorName: authorName, genre: genre || 'Sandbox',
-        groupId: groupId || null, gameData, lastEditTime: Date.now(), collaborators: [], likes: [], plays: 0, updates: [],
+        id: crypto.randomUUID(), title: safeTitle, authorId: user.id, authorName: authorName, genre: genre || 'Sandbox',
+        groupId: groupId || null, gameData: safeGameData, lastEditTime: Date.now(), collaborators: [], likes: [], plays: 0, updates: [],
         createdAt: new Date().toISOString(),
-        versions: [{ versionId: 1, timestamp: Date.now(), gameData }],
+        versions: [{ versionId: 1, timestamp: Date.now(), gameData: safeGameData }],
         analytics: { uniquePlayers: [], totalSessionTimeSeconds: 0, fallOffs: 0, peakCCU: 0, desktopSessions: 0, mobileSessions: 0, totalJumps: 0 },
         
         // NEW: Image fields
@@ -2206,7 +2363,7 @@ app.post('/api/games/:id/sync', requireAuth, (req, res) => {
 
     let appliedUpdate = false;
     if (gameData && lastLocalEditTime > game.lastEditTime) {
-        game.gameData = gameData;
+        game.gameData = sanitizeGameData(gameData);
         if (genre) game.genre = genre;
         game.lastEditTime = lastLocalEditTime;
         saveDB(); appliedUpdate = true;
@@ -2388,6 +2545,7 @@ for (let uId in activePlayers[gameId]) {
     if (Date.now() - activePlayers[gameId][uId].timestamp < 3000) {
         if (uId !== req.userId && activePlayers[gameId][uId].sceneId === sceneId) {
             others.push({ userId: uId, ...activePlayers[gameId][uId] });
+            grantFriendshipXp(req.userId, uId, 5);
         }
     } else {
         // Remove timed-out player
