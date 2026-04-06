@@ -1101,6 +1101,7 @@
                 <button class="tool-btn" style="color: #e74c3c; font-weight:bold;" onclick="addPart('seat')">Seat</button>
                 <button class="tool-btn" style="color: #9b59b6; font-weight:bold;" onclick="addPart('aircraftSeat')">Air Seat</button>
                 <button class="tool-btn" style="color: #9b59b6; font-weight:bold;" onclick="addPart('tool')">Tool</button>
+                <button class="tool-btn" style="color:#1abc9c; font-weight:bold;" onclick="toggleSmartObjectSidebar()">Smart Objects</button>
                 <button class="tool-btn" style="color: #27ae60; font-weight:bold; margin-left:10px;" onclick="toggleTerrainEditor()">Terrain</button>
                 <button class="btn btn-sm btn-warning" style="margin-left: 10px;" onclick="groupAsVehicle()">Group Vehicle</button>
 
@@ -1138,6 +1139,17 @@
 
 
 
+
+
+<div id="smart-object-sidebar" style="display:none; position:absolute; top:10px; left:10px; width:280px; max-height:90%; overflow:auto; background:rgba(18,23,30,0.96); color:#fff; border:1px solid #2c3e50; border-radius:8px; z-index:170; padding:10px; box-shadow:0 4px 16px rgba(0,0,0,0.45);">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
+        <strong>Smart Object Library</strong>
+        <button class="btn btn-sm btn-danger" onclick="toggleSmartObjectSidebar(false)">Close</button>
+    </div>
+    <p style="font-size:11px; color:#b8c7d9; margin:0 0 8px 0;">Drag objects into the world to get instant behaviors. No code required.</p>
+    <input id="smart-object-search" class="form-control" placeholder="Search objects..." style="margin-bottom:8px;" oninput="renderSmartObjectLibrary()"> 
+    <div id="smart-object-library" style="display:grid; grid-template-columns:1fr; gap:8px;"></div>
+</div>
 
 <div id="terrain-editor-panel" style="display:none; position:absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.95); padding: 15px; border-radius: 4px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 100; width: 220px; text-align: left; max-height: 90%; overflow-y: auto;">
                         <h4 style="margin-top:0; color:#2c3e50; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Terrain Editor</h4>
@@ -1371,6 +1383,40 @@
                             <option value="Sand">Sand / Dirt</option>
                             <option value="Slate">Slate / Stone</option>
                         </select>
+                        <div id="smart-props-section" style="display:none; margin-top:10px; background:#f6fbff; border:1px solid #d7e7f5; border-radius:4px; padding:8px;">
+                            <h5 style="margin:0 0 8px 0; color:#2c3e50;">Smart Object Logic</h5>
+                            <div class="form-group mb-10">
+                                <label><strong>Type:</strong></label>
+                                <input id="smart-type" class="form-control" disabled>
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Title:</strong></label>
+                                <input id="smart-title" class="form-control" maxlength="40" onchange="updateSmartObjectProperties()">
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Power / Price:</strong></label>
+                                <input id="smart-power" class="form-control" type="number" step="1" onchange="updateSmartObjectProperties()">
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Team:</strong></label>
+                                <select id="smart-team" class="form-control" onchange="updateSmartObjectProperties()">
+                                    <option value="all">All</option>
+                                    <option value="red">Red</option>
+                                    <option value="blue">Blue</option>
+                                    <option value="neutral">Neutral</option>
+                                </select>
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Range:</strong></label>
+                                <input id="smart-range" class="form-control" type="number" step="0.5" onchange="updateSmartObjectProperties()">
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Enable Advanced Script:</strong></label>
+                                <input id="smart-advanced" type="checkbox" onchange="updateSmartObjectProperties()">
+                            </div>
+                            <button class="btn btn-sm btn-info" style="width:100%;" onclick="openScriptEditorForSelected()">Open Advanced Script</button>
+                        </div>
+
                         </div>
                     </div>
                     <div id="props-empty" style="padding: 10px; font-size:12px; color:#777;">Select an object to edit properties.</div>
@@ -4686,6 +4732,7 @@ let currentEditMode = 'translate';
             let newData = { settings: { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
             if (levelData.settings) newData.settings = levelData.settings;
             if (levelData.objects) { 
+                (levelData.objects || []).forEach(ensureSmartLogicDefaults);
                 newData.objects = levelData.objects; 
                 newData.spawn = levelData.spawn; 
                 if (levelData.terrain) newData.terrain = levelData.terrain; // FIX: Ensure terrain loads!
@@ -4748,6 +4795,85 @@ let currentEditMode = 'translate';
 
         // --- Studio UI & Explorer Logic ---
    
+
+        const SMART_OBJECT_TEMPLATES = {
+            gun_spawner: { label: 'Gun Spawner', type: 'tool', color: '#8e44ad', scale: { x: 2, y: 1, z: 2 }, smart: { kind: 'gun', title: 'Blaster Pickup', power: 24, range: 5, team: 'all', advanced: false } },
+            npc_vendor: { label: 'NPC', type: 'block', color: '#e67e22', scale: { x: 2, y: 4, z: 2 }, smart: { kind: 'npc', title: 'Guide NPC', power: 12, range: 6, team: 'all', advanced: false } },
+            checkpoint: { label: 'Checkpoint', type: 'block', color: '#f1c40f', scale: { x: 3, y: 0.5, z: 3 }, smart: { kind: 'checkpoint', title: 'Checkpoint', power: 0, range: 3, team: 'all', advanced: false } },
+            vehicle_spawn: { label: 'Vehicle Spawner', type: 'block', color: '#2980b9', scale: { x: 4, y: 0.5, z: 4 }, smart: { kind: 'vehicleSpawner', title: 'Car Spawn Pad', power: 1, range: 4, team: 'all', advanced: false } },
+            auto_door: { label: 'Door', type: 'block', color: '#7f8c8d', scale: { x: 1, y: 5, z: 3 }, smart: { kind: 'door', title: 'Auto Door', power: 90, range: 4, team: 'all', advanced: false } },
+            shop_terminal: { label: 'Shop', type: 'block', color: '#27ae60', scale: { x: 2.5, y: 3, z: 2 }, smart: { kind: 'shop', title: 'Item Shop', power: 50, range: 5, team: 'all', advanced: false } },
+            jump_pad: { label: 'Jump Pad', type: 'block', color: '#1abc9c', scale: { x: 3, y: 0.4, z: 3 }, smart: { kind: 'jumpPad', title: 'Jump Pad', power: 8, range: 2.8, team: 'all', advanced: false } },
+            teleporter: { label: 'Teleporter', type: 'block', color: '#9b59b6', scale: { x: 3, y: 0.5, z: 3 }, smart: { kind: 'teleporter', title: 'Teleporter', power: 0, range: 3, team: 'all', advanced: false } }
+        };
+
+        const sanitizeSmartText = (value, fallback = '') => String(value || fallback).replace(/[^a-zA-Z0-9 _\-!?.]/g, '').trim().slice(0, 40);
+        const ensureSmartLogicDefaults = (obj) => {
+            if (!obj || !obj.smart || !obj.smart.kind) return;
+            obj.smart.title = sanitizeSmartText(obj.smart.title, obj.name || obj.smart.kind);
+            obj.smart.power = Math.max(0, Math.min(1000, parseFloat(obj.smart.power) || 0));
+            obj.smart.range = Math.max(1, Math.min(30, parseFloat(obj.smart.range) || 4));
+            obj.smart.team = ['all', 'red', 'blue', 'neutral'].includes(obj.smart.team) ? obj.smart.team : 'all';
+            obj.smart.advanced = !!obj.smart.advanced;
+        };
+
+        const toggleSmartObjectSidebar = (force) => {
+            const panel = document.getElementById('smart-object-sidebar');
+            if (!panel) return;
+            const show = typeof force === 'boolean' ? force : panel.style.display !== 'block';
+            panel.style.display = show ? 'block' : 'none';
+            if (show) { setupSmartObjectDragDrop(); renderSmartObjectLibrary(); }
+        };
+        window.toggleSmartObjectSidebar = toggleSmartObjectSidebar;
+
+        const renderSmartObjectLibrary = () => {
+            const host = document.getElementById('smart-object-library');
+            const q = (document.getElementById('smart-object-search')?.value || '').toLowerCase().trim();
+            if (!host) return;
+            host.innerHTML = '';
+            Object.entries(SMART_OBJECT_TEMPLATES).forEach(([key, cfg]) => {
+                if (q && !cfg.label.toLowerCase().includes(q) && !cfg.smart.kind.toLowerCase().includes(q)) return;
+                const card = document.createElement('div');
+                card.draggable = true;
+                card.dataset.template = key;
+                card.style.border = '1px solid #2f4358';
+                card.style.borderLeft = `4px solid ${cfg.color}`;
+                card.style.borderRadius = '6px';
+                card.style.padding = '8px';
+                card.style.background = '#15202b';
+                card.innerHTML = `<div style="font-weight:700;">${cfg.label}</div><div style="font-size:11px; color:#9fb3c8;">${cfg.smart.kind} • drag into world</div>`;
+                card.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', key));
+                card.addEventListener('dblclick', () => addSmartObject(key));
+                host.appendChild(card);
+            });
+        };
+        window.renderSmartObjectLibrary = renderSmartObjectLibrary;
+
+        const addSmartObject = (templateId, dropPoint) => {
+            const template = SMART_OBJECT_TEMPLATES[templateId];
+            if (!template) return;
+            const dir = new THREE.Vector3();
+            edCamera.getWorldDirection(dir);
+            const basePos = dropPoint || (edControls && edControls.target ? { x: edControls.target.x, y: edControls.target.y, z: edControls.target.z } : edCamera.position.clone().add(dir.multiplyScalar(10)));
+            const newObj = {
+                id: crypto.randomUUID(),
+                name: template.label,
+                type: template.type,
+                position: { x: basePos.x, y: (basePos.y || 0) + 1, z: basePos.z },
+                rotation: { x: 0, y: 0, z: 0 },
+                scale: { ...template.scale },
+                color: template.color,
+                material: 'Plastic',
+                smart: JSON.parse(JSON.stringify(template.smart))
+            };
+            ensureSmartLogicDefaults(newObj);
+            edData.objects.push(newObj);
+            buildEditorScene();
+            recordEdit();
+            setTimeout(() => selectObjectById(newObj.id), 40);
+        };
+        window.addSmartObject = addSmartObject;
+
       const addPart = (type) => {
             // Find exactly where the camera is looking
 const dir = new THREE.Vector3();
@@ -4943,6 +5069,7 @@ document.addEventListener('keydown', (e) => {
                     document.getElementById('prop-name').disabled = true;
                     document.getElementById('prop-color').disabled = true;
                     document.getElementById('prop-material').disabled = true;
+                    document.getElementById('smart-props-section').style.display = 'none';
                 } else {
                     const objData = edData.objects.find(o => o.id === primary.userData.id);
                     if (objData) {
@@ -4954,6 +5081,19 @@ document.addEventListener('keydown', (e) => {
                         
                         document.getElementById('prop-material').value = objData.material || 'Plastic';
                         document.getElementById('prop-material').disabled = false;
+                        const smartSection = document.getElementById('smart-props-section');
+                        if (objData.smart && objData.smart.kind) {
+                            ensureSmartLogicDefaults(objData);
+                            smartSection.style.display = 'block';
+                            document.getElementById('smart-type').value = objData.smart.kind;
+                            document.getElementById('smart-title').value = objData.smart.title || objData.name || '';
+                            document.getElementById('smart-power').value = objData.smart.power || 0;
+                            document.getElementById('smart-team').value = objData.smart.team || 'all';
+                            document.getElementById('smart-range').value = objData.smart.range || 4;
+                            document.getElementById('smart-advanced').checked = !!objData.smart.advanced;
+                        } else {
+                            smartSection.style.display = 'none';
+                        }
                     }
                 }
             } else {
@@ -4963,6 +5103,7 @@ document.addEventListener('keydown', (e) => {
                 
                 document.getElementById('props-empty').style.display = 'block';
                 document.getElementById('props-content').style.display = 'none';
+                document.getElementById('smart-props-section').style.display = 'none';
             }
             renderExplorer();
         };
@@ -5001,6 +5142,37 @@ document.addEventListener('keydown', (e) => {
 
 
 
+
+
+
+        const updateSmartObjectProperties = () => {
+            if (selectedObjects.length === 0) return;
+            const primary = selectedObjects[selectedObjects.length - 1];
+            if (primary.userData.isSpawn) return;
+            const objData = edData.objects.find(o => o.id === primary.userData.id);
+            if (!objData || !objData.smart) return;
+            objData.smart.title = sanitizeSmartText(document.getElementById('smart-title').value, objData.name);
+            objData.smart.power = Math.max(0, Math.min(1000, parseFloat(document.getElementById('smart-power').value) || 0));
+            objData.smart.team = document.getElementById('smart-team').value;
+            objData.smart.range = Math.max(1, Math.min(30, parseFloat(document.getElementById('smart-range').value) || 4));
+            objData.smart.advanced = document.getElementById('smart-advanced').checked;
+            ensureSmartLogicDefaults(objData);
+            recordEdit();
+        };
+        window.updateSmartObjectProperties = updateSmartObjectProperties;
+
+        const openScriptEditorForSelected = () => {
+            if (!selectedObjects.length) return showModal('Select Object', 'Select a smart object first.');
+            const primary = selectedObjects[selectedObjects.length - 1];
+            if (primary.userData.isSpawn) return;
+            const objData = edData.objects.find(o => o.id === primary.userData.id);
+            if (!objData) return;
+            if (!objData.smart) objData.smart = { kind: 'custom', title: objData.name || 'Object', power: 0, range: 4, team: 'all', advanced: true };
+            objData.smart.advanced = true;
+            updateSmartObjectProperties();
+            openScriptEditor(objData.id);
+        };
+        window.openScriptEditorForSelected = openScriptEditorForSelected;
 
 // --- ORIENTATION INDICATOR ---
         window.orientationHelper = null;
@@ -5717,6 +5889,7 @@ const promptClearEditor = () => {
             currentEditGameId = null; 
             edData = { settings: { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
+            (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
         };
        
@@ -5981,7 +6154,7 @@ playerObj = {
         // Tool System Variables
         let playerInventory = [];
         let equippedToolIndex = -1;
-        let playInput = { justClicked: false };
+        let playInput = { justClicked: false, justJumped: false, justInteract: false };
 
         const keys = { w: false, a: false, s: false, d: false, q: false, e: false, space: false };
 
@@ -6017,6 +6190,7 @@ playerObj = {
             }
 
             if (document.getElementById('view-play').classList.contains('active')) {
+                if (e.code === 'KeyE') playInput.justInteract = true;
                 const num = parseInt(e.key);
                 if (!isNaN(num) && num >= 1 && num <= 9) equipTool(num - 1); 
             }
@@ -6045,6 +6219,30 @@ if (e.code === 'Space') {
                 keys.space = false; // FIX: Release the spacebar!
             }
         });
+
+        function setupSmartObjectDragDrop() {
+            const container = document.getElementById('editor-container-3d');
+            if (!container || container.dataset.smartDropReady === '1') return;
+            container.dataset.smartDropReady = '1';
+            container.addEventListener('dragover', (e) => e.preventDefault());
+            container.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const templateId = e.dataTransfer.getData('text/plain');
+                if (!SMART_OBJECT_TEMPLATES[templateId]) return;
+                const rect = container.getBoundingClientRect();
+                const mouse = new THREE.Vector2(
+                    ((e.clientX - rect.left) / rect.width) * 2 - 1,
+                    -((e.clientY - rect.top) / rect.height) * 2 + 1
+                );
+                const ray = new THREE.Raycaster();
+                ray.setFromCamera(mouse, edCamera);
+                const hits = ray.intersectObjects(editorMeshes, true);
+                let point = null;
+                if (hits.length) point = { x: hits[0].point.x, y: hits[0].point.y, z: hits[0].point.z };
+                addSmartObject(templateId, point);
+            });
+        };
+
 
         const renderPlayToolbar = () => {
             const tb = document.getElementById('play-toolbar');
@@ -6441,7 +6639,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: objData.noCollide || false };
+mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: objData.noCollide || false, smart: objData.smart || null, smartState: {} };
                     
             if (objData.script && objData.script.trim() !== '') {
                         const engine = new SculptScript(objData.script, { mesh: mesh, player: playerObj, ui: uiRuntimeManager });
@@ -6498,6 +6696,7 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
 
             playerMesh = createPlayerMesh(currentUser ? currentUser.color : '#e74c3c', currentUser ? currentUser.equipped : null);
             playerMesh.scale.set(0.5, 0.5, 0.5); playScene.add(playerMesh); renderPlayToolbar();
+            window.smartRuntime = { lastInteractAt: 0 };
         };
 
   const startPlaySync = () => {
@@ -6775,6 +6974,63 @@ const updateChatBubbles = () => {
             return null;
         };
 
+
+
+
+        const canUseSmartObjectForTeam = (smart) => {
+            if (!smart) return true;
+            if (!currentUser || !currentUser.team) return smart.team === 'all' || smart.team === 'neutral';
+            return smart.team === 'all' || smart.team === 'neutral' || smart.team === currentUser.team;
+        };
+
+        const applySmartObjectBehavior = (mesh) => {
+            const smart = mesh.userData.smart;
+            if (!smart || !canUseSmartObjectForTeam(smart)) return;
+            const dist = mesh.position.distanceTo(new THREE.Vector3(playerObj.x, playerObj.y + 2, playerObj.z));
+            if (dist > (smart.range || 4)) return;
+            const now = Date.now();
+            const interactPressed = !!playInput.justInteract;
+            if (smart.kind === 'checkpoint') {
+                activeLevel.spawn = { x: mesh.position.x, y: mesh.position.y + 2, z: mesh.position.z, scale: { x: 4, y: 1, z: 4 } };
+                mesh.material && mesh.material.color && mesh.material.color.set('#2ecc71');
+            } else if (smart.kind === 'jumpPad') {
+                if (playerObj.vy <= 0.2) playerObj.vy = Math.max(playerObj.vy, Math.min(20, smart.power || 8));
+            } else if (smart.kind === 'gun') {
+                if (!mesh.userData.smartState.claimed) {
+                    playerObj.blasterDamage = Math.max(5, smart.power || 20);
+                    playerObj.blasterFireRate = Math.max(70, 240 - (smart.power || 20));
+                    mesh.userData.smartState.claimed = true;
+                    if (mesh.material) mesh.material.transparent = true, mesh.material.opacity = 0.35;
+                }
+            } else if (smart.kind === 'door') {
+                const autoOpen = dist < (smart.range || 4);
+                const target = autoOpen ? -THREE.MathUtils.degToRad(Math.max(10, Math.min(170, smart.power || 90))) : 0;
+                mesh.rotation.y += (target - mesh.rotation.y) * 0.2;
+                mesh.userData.noCollide = autoOpen;
+            } else if (smart.kind === 'npc' && interactPressed && now - (window.smartRuntime.lastInteractAt || 0) > 700) {
+                window.smartRuntime.lastInteractAt = now;
+                showModal(smart.title || 'NPC', `${smart.title || 'Hello!'} offers +${smart.power || 10} health.`);
+                playerObj.health = Math.min(100, playerObj.health + (smart.power || 10));
+            } else if (smart.kind === 'shop' && interactPressed && now - (window.smartRuntime.lastInteractAt || 0) > 700) {
+                window.smartRuntime.lastInteractAt = now;
+                const buff = Math.max(5, smart.power || 50);
+                playerObj.speed = Math.min(0.6, playerObj.speed + buff / 1000);
+                showModal('Shop Purchase', `${smart.title || 'Shop'} sold a speed buff (+${(buff / 1000).toFixed(2)}).`);
+            } else if (smart.kind === 'teleporter' && interactPressed && now - (window.smartRuntime.lastInteractAt || 0) > 700) {
+                window.smartRuntime.lastInteractAt = now;
+                const cp = (activeLevel.objects || []).find(o => o.smart && o.smart.kind === 'checkpoint' && o.id !== mesh.userData.id);
+                if (cp) {
+                    playerObj.x = cp.position.x; playerObj.y = cp.position.y + 4; playerObj.z = cp.position.z;
+                }
+            }
+        };
+
+        const updateSmartObjectBehaviors = () => {
+            playMeshes.forEach((mesh) => {
+                if (!mesh.userData || !mesh.userData.smart) return;
+                applySmartObjectBehavior(mesh);
+            });
+        };
 
     const updatePhysics3D = () => {
             if (playerObj.seatCooldown > 0) playerObj.seatCooldown--;
@@ -7247,6 +7503,7 @@ const animatePlay = () => {
                     if (window.playLadders) { window.playLadders = playMeshes.filter(m => m.userData.type === 'ladder').map(m => { m.updateMatrixWorld(true); return new THREE.Box3().setFromObject(m); }); }
                 }
                 updatePhysics3D();
+                updateSmartObjectBehaviors();
                 updatePlayerHealthHUD();
 
 if (playerMesh) {
@@ -7287,7 +7544,7 @@ if (playerMesh) {
                 }
 
                
-              playInput.justClicked = false; playInput.justJumped = false;
+              playInput.justClicked = false; playInput.justJumped = false; playInput.justInteract = false;
 
               updateChatBubbles();
 
