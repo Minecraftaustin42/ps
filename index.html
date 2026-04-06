@@ -130,30 +130,6 @@
         /* Toolbar */
         .toolbar { background: #fff; padding: 10px; border: 1px solid #d8dee2; border-radius: 4px; margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
         .tool-btn { background: #ecf0f1; color: #333; border: 1px solid #bdc3c7; padding: 8px 15px; border-radius: 3px; cursor: pointer; font-weight: 600; }
-
-        /* SculptScript visual coding editor */
-        .script-editor-mode-btn.active { box-shadow: inset 0 -2px 0 rgba(0,0,0,0.25); }
-        .sculptscript-layout { display:flex; gap:12px; height:100%; min-height:280px; }
-        .sculptscript-palette, .sculptscript-workspace { background:#232323; border:1px solid #555; border-radius:6px; padding:10px; overflow:auto; }
-        .sculptscript-palette { width:230px; flex-shrink:0; }
-        .sculptscript-workspace { flex:1; }
-        .sculptscript-chip { display:block; width:100%; margin-bottom:8px; border:0; border-radius:16px; padding:8px 10px; font-weight:700; color:#fff; cursor:pointer; text-align:left; }
-        .chip-event { background:#ff8c42; }
-        .chip-motion { background:#4f8df7; }
-        .chip-looks { background:#9b59b6; }
-        .chip-player { background:#2ecc71; }
-        .chip-ui { background:#e67e22; }
-        .chip-flow { background:#f1c40f; color:#222; }
-        .sculptscript-row { background:#2f2f2f; border:1px solid #666; border-left:6px solid #4f8df7; border-radius:8px; padding:8px; margin-bottom:8px; color:#eee; display:flex; gap:8px; align-items:center; flex-wrap:wrap; cursor:grab; }
-        .sculptscript-row[data-kind="event"] { border-left-color:#ff8c42; }
-        .sculptscript-row[data-kind="motion"] { border-left-color:#4f8df7; }
-        .sculptscript-row[data-kind="looks"] { border-left-color:#9b59b6; }
-        .sculptscript-row[data-kind="player"] { border-left-color:#2ecc71; }
-        .sculptscript-row[data-kind="ui"] { border-left-color:#e67e22; }
-        .sculptscript-row[data-kind="flow"] { border-left-color:#f1c40f; }
-        .sculptscript-row input, .sculptscript-row select { background:#1f1f1f; color:#fff; border:1px solid #666; border-radius:4px; padding:4px 6px; }
-        .sculptscript-delete { margin-left:auto; background:#e74c3c; border:0; color:#fff; border-radius:4px; padding:4px 8px; cursor:pointer; }
-        .sculptscript-dropzone { min-height:120px; border:2px dashed #555; border-radius:6px; padding:8px; }
         .tool-btn.active { background: #3498db; color: white; border-color: #2980b9; }
         .active-users-badge { background-color: #2ecc71; color: white; padding: 4px 10px; border-radius: 12px; font-size: 12px; font-weight: bold; }
 
@@ -1101,6 +1077,7 @@
                 <button class="tool-btn" style="color: #e74c3c; font-weight:bold;" onclick="addPart('seat')">Seat</button>
                 <button class="tool-btn" style="color: #9b59b6; font-weight:bold;" onclick="addPart('aircraftSeat')">Air Seat</button>
                 <button class="tool-btn" style="color: #9b59b6; font-weight:bold;" onclick="addPart('tool')">Tool</button>
+                <button class="tool-btn" style="color:#1abc9c; font-weight:bold;" onclick="toggleSmartObjectSidebar()">Smart Objects</button>
                 <button class="tool-btn" style="color: #27ae60; font-weight:bold; margin-left:10px;" onclick="toggleTerrainEditor()">Terrain</button>
                 <button class="btn btn-sm btn-warning" style="margin-left: 10px;" onclick="groupAsVehicle()">Group Vehicle</button>
 
@@ -1138,6 +1115,17 @@
 
 
 
+
+
+<div id="smart-object-sidebar" style="display:none; position:absolute; top:10px; left:10px; width:280px; max-height:90%; overflow:auto; background:rgba(18,23,30,0.96); color:#fff; border:1px solid #2c3e50; border-radius:8px; z-index:170; padding:10px; box-shadow:0 4px 16px rgba(0,0,0,0.45);">
+    <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px;">
+        <strong>Smart Object Library</strong>
+        <button class="btn btn-sm btn-danger" onclick="toggleSmartObjectSidebar(false)">Close</button>
+    </div>
+    <p style="font-size:11px; color:#b8c7d9; margin:0 0 8px 0;">Drag objects into the world to get instant behaviors. No code required.</p>
+    <input id="smart-object-search" class="form-control" placeholder="Search objects..." style="margin-bottom:8px;" oninput="renderSmartObjectLibrary()"> 
+    <div id="smart-object-library" style="display:grid; grid-template-columns:1fr; gap:8px;"></div>
+</div>
 
 <div id="terrain-editor-panel" style="display:none; position:absolute; top: 10px; left: 10px; background: rgba(255,255,255,0.95); padding: 15px; border-radius: 4px; box-shadow: 0 2px 10px rgba(0,0,0,0.3); z-index: 100; width: 220px; text-align: left; max-height: 90%; overflow-y: auto;">
                         <h4 style="margin-top:0; color:#2c3e50; border-bottom: 1px solid #ccc; padding-bottom: 5px;">Terrain Editor</h4>
@@ -1199,63 +1187,15 @@
 
 <div id="script-editor-panel" style="display:none; position:absolute; top: 10px; left: 10px; right: 10px; bottom: 10px; background: rgba(30,30,30,0.95); padding: 15px; border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 200; flex-direction: column;">
                         <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap:10px; flex-wrap:wrap;">
-                            <h3 style="margin:0; color:#fff;" id="script-editor-title">Edit Script</h3>
+                            <h3 style="margin:0; color:#fff;" id="script-editor-title">JavaScript Editor</h3>
                             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
                                 <button class="btn btn-sm btn-info" onclick="toggleUIDesigner()">UI Designer</button>
-                                <button class="btn btn-sm btn-success" onclick="saveScript()">Save Script</button>
+                                <button class="btn btn-sm btn-success" onclick="saveScript()">Save JavaScript</button>
                                 <button class="btn btn-sm btn-danger" onclick="document.getElementById('script-editor-panel').style.display='none'">Close</button>
                             </div>
                         </div>
-                        <div id="script-block-mode" style="display:block; flex-grow:1; min-height:0;">
-                            <div class="sculptscript-layout">
-                                <div class="sculptscript-palette">
-                                    <h4 style="margin:0 0 8px 0; color:#fff;">SculptScript Blocks</h4>
-                                    <button class="sculptscript-chip chip-event" onclick="addSculptScriptBlock('event')">Event Trigger</button>
-                                    <button class="sculptscript-chip chip-flow" onclick="addSculptScriptBlock('repeat')">Repeat Loop</button>
-                                    <button class="sculptscript-chip chip-flow" onclick="addSculptScriptBlock('while')">While Loop</button>
-                                    <button class="sculptscript-chip chip-flow" onclick="addSculptScriptBlock('if')">If Condition</button>
-                                    <button class="sculptscript-chip chip-flow" onclick="addSculptScriptBlock('end')">End Block</button>
-                                    <button class="sculptscript-chip chip-flow" onclick="addSculptScriptBlock('wait')">Wait</button>
-                                    <button class="sculptscript-chip chip-motion" onclick="addSculptScriptBlock('move')">Object Move</button>
-                                    <button class="sculptscript-chip chip-motion" onclick="addSculptScriptBlock('rotate')">Object Rotate</button>
-                                    <button class="sculptscript-chip chip-looks" onclick="addSculptScriptBlock('color')">Object Color</button>
-                                    <button class="sculptscript-chip chip-player" onclick="addSculptScriptBlock('player_health')">Set Player Health</button>
-                                    <button class="sculptscript-chip chip-player" onclick="addSculptScriptBlock('player_heal')">Player Heal</button>
-                                    <button class="sculptscript-chip chip-player" onclick="addSculptScriptBlock('player_damage')">Player Damage</button>
-                                    <button class="sculptscript-chip chip-player" onclick="addSculptScriptBlock('player_speed')">Set Player Speed</button>
-                                    <button class="sculptscript-chip chip-player" onclick="addSculptScriptBlock('player_jump')">Set Player Jump</button>
-                                    <button class="sculptscript-chip chip-player" onclick="addSculptScriptBlock('player_teleport')">Player Teleport</button>
-                                    <button class="sculptscript-chip chip-ui" onclick="addSculptScriptBlock('ui_message')">UI Message</button>
-                                    <button class="sculptscript-chip chip-ui" onclick="addSculptScriptBlock('ui_notify')">UI Notify</button>
-                                    <button class="sculptscript-chip chip-ui" onclick="addSculptScriptBlock('ui_create_label')">UI Create Label</button>
-                                    <button class="sculptscript-chip chip-ui" onclick="addSculptScriptBlock('ui_create_button')">UI Create Button</button>
-                                    <button class="sculptscript-chip chip-ui" onclick="addSculptScriptBlock('ui_create_bar')">UI Create Bar</button>
-                                    <button class="sculptscript-chip chip-ui" onclick="addSculptScriptBlock('ui_set_text')">UI Set Text</button>
-                                    <button class="sculptscript-chip chip-ui" onclick="addSculptScriptBlock('ui_set_value')">UI Set Value</button>
-                                    <button class="sculptscript-chip chip-ui" onclick="addSculptScriptBlock('ui_visible')">UI Show/Hide</button>
-                                    <button class="sculptscript-chip chip-motion" onclick="addSculptScriptBlock('blaster_damage')">Blaster Damage</button>
-                                    <button class="sculptscript-chip chip-motion" onclick="addSculptScriptBlock('blaster_speed')">Blaster Speed</button>
-                                    <button class="sculptscript-chip chip-motion" onclick="addSculptScriptBlock('blaster_spread')">Blaster Spread</button>
-                                    <button class="sculptscript-chip chip-motion" onclick="addSculptScriptBlock('blaster_fire_rate')">Blaster Fire Rate</button>
-                                    <button class="sculptscript-chip chip-motion" onclick="addSculptScriptBlock('blaster_lifetime')">Blaster Lifetime</button>
-                                    <button class="sculptscript-chip chip-motion" onclick="addSculptScriptBlock('blaster_color')">Blaster Color</button>
-                                    <button class="sculptscript-chip chip-motion" onclick="addSculptScriptBlock('blaster_shoot')">Blaster Shoot</button>
-                                    <button class="sculptscript-chip chip-motion" onclick="addSculptScriptBlock('vehicle_speed')">Vehicle Speed</button>
-                                    <button class="sculptscript-chip chip-motion" onclick="addSculptScriptBlock('vehicle_turn')">Vehicle Turn</button>
-                                    <button class="sculptscript-chip chip-flow" onclick="addSculptScriptBlock('set_var')">Set Variable</button>
-                                    <button class="sculptscript-chip chip-flow" onclick="addSculptScriptBlock('function')">Function</button>
-                                    <button class="sculptscript-chip chip-flow" onclick="addSculptScriptBlock('call')">Call Function</button>
-                                    <button class="sculptscript-chip chip-ui" onclick="addSculptScriptBlock('custom')">Custom Command</button>
-                                </div>
-                                <div class="sculptscript-workspace">
-                                    <div id="sculptscript-dropzone" class="sculptscript-dropzone"></div>
-                                    <div style="margin-top:10px;">
-                                        <label style="display:block; color:#bbb; font-size:12px; margin-bottom:4px;">Generated SculptScript Preview</label>
-                                        <textarea id="sculptscript-preview" readonly style="width:100%; min-height:130px; background:#171717; color:#ddd; border:1px solid #555; border-radius:4px; padding:8px; font-family:monospace; font-size:12px;"></textarea>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+                        <p style="color:#bfc9d4; font-size:12px; margin:0 0 8px 0;">Write plain JavaScript. Your code runs with <code>ctx</code>, <code>event</code>, and <code>state</code>. Events include <code>start</code>, <code>update</code>, and <code>interact</code>.</p>
+                        <textarea id="script-js-editor" style="width:100%; flex:1; min-height:220px; resize:none; background:#111820; color:#dce9ff; border:1px solid #3b4e61; border-radius:6px; padding:10px; font-family:monospace; font-size:13px; line-height:1.45;" spellcheck="false"></textarea>
                         <input type="hidden" id="script-editor-target-id">
                     </div>
 
@@ -1371,6 +1311,40 @@
                             <option value="Sand">Sand / Dirt</option>
                             <option value="Slate">Slate / Stone</option>
                         </select>
+                        <div id="smart-props-section" style="display:none; margin-top:10px; background:#f6fbff; border:1px solid #d7e7f5; border-radius:4px; padding:8px;">
+                            <h5 style="margin:0 0 8px 0; color:#2c3e50;">Smart Object Logic</h5>
+                            <div class="form-group mb-10">
+                                <label><strong>Type:</strong></label>
+                                <input id="smart-type" class="form-control" disabled>
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Title:</strong></label>
+                                <input id="smart-title" class="form-control" maxlength="40" onchange="updateSmartObjectProperties()">
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Power / Price:</strong></label>
+                                <input id="smart-power" class="form-control" type="number" step="1" onchange="updateSmartObjectProperties()">
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Team:</strong></label>
+                                <select id="smart-team" class="form-control" onchange="updateSmartObjectProperties()">
+                                    <option value="all">All</option>
+                                    <option value="red">Red</option>
+                                    <option value="blue">Blue</option>
+                                    <option value="neutral">Neutral</option>
+                                </select>
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Range:</strong></label>
+                                <input id="smart-range" class="form-control" type="number" step="0.5" onchange="updateSmartObjectProperties()">
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Enable Advanced Script:</strong></label>
+                                <input id="smart-advanced" type="checkbox" onchange="updateSmartObjectProperties()">
+                            </div>
+                            <button class="btn btn-sm btn-info" style="width:100%;" onclick="openScriptEditorForSelected()">Open Advanced Script</button>
+                        </div>
+
                         </div>
                     </div>
                     <div id="props-empty" style="padding: 10px; font-size:12px; color:#777;">Select an object to edit properties.</div>
@@ -4300,231 +4274,47 @@ const playRandomGame = async () => {
 
 
 // ==========================================
-        // SCULPTSCRIPT ENGINE v1.0
+        // JAVASCRIPT BEHAVIOR ENGINE
         // ==========================================
-        class SculptScript {
-            constructor(scriptText, contextObj) {
-                this.rawScript = scriptText;
-                this.ctx = contextObj; // Holds mesh, player, scene, etc.
-                this.ast = [];
-                this.events = {};
-                this.functions = {};
-                this.env = {}; // Variables
+        class JavaScriptBehaviorEngine {
+            constructor(scriptText, contextFactory) {
+                this.rawScript = String(scriptText || '');
+                this.contextFactory = contextFactory;
+                this.state = {};
+                this.compiled = null;
+                this.lastError = 0;
+                this.compile();
             }
 
-            // --- 1. THE PARSER ---
-            parse() {
-                const lines = this.rawScript.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('//'));
-                let currentBlock = this.ast;
-                let stack = [];
-
-                for (let i = 0; i < lines.length; i++) {
-                    const line = lines[i];
-                    
-                    if (line.endsWith(':')) {
-                        // Start of a new block (event, function, loop, if)
-                        const block = { type: 'block', header: line.slice(0, -1).trim(), body: [], lineNum: i + 1 };
-                        currentBlock.push(block);
-                        stack.push(currentBlock);
-                        currentBlock = block.body;
-                    } 
-                    else if (line === 'end') {
-                        // End of block
-                        if (stack.length === 0) return printOutput(`Syntax Error line ${i+1}: 'end' without opening block.`, 'error');
-                        currentBlock = stack.pop();
-                    } 
-                    else {
-                        // Standard Command or Variable Assignment
-                        currentBlock.push({ type: 'command', text: line, lineNum: i + 1 });
-                    }
+            compile() {
+                const source = `"use strict";
+const window=undefined,document=undefined,fetch=undefined,XMLHttpRequest=undefined,WebSocket=undefined,eval=undefined,Function=undefined;
+${this.rawScript}`;
+                try {
+                    this.compiled = new Function('ctx', 'event', 'state', source);
+                } catch (e) {
+                    this.compiled = null;
+                    printOutput(`JS Compile Error: ${e.message}`, 'error');
                 }
-
-                if (stack.length > 0) printOutput('Syntax Error: Missing "end" for block(s).', 'error');
-
-                // Organize AST into Events and Functions for fast execution
-                this.ast.forEach(node => {
-                    if (node.type === 'block') {
-                        if (node.header.startsWith('on ')) this.events[node.header] = node;
-                        else if (node.header.startsWith('function ')) this.functions[node.header.replace('function ', '').trim()] = node;
-                    }
-                });
             }
 
-            // --- 2. VALUE EVALUATOR ---
-            evaluate(valStr) {
-                if (!valStr) return null;
-                // Check if it's a number
-                if (!isNaN(valStr)) return parseFloat(valStr);
-                // Check if it's a string literal "hello"
-                if (valStr.startsWith('"') && valStr.endsWith('"')) return valStr.slice(1, -1);
-                // Check if it's a variable
-                if (this.env.hasOwnProperty(valStr)) return this.env[valStr];
-                
-                // Very basic math evaluation for things like `player health < 50`
-                const tokens = valStr.split(' ');
-                if (tokens.length === 3) {
-                    const left = this.evaluate(tokens[0]);
-                    const right = this.evaluate(tokens[2]);
-                    const op = tokens[1];
-                    if (op === '<') return left < right;
-                    if (op === '>') return left > right;
-                    if (op === '<=') return left <= right;
-                    if (op === '>=') return left >= right;
-                    if (op === '==') return left == right;
-                    if (op === '!=') return left != right;
-                }
-                return valStr; // Fallback
-            }
-
-            // --- 3. THE INTERPRETER ---
-            async executeNode(node) {
-                if (node.type === 'command') {
-                    const parts = node.text.match(/(?:[^\s"]+|"[^"]*")+/g); // Split by space but keep quotes intact
-                    if (!parts) return;
-                    
-                    const cmd = parts[0].toLowerCase();
-
-                    try {
-                        // Variable Assignment: set score = 10
-                        if (cmd === 'set' && parts[2] === '=') {
-                            this.env[parts[1]] = this.evaluate(parts.slice(3).join(' '));
-                        }
-                        // Function Call: call boost
-                        else if (cmd === 'call') {
-                            const func = this.functions[parts[1]];
-                            if (func) await this.executeBlock(func.body);
-                            else printOutput(`Runtime Error: Function '${parts[1]}' not found.`, 'error');
-                        }
-                        // Wait Command: wait 2
-                        else if (cmd === 'wait') {
-                            const secs = this.evaluate(parts[1]);
-                            await new Promise(r => setTimeout(r, secs * 1000));
-                        }
-                        // API Routing: player health 100
-                        else {
-                            await this.executeAPI(parts);
-                        }
-                    } catch(e) {
-                        printOutput(`Runtime Error line ${node.lineNum}: ${e.message}`, 'error');
-                    }
-                } 
-                else if (node.type === 'block') {
-                    if (node.header.startsWith('repeat ')) {
-                        const count = this.evaluate(node.header.replace('repeat ', ''));
-                        for (let i = 0; i < count; i++) await this.executeBlock(node.body);
-                    }
-                    else if (node.header.startsWith('while ')) {
-                        const condition = node.header.replace('while ', '');
-                        let safety = 0;
-                        while (this.evaluate(condition) && safety < 1000) {
-                            await this.executeBlock(node.body);
-                            safety++;
-                        }
-                        if (safety >= 1000) printOutput(`Infinite Loop prevented on line ${node.lineNum}`, 'error');
-                    }
-                    else if (node.header.startsWith('if ')) {
-                        const condition = node.header.replace('if ', '');
-                        if (this.evaluate(condition)) await this.executeBlock(node.body);
+            run(eventName = 'update') {
+                if (!this.compiled) return;
+                try {
+                    const ctx = Object.freeze(this.contextFactory());
+                    this.compiled(ctx, eventName, this.state);
+                } catch (e) {
+                    const now = Date.now();
+                    if (now - this.lastError > 1000) {
+                        printOutput(`JS Runtime Error (${eventName}): ${e.message}`, 'error');
+                        this.lastError = now;
                     }
                 }
             }
 
-            async executeBlock(nodes) {
-                for (let node of nodes) await this.executeNode(node);
-            }
-
-            async triggerEvent(eventName) {
-                const eventNode = this.events[`on ${eventName}`];
-                if (eventNode) await this.executeBlock(eventNode.body);
-            }
-
-            async invokeHook(name) {
-                const fn = this.functions[name];
-                if (fn) return this.executeBlock(fn.body);
-                return this.triggerEvent(name);
-            }
-
-            // --- 4. GAME API MOCK BINDINGS ---
-            async executeAPI(parts) {
-                const category = parts[0].toLowerCase();
-                const action = parts[1] ? parts[1].toLowerCase() : null;
-                const val = parts.length > 2 ? this.evaluate(parts[2]) : null;
-
-                // MESH / OBJECT API
-                if (category === 'object') {
-                    if (action === 'move') {
-                        this.ctx.mesh.position.x += this.evaluate(parts[2]);
-                        this.ctx.mesh.position.y += this.evaluate(parts[3]);
-                        this.ctx.mesh.position.z += this.evaluate(parts[4]);
-                    }
-                    if (action === 'rotate') {
-                        this.ctx.mesh.rotation.x += this.evaluate(parts[2]);
-                        this.ctx.mesh.rotation.y += this.evaluate(parts[3]);
-                        this.ctx.mesh.rotation.z += this.evaluate(parts[4]);
-                    }
-                    if (action === 'destroy') {
-                        this.ctx.mesh.position.y = -9999; // Simple destroy
-                    }
-                    if (action === 'color') {
-                        this.ctx.mesh.material.color.set(val);
-                    }
-                }
-                // PLAYER API
-                else if (category === 'player') {
-                    if (action === 'health') { this.ctx.player.health = Math.max(0, Math.min(100, val)); printOutput(`Player Health set to ${this.ctx.player.health}`); }
-                    if (action === 'heal') { this.ctx.player.health = Math.max(0, Math.min(100, this.ctx.player.health + val)); printOutput(`Player Healed +${val}. Health is ${this.ctx.player.health}`); }
-                    if (action === 'damage') { this.ctx.player.health = Math.max(0, Math.min(100, this.ctx.player.health - val)); printOutput(`Player Damaged -${val}. Health is ${this.ctx.player.health}`); }
-                    if (action === 'speed') { this.ctx.player.speed = val; }
-                    if (action === 'jump') { this.ctx.player.jump = val; }
-                    if (action === 'teleport') {
-                        this.ctx.player.x = this.evaluate(parts[2]);
-                        this.ctx.player.y = this.evaluate(parts[3]);
-                        this.ctx.player.z = this.evaluate(parts[4]);
-                    }
-                    if (typeof updatePlayerHealthHUD === 'function') updatePlayerHealthHUD();
-                }
-                // UI API
-                else if (category === 'ui') {
-                    if (action === 'message') showModal('Message', val);
-                    if (action === 'notify') printOutput(`[Notification]: ${val}`, 'warn');
-                    if (action === 'settext' && this.ctx.ui) this.ctx.ui.setText(parts[2], this.evaluate(parts.slice(3).join(' ')).toString().replace(/^"|"$/g, ''));
-                    if (action === 'setvalue' && this.ctx.ui) this.ctx.ui.setValue(parts[2], this.evaluate(parts[3]));
-                    if (action === 'visible' && this.ctx.ui) this.ctx.ui.setVisible(parts[2], parseFloat(this.evaluate(parts[3])) > 0);
-                    if (action === 'create' && this.ctx.ui) {
-                        const uiType = (parts[2] || '').toLowerCase();
-                        if (uiType === 'label') this.ctx.ui.create('label', parts[3], this.evaluate(parts[4]), this.evaluate(parts[5]), this.evaluate(parts[6]), this.evaluate(parts[7]), this.evaluate(parts[8]));
-                        if (uiType === 'button') this.ctx.ui.create('button', parts[3], this.evaluate(parts[4]), this.evaluate(parts[5]), this.evaluate(parts[6]), this.evaluate(parts[7]), this.evaluate(parts[8]), this.evaluate(parts[9]));
-                        if (uiType === 'bar') this.ctx.ui.create('bar', parts[3], '', this.evaluate(parts[4]), this.evaluate(parts[5]), this.evaluate(parts[6]), this.evaluate(parts[7]));
-                        if (uiType === 'bar') this.ctx.ui.setValue(parts[3], this.evaluate(parts[8] || 100));
-                    }
-                }
-                else if (category === 'blaster') {
-                    if (action === 'damage') this.ctx.player.blasterDamage = parseFloat(val) || 20;
-                    if (action === 'speed') this.ctx.player.blasterSpeed = parseFloat(val) || 2.5;
-                    if (action === 'spread') this.ctx.player.blasterSpread = parseFloat(val) || 0;
-                    if (action === 'firerate') this.ctx.player.blasterFireRate = parseFloat(val) || 150;
-                    if (action === 'lifetime') this.ctx.player.blasterLifetime = parseFloat(val) || 100;
-                    if (action === 'color') this.ctx.player.blasterColor = val || '#ffff00';
-                    if (action === 'shoot' && this.ctx.shoot) {
-                        this.ctx.shoot(this.ctx.player.blasterColor || '#ffff00', this.ctx.player.blasterSpeed || 2.5, {
-                            damage: this.ctx.player.blasterDamage || 20,
-                            spread: this.ctx.player.blasterSpread || 0,
-                            lifetime: this.ctx.player.blasterLifetime || 100,
-                            fireRate: this.ctx.player.blasterFireRate || 150
-                        });
-                    }
-                }
-                // VEHICLE API
-                else if (category === 'vehicle' && this.ctx.mesh.userData.type === 'vehicle') {
-                    if (action === 'speed') this.ctx.mesh.userData.vSpeed = val;
-                    if (action === 'turn') this.ctx.mesh.userData.vTurn = val;
-                }
-                else {
-                    throw new Error(`Unknown command or missing category: ${category} ${action}`);
-                }
-            }
+            triggerEvent(eventName) { this.run(eventName); }
+            invokeHook(name) { this.run(name || 'interact'); }
         }
-
 
 
 
@@ -4686,6 +4476,7 @@ let currentEditMode = 'translate';
             let newData = { settings: { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
             if (levelData.settings) newData.settings = levelData.settings;
             if (levelData.objects) { 
+                (levelData.objects || []).forEach(ensureSmartLogicDefaults);
                 newData.objects = levelData.objects; 
                 newData.spawn = levelData.spawn; 
                 if (levelData.terrain) newData.terrain = levelData.terrain; // FIX: Ensure terrain loads!
@@ -4748,6 +4539,85 @@ let currentEditMode = 'translate';
 
         // --- Studio UI & Explorer Logic ---
    
+
+        const SMART_OBJECT_TEMPLATES = {
+            gun_spawner: { label: 'Gun Spawner', type: 'tool', color: '#8e44ad', scale: { x: 2, y: 1, z: 2 }, smart: { kind: 'gun', title: 'Blaster Pickup', power: 24, range: 5, team: 'all', advanced: false } },
+            npc_vendor: { label: 'NPC', type: 'block', color: '#e67e22', scale: { x: 2, y: 4, z: 2 }, smart: { kind: 'npc', title: 'Guide NPC', power: 12, range: 6, team: 'all', advanced: false } },
+            checkpoint: { label: 'Checkpoint', type: 'block', color: '#f1c40f', scale: { x: 3, y: 0.5, z: 3 }, smart: { kind: 'checkpoint', title: 'Checkpoint', power: 0, range: 3, team: 'all', advanced: false } },
+            vehicle_spawn: { label: 'Vehicle Spawner', type: 'block', color: '#2980b9', scale: { x: 4, y: 0.5, z: 4 }, smart: { kind: 'vehicleSpawner', title: 'Car Spawn Pad', power: 1, range: 4, team: 'all', advanced: false } },
+            auto_door: { label: 'Door', type: 'block', color: '#7f8c8d', scale: { x: 1, y: 5, z: 3 }, smart: { kind: 'door', title: 'Auto Door', power: 90, range: 4, team: 'all', advanced: false } },
+            shop_terminal: { label: 'Shop', type: 'block', color: '#27ae60', scale: { x: 2.5, y: 3, z: 2 }, smart: { kind: 'shop', title: 'Item Shop', power: 50, range: 5, team: 'all', advanced: false } },
+            jump_pad: { label: 'Jump Pad', type: 'block', color: '#1abc9c', scale: { x: 3, y: 0.4, z: 3 }, smart: { kind: 'jumpPad', title: 'Jump Pad', power: 8, range: 2.8, team: 'all', advanced: false } },
+            teleporter: { label: 'Teleporter', type: 'block', color: '#9b59b6', scale: { x: 3, y: 0.5, z: 3 }, smart: { kind: 'teleporter', title: 'Teleporter', power: 0, range: 3, team: 'all', advanced: false } }
+        };
+
+        const sanitizeSmartText = (value, fallback = '') => String(value || fallback).replace(/[^a-zA-Z0-9 _\-!?.]/g, '').trim().slice(0, 40);
+        const ensureSmartLogicDefaults = (obj) => {
+            if (!obj || !obj.smart || !obj.smart.kind) return;
+            obj.smart.title = sanitizeSmartText(obj.smart.title, obj.name || obj.smart.kind);
+            obj.smart.power = Math.max(0, Math.min(1000, parseFloat(obj.smart.power) || 0));
+            obj.smart.range = Math.max(1, Math.min(30, parseFloat(obj.smart.range) || 4));
+            obj.smart.team = ['all', 'red', 'blue', 'neutral'].includes(obj.smart.team) ? obj.smart.team : 'all';
+            obj.smart.advanced = !!obj.smart.advanced;
+        };
+
+        const toggleSmartObjectSidebar = (force) => {
+            const panel = document.getElementById('smart-object-sidebar');
+            if (!panel) return;
+            const show = typeof force === 'boolean' ? force : panel.style.display !== 'block';
+            panel.style.display = show ? 'block' : 'none';
+            if (show) { setupSmartObjectDragDrop(); renderSmartObjectLibrary(); }
+        };
+        window.toggleSmartObjectSidebar = toggleSmartObjectSidebar;
+
+        const renderSmartObjectLibrary = () => {
+            const host = document.getElementById('smart-object-library');
+            const q = (document.getElementById('smart-object-search')?.value || '').toLowerCase().trim();
+            if (!host) return;
+            host.innerHTML = '';
+            Object.entries(SMART_OBJECT_TEMPLATES).forEach(([key, cfg]) => {
+                if (q && !cfg.label.toLowerCase().includes(q) && !cfg.smart.kind.toLowerCase().includes(q)) return;
+                const card = document.createElement('div');
+                card.draggable = true;
+                card.dataset.template = key;
+                card.style.border = '1px solid #2f4358';
+                card.style.borderLeft = `4px solid ${cfg.color}`;
+                card.style.borderRadius = '6px';
+                card.style.padding = '8px';
+                card.style.background = '#15202b';
+                card.innerHTML = `<div style="font-weight:700;">${cfg.label}</div><div style="font-size:11px; color:#9fb3c8;">${cfg.smart.kind} • drag into world</div>`;
+                card.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', key));
+                card.addEventListener('dblclick', () => addSmartObject(key));
+                host.appendChild(card);
+            });
+        };
+        window.renderSmartObjectLibrary = renderSmartObjectLibrary;
+
+        const addSmartObject = (templateId, dropPoint) => {
+            const template = SMART_OBJECT_TEMPLATES[templateId];
+            if (!template) return;
+            const dir = new THREE.Vector3();
+            edCamera.getWorldDirection(dir);
+            const basePos = dropPoint || (edControls && edControls.target ? { x: edControls.target.x, y: edControls.target.y, z: edControls.target.z } : edCamera.position.clone().add(dir.multiplyScalar(10)));
+            const newObj = {
+                id: crypto.randomUUID(),
+                name: template.label,
+                type: template.type,
+                position: { x: basePos.x, y: (basePos.y || 0) + 1, z: basePos.z },
+                rotation: { x: 0, y: 0, z: 0 },
+                scale: { ...template.scale },
+                color: template.color,
+                material: 'Plastic',
+                smart: JSON.parse(JSON.stringify(template.smart))
+            };
+            ensureSmartLogicDefaults(newObj);
+            edData.objects.push(newObj);
+            buildEditorScene();
+            recordEdit();
+            setTimeout(() => selectObjectById(newObj.id), 40);
+        };
+        window.addSmartObject = addSmartObject;
+
       const addPart = (type) => {
             // Find exactly where the camera is looking
 const dir = new THREE.Vector3();
@@ -4943,6 +4813,7 @@ document.addEventListener('keydown', (e) => {
                     document.getElementById('prop-name').disabled = true;
                     document.getElementById('prop-color').disabled = true;
                     document.getElementById('prop-material').disabled = true;
+                    document.getElementById('smart-props-section').style.display = 'none';
                 } else {
                     const objData = edData.objects.find(o => o.id === primary.userData.id);
                     if (objData) {
@@ -4954,6 +4825,19 @@ document.addEventListener('keydown', (e) => {
                         
                         document.getElementById('prop-material').value = objData.material || 'Plastic';
                         document.getElementById('prop-material').disabled = false;
+                        const smartSection = document.getElementById('smart-props-section');
+                        if (objData.smart && objData.smart.kind) {
+                            ensureSmartLogicDefaults(objData);
+                            smartSection.style.display = 'block';
+                            document.getElementById('smart-type').value = objData.smart.kind;
+                            document.getElementById('smart-title').value = objData.smart.title || objData.name || '';
+                            document.getElementById('smart-power').value = objData.smart.power || 0;
+                            document.getElementById('smart-team').value = objData.smart.team || 'all';
+                            document.getElementById('smart-range').value = objData.smart.range || 4;
+                            document.getElementById('smart-advanced').checked = !!objData.smart.advanced;
+                        } else {
+                            smartSection.style.display = 'none';
+                        }
                     }
                 }
             } else {
@@ -4963,6 +4847,7 @@ document.addEventListener('keydown', (e) => {
                 
                 document.getElementById('props-empty').style.display = 'block';
                 document.getElementById('props-content').style.display = 'none';
+                document.getElementById('smart-props-section').style.display = 'none';
             }
             renderExplorer();
         };
@@ -5001,6 +4886,37 @@ document.addEventListener('keydown', (e) => {
 
 
 
+
+
+
+        const updateSmartObjectProperties = () => {
+            if (selectedObjects.length === 0) return;
+            const primary = selectedObjects[selectedObjects.length - 1];
+            if (primary.userData.isSpawn) return;
+            const objData = edData.objects.find(o => o.id === primary.userData.id);
+            if (!objData || !objData.smart) return;
+            objData.smart.title = sanitizeSmartText(document.getElementById('smart-title').value, objData.name);
+            objData.smart.power = Math.max(0, Math.min(1000, parseFloat(document.getElementById('smart-power').value) || 0));
+            objData.smart.team = document.getElementById('smart-team').value;
+            objData.smart.range = Math.max(1, Math.min(30, parseFloat(document.getElementById('smart-range').value) || 4));
+            objData.smart.advanced = document.getElementById('smart-advanced').checked;
+            ensureSmartLogicDefaults(objData);
+            recordEdit();
+        };
+        window.updateSmartObjectProperties = updateSmartObjectProperties;
+
+        const openScriptEditorForSelected = () => {
+            if (!selectedObjects.length) return showModal('Select Object', 'Select a smart object first.');
+            const primary = selectedObjects[selectedObjects.length - 1];
+            if (primary.userData.isSpawn) return;
+            const objData = edData.objects.find(o => o.id === primary.userData.id);
+            if (!objData) return;
+            if (!objData.smart) objData.smart = { kind: 'custom', title: objData.name || 'Object', power: 0, range: 4, team: 'all', advanced: true };
+            objData.smart.advanced = true;
+            updateSmartObjectProperties();
+            openScriptEditor(objData.id);
+        };
+        window.openScriptEditorForSelected = openScriptEditorForSelected;
 
 // --- ORIENTATION INDICATOR ---
         window.orientationHelper = null;
@@ -5156,7 +5072,7 @@ if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', bri
             edData.objects.forEach(obj => {
                 const isSel = selectedObjects.some(m => m.userData.id === obj.id);
                 // Highlight items that have scripts with a small yellow dot
-                const scriptIndicator = obj.script && obj.script.trim() !== '' ? '<span style="color:#f1c40f; margin-right:5px;"> </span>' : '';
+                const scriptIndicator = ((obj.scriptJs && obj.scriptJs.trim() !== '') || (obj.script && obj.script.trim() !== '')) ? '<span style="color:#f1c40f; margin-right:5px;">●</span>' : '';
                 
                 list.innerHTML += `
                     <div class="explorer-item ${isSel ? 'selected' : ''}" onclick="selectObjectById('${obj.id}', event.shiftKey)">
@@ -5355,322 +5271,25 @@ if (item.type === 'button' && item.onClickEvent) {
             playerObj.health = Math.max(0, (playerObj.health || 100) - (parseFloat(amount) || 0));
             updatePlayerHealthHUD();
         };
-
-        let sculptscriptBlocks = [];
-        let dragBlockIndex = -1;
-
-        const sculptDefaults = {
-            event: { kind: 'event', type: 'event', eventName: 'start' },
-            repeat: { kind: 'flow', type: 'repeat', count: 5 },
-            while: { kind: 'flow', type: 'while', condition: 'health > 0' },
-            if: { kind: 'flow', type: 'if', condition: 'score > 10' },
-            end: { kind: 'flow', type: 'end' },
-            wait: { kind: 'flow', type: 'wait', seconds: 1 },
-            move: { kind: 'motion', type: 'move', x: 1, y: 0, z: 0 },
-            rotate: { kind: 'motion', type: 'rotate', x: 0, y: 0.2, z: 0 },
-            color: { kind: 'looks', type: 'color', color: '#ffcc00' },
-            player_health: { kind: 'player', type: 'player_health', amount: 100 },
-            player_heal: { kind: 'player', type: 'player_heal', amount: 10 },
-            player_damage: { kind: 'player', type: 'player_damage', amount: 10 },
-            player_speed: { kind: 'player', type: 'player_speed', amount: 0.15 },
-            player_jump: { kind: 'player', type: 'player_jump', amount: 0.5 },
-            player_teleport: { kind: 'player', type: 'player_teleport', x: 0, y: 5, z: 0 },
-            ui_message: { kind: 'ui', type: 'ui_message', text: 'Mission Started!' },
-            ui_notify: { kind: 'ui', type: 'ui_notify', text: 'Checkpoint reached.' },
-            ui_create_label: { kind: 'ui', type: 'ui_create_label', id: 'hud_label', text: 'Objective', x: 20, y: 20, w: 180, h: 32 },
-            ui_create_button: { kind: 'ui', type: 'ui_create_button', id: 'hud_button', text: 'Press', x: 20, y: 60, w: 140, h: 34, functionName: 'onButtonPressed' },
-            ui_create_button: { kind: 'ui', type: 'ui_create_button', id: 'hud_button', text: 'Press', x: 20, y: 60, w: 140, h: 34, eventName: 'ui_button_press' },
-            ui_create_bar: { kind: 'ui', type: 'ui_create_bar', id: 'hud_bar', x: 20, y: 100, w: 220, h: 20, value: 100 },
-            ui_set_text: { kind: 'ui', type: 'ui_set_text', id: 'hud_label', text: 'Updated!' },
-            ui_set_value: { kind: 'ui', type: 'ui_set_value', id: 'hud_bar', value: 75 },
-            ui_visible: { kind: 'ui', type: 'ui_visible', id: 'hud_label', visible: 1 },
-            blaster_damage: { kind: 'motion', type: 'blaster_damage', amount: 20 },
-            blaster_speed: { kind: 'motion', type: 'blaster_speed', amount: 2.5 },
-            blaster_spread: { kind: 'motion', type: 'blaster_spread', amount: 0.05 },
-            blaster_fire_rate: { kind: 'motion', type: 'blaster_fire_rate', amount: 150 },
-            blaster_lifetime: { kind: 'motion', type: 'blaster_lifetime', amount: 100 },
-            blaster_color: { kind: 'motion', type: 'blaster_color', color: '#ffff00' },
-            blaster_shoot: { kind: 'motion', type: 'blaster_shoot' },
-            vehicle_speed: { kind: 'motion', type: 'vehicle_speed', amount: 1 },
-            vehicle_turn: { kind: 'motion', type: 'vehicle_turn', amount: 0.04 },
-            set_var: { kind: 'flow', type: 'set_var', name: 'score', value: '10' },
-            function: { kind: 'flow', type: 'function', name: 'fire_blaster' },
-            call: { kind: 'flow', type: 'call', name: 'fire_blaster' },
-            custom: { kind: 'ui', type: 'custom', command: 'object move 0 1 0' }
-        };
-
-        const createSculptScriptBlock = (type, values = {}) => ({ ...(sculptDefaults[type] || { kind: 'ui', type: 'custom', command: '' }), ...values });
-
-        const blockRowLabel = (block) => {
-            if (block.type === 'event') return `on <input type="text" data-key="eventName" value="${block.eventName || 'start'}"> :`;
-            if (block.type === 'repeat') return `repeat <input type="number" step="1" data-key="count" value="${block.count}"> :`;
-            if (block.type === 'while') return `while <input type="text" data-key="condition" value="${(block.condition || '').replace(/"/g, '&quot;')}"> :`;
-            if (block.type === 'if') return `if <input type="text" data-key="condition" value="${(block.condition || '').replace(/"/g, '&quot;')}"> :`;
-            if (block.type === 'end') return `<strong>end</strong>`;
-            if (block.type === 'wait') return `wait <input type="number" step="0.1" data-key="seconds" value="${block.seconds}">`;
-            if (block.type === 'move') return `object move <input type="number" step="0.1" data-key="x" value="${block.x}"> <input type="number" step="0.1" data-key="y" value="${block.y}"> <input type="number" step="0.1" data-key="z" value="${block.z}">`;
-            if (block.type === 'rotate') return `object rotate <input type="number" step="0.1" data-key="x" value="${block.x}"> <input type="number" step="0.1" data-key="y" value="${block.y}"> <input type="number" step="0.1" data-key="z" value="${block.z}">`;
-            if (block.type === 'color') return `object color <input type="color" data-key="color" value="${block.color}">`;
-            if (block.type === 'player_health') return `player health <input type="number" step="1" data-key="amount" value="${block.amount}">`;
-            if (block.type === 'player_heal') return `player heal <input type="number" step="1" data-key="amount" value="${block.amount}">`;
-            if (block.type === 'player_damage') return `player damage <input type="number" step="1" data-key="amount" value="${block.amount}">`;
-            if (block.type === 'player_speed') return `player speed <input type="number" step="0.01" data-key="amount" value="${block.amount}">`;
-            if (block.type === 'player_jump') return `player jump <input type="number" step="0.01" data-key="amount" value="${block.amount}">`;
-            if (block.type === 'player_teleport') return `player teleport <input type="number" step="0.1" data-key="x" value="${block.x}"> <input type="number" step="0.1" data-key="y" value="${block.y}"> <input type="number" step="0.1" data-key="z" value="${block.z}">`;
-            if (block.type === 'ui_message') return `ui message <input type="text" data-key="text" value="${(block.text || '').replace(/"/g, '&quot;')}">`;
-            if (block.type === 'ui_notify') return `ui notify <input type="text" data-key="text" value="${(block.text || '').replace(/"/g, '&quot;')}">`;
-            if (block.type === 'ui_create_label') return `ui create label <input type="text" data-key="id" value="${block.id}"> "<input type="text" data-key="text" value="${(block.text || '').replace(/"/g, '&quot;')}">" x <input type="number" data-key="x" value="${block.x}"> y <input type="number" data-key="y" value="${block.y}"> w <input type="number" data-key="w" value="${block.w}"> h <input type="number" data-key="h" value="${block.h}">`;
-            if (block.type === 'ui_create_button') return `ui create button <input type="text" data-key="id" value="${block.id}"> "<input type="text" data-key="text" value="${(block.text || '').replace(/"/g, '&quot;')}">" x <input type="number" data-key="x" value="${block.x}"> y <input type="number" data-key="y" value="${block.y}"> w <input type="number" data-key="w" value="${block.w}"> h <input type="number" data-key="h" value="${block.h}"> function <input type="text" data-key="functionName" value="${(block.functionName || '').replace(/"/g, '&quot;')}">`;
-            if (block.type === 'ui_create_button') return `ui create button <input type="text" data-key="id" value="${block.id}"> "<input type="text" data-key="text" value="${(block.text || '').replace(/"/g, '&quot;')}">" x <input type="number" data-key="x" value="${block.x}"> y <input type="number" data-key="y" value="${block.y}"> w <input type="number" data-key="w" value="${block.w}"> h <input type="number" data-key="h" value="${block.h}"> event <input type="text" data-key="eventName" value="${(block.eventName || '').replace(/"/g, '&quot;')}">`;
-            if (block.type === 'ui_create_bar') return `ui create bar <input type="text" data-key="id" value="${block.id}"> x <input type="number" data-key="x" value="${block.x}"> y <input type="number" data-key="y" value="${block.y}"> w <input type="number" data-key="w" value="${block.w}"> h <input type="number" data-key="h" value="${block.h}"> value <input type="number" data-key="value" value="${block.value}">`;
-            if (block.type === 'ui_set_text') return `ui settext <input type="text" data-key="id" value="${block.id}"> "<input type="text" data-key="text" value="${(block.text || '').replace(/"/g, '&quot;')}">"`;
-            if (block.type === 'ui_set_value') return `ui setvalue <input type="text" data-key="id" value="${block.id}"> <input type="number" data-key="value" value="${block.value}">`;
-            if (block.type === 'ui_visible') return `ui visible <input type="text" data-key="id" value="${block.id}"> <select data-key="visible"><option value="1" ${String(block.visible) === '1' ? 'selected' : ''}>show</option><option value="0" ${String(block.visible) === '0' ? 'selected' : ''}>hide</option></select>`;
-            if (block.type === 'blaster_damage') return `blaster damage <input type="number" data-key="amount" value="${block.amount}">`;
-            if (block.type === 'blaster_speed') return `blaster speed <input type="number" step="0.1" data-key="amount" value="${block.amount}">`;
-            if (block.type === 'blaster_spread') return `blaster spread <input type="number" step="0.01" data-key="amount" value="${block.amount}">`;
-            if (block.type === 'blaster_fire_rate') return `blaster firerate <input type="number" step="1" data-key="amount" value="${block.amount}"> ms`;
-            if (block.type === 'blaster_lifetime') return `blaster lifetime <input type="number" step="1" data-key="amount" value="${block.amount}">`;
-            if (block.type === 'blaster_color') return `blaster color <input type="color" data-key="color" value="${block.color}">`;
-            if (block.type === 'blaster_shoot') return `<strong>blaster shoot</strong>`;
-            if (block.type === 'vehicle_speed') return `vehicle speed <input type="number" step="0.1" data-key="amount" value="${block.amount}">`;
-            if (block.type === 'vehicle_turn') return `vehicle turn <input type="number" step="0.01" data-key="amount" value="${block.amount}">`;
-            if (block.type === 'set_var') return `set <input type="text" data-key="name" value="${(block.name || '').replace(/"/g, '&quot;')}"> = <input type="text" data-key="value" value="${(block.value || '').replace(/"/g, '&quot;')}">`;
-            if (block.type === 'function') return `function <input type="text" data-key="name" value="${(block.name || '').replace(/"/g, '&quot;')}"> :`;
-            if (block.type === 'call') return `call <input type="text" data-key="name" value="${(block.name || '').replace(/"/g, '&quot;')}">`;
-            return `custom <input type="text" data-key="command" value="${(block.command || '').replace(/"/g, '&quot;')}">`;
-        };
-
-        const lineForBlock = (block) => {
-            if (block.type === 'event') return `on ${block.eventName || 'start'}:`;
-            if (block.type === 'repeat') return `repeat ${block.count || 1}:`;
-            if (block.type === 'while') return `while ${block.condition || '1 == 1'}:`;
-            if (block.type === 'if') return `if ${block.condition || '1 == 1'}:`;
-            if (block.type === 'end') return 'end';
-            if (block.type === 'wait') return `wait ${block.seconds || 1}`;
-            if (block.type === 'move') return `object move ${block.x || 0} ${block.y || 0} ${block.z || 0}`;
-            if (block.type === 'rotate') return `object rotate ${block.x || 0} ${block.y || 0} ${block.z || 0}`;
-            if (block.type === 'color') return `object color ${block.color || '#ffcc00'}`;
-            if (block.type === 'player_health') return `player health ${block.amount || 100}`;
-            if (block.type === 'player_heal') return `player heal ${block.amount || 10}`;
-            if (block.type === 'player_damage') return `player damage ${block.amount || 10}`;
-            if (block.type === 'player_speed') return `player speed ${block.amount || 0.15}`;
-            if (block.type === 'player_jump') return `player jump ${block.amount || 0.5}`;
-            if (block.type === 'player_teleport') return `player teleport ${block.x || 0} ${block.y || 0} ${block.z || 0}`;
-            if (block.type === 'ui_message') return `ui message "${(block.text || '').replace(/"/g, '\\"')}"`;
-            if (block.type === 'ui_notify') return `ui notify "${(block.text || '').replace(/"/g, '\\"')}"`;
-            if (block.type === 'ui_create_label') return `ui create label ${block.id || 'hud_label'} "${(block.text || '').replace(/"/g, '\\"')}" ${block.x || 0} ${block.y || 0} ${block.w || 180} ${block.h || 32}`;
-            if (block.type === 'ui_create_button') return `ui create button ${block.id || 'hud_button'} "${(block.text || '').replace(/"/g, '\\"')}" ${block.x || 0} ${block.y || 0} ${block.w || 140} ${block.h || 34} ${block.functionName || 'onButtonPressed'}`;
-            if (block.type === 'ui_create_button') return `ui create button ${block.id || 'hud_button'} "${(block.text || '').replace(/"/g, '\\"')}" ${block.x || 0} ${block.y || 0} ${block.w || 140} ${block.h || 34} ${block.eventName || 'ui_button_press'}`;
-            if (block.type === 'ui_create_bar') return `ui create bar ${block.id || 'hud_bar'} ${block.x || 0} ${block.y || 0} ${block.w || 220} ${block.h || 20} ${block.value || 100}`;
-            if (block.type === 'ui_set_text') return `ui settext ${block.id || 'hud_label'} "${(block.text || '').replace(/"/g, '\\"')}"`;
-            if (block.type === 'ui_set_value') return `ui setvalue ${block.id || 'hud_bar'} ${block.value || 0}`;
-            if (block.type === 'ui_visible') return `ui visible ${block.id || 'hud_label'} ${parseFloat(block.visible) > 0 ? 1 : 0}`;
-            if (block.type === 'blaster_damage') return `blaster damage ${block.amount || 20}`;
-            if (block.type === 'blaster_speed') return `blaster speed ${block.amount || 2.5}`;
-            if (block.type === 'blaster_spread') return `blaster spread ${block.amount || 0}`;
-            if (block.type === 'blaster_fire_rate') return `blaster firerate ${block.amount || 150}`;
-            if (block.type === 'blaster_lifetime') return `blaster lifetime ${block.amount || 100}`;
-            if (block.type === 'blaster_color') return `blaster color ${block.color || '#ffff00'}`;
-            if (block.type === 'blaster_shoot') return `blaster shoot`;
-            if (block.type === 'vehicle_speed') return `vehicle speed ${block.amount || 1}`;
-            if (block.type === 'vehicle_turn') return `vehicle turn ${block.amount || 0.04}`;
-            if (block.type === 'set_var') return `set ${block.name || 'score'} = ${block.value || '0'}`;
-            if (block.type === 'function') return `function ${block.name || 'my_fn'}:`;
-            if (block.type === 'call') return `call ${block.name || 'my_fn'}`;
-            return block.command || '';
-        };
-
-        const compileSculptScriptBlocks = () => {
-            const lines = [];
-            let openDepth = 0;
-            let hasEvent = false;
-            sculptscriptBlocks.forEach((block) => {
-                const line = lineForBlock(block);
-                if (!line) return;
-                const isEnd = block.type === 'end';
-                if (isEnd) openDepth = Math.max(0, openDepth - 1);
-                lines.push(`${'    '.repeat(openDepth)}${line}`);
-                if (block.type === 'event' || block.type === 'repeat' || block.type === 'while' || block.type === 'if' || block.type === 'function') {
-                    openDepth++;
-                }
-                if (block.type === 'event') hasEvent = true;
-            });
-            if (!hasEvent) {
-                lines.unshift('on start:');
-                openDepth++;
-            }
-            while (openDepth > 0) {
-                openDepth--;
-                lines.push(`${'    '.repeat(openDepth)}end`);
-            }
-            return lines.join('\n');
-        };
-
-      const renderSculptScriptWorkspace = () => {
-    const zone = document.getElementById('sculptscript-dropzone');
-    if (!zone) return;
-
-    zone.innerHTML = '';
-
-    if (sculptscriptBlocks.length === 0) {
-        zone.innerHTML = '<p style="color:#aaa; margin:4px;">Add blocks from the left to build your game logic.</p>';
-    }
-
-    sculptscriptBlocks.forEach((block, idx) => {
-        const row = document.createElement('div');
-        row.className = 'sculptscript-row';
-        row.dataset.kind = block.kind || 'flow';
-        row.draggable = true;
-
-        row.addEventListener('dragstart', () => {
-            dragBlockIndex = idx;
-        });
-
-        row.addEventListener('dragover', (e) => e.preventDefault());
-
-        row.addEventListener('drop', (e) => {
-            e.preventDefault();
-            if (dragBlockIndex < 0 || dragBlockIndex === idx) return;
-
-            const moved = sculptscriptBlocks.splice(dragBlockIndex, 1)[0];
-            sculptscriptBlocks.splice(idx, 0, moved);
-            dragBlockIndex = -1;
-
-            renderSculptScriptWorkspace();
-            recordEdit();
-        });
-
-        row.innerHTML = blockRowLabel(block);
-
-        const del = document.createElement('button');
-        del.className = 'sculptscript-delete';
-        del.textContent = 'Delete';
-        del.onclick = () => {
-            sculptscriptBlocks.splice(idx, 1);
-            renderSculptScriptWorkspace();
-            recordEdit();
-        };
-        row.appendChild(del);
-
-        row.querySelectorAll('input, select').forEach((input) => {
-            input.addEventListener('input', (e) => {
-                const key = e.target.dataset.key;
-                const isNumber = e.target.type === 'number';
-                block[key] = isNumber ? parseFloat(e.target.value || '0') : e.target.value;
-
-                const preview = document.getElementById('sculptscript-preview');
-                if (preview) {
-                    preview.value = compileSculptScriptBlocks();
-                }
-
-                recordEdit();
-            });
-        });
-
-        zone.appendChild(row);
-    });
-
-    const preview = document.getElementById('sculptscript-preview');
-    if (preview) {
-        preview.value = compileSculptScriptBlocks();
-    }
-};
-
-
-        const addSculptScriptBlock = (type) => {
-            sculptscriptBlocks.push(createSculptScriptBlock(type));
-            renderSculptScriptWorkspace();
-            recordEdit();
-        };
-        window.addSculptScriptBlock = addSculptScriptBlock;
-      
-
-        const loadSculptScriptBlocks = (scriptText) => {
-            const blocks = [];
-            (scriptText || '').split('\n').map(l => l.trim()).filter(Boolean).forEach((line) => {
-                const lower = line.toLowerCase();
-                if (lower.startsWith('on ')) blocks.push(createSculptScriptBlock('event', { eventName: line.replace(/^on\s+/i, '').replace(':', '') }));
-                else if (lower.startsWith('repeat ')) blocks.push(createSculptScriptBlock('repeat', { count: parseFloat(line.split(/\s+/)[1]) || 1 }));
-                else if (lower.startsWith('while ')) blocks.push(createSculptScriptBlock('while', { condition: line.replace(/^while\s+/i, '').replace(':', '') }));
-                else if (lower.startsWith('if ')) blocks.push(createSculptScriptBlock('if', { condition: line.replace(/^if\s+/i, '').replace(':', '') }));
-                else if (lower.startsWith('function ')) blocks.push(createSculptScriptBlock('function', { name: line.replace(/^function\s+/i, '').replace(':', '') }));
-                else if (lower === 'end') blocks.push(createSculptScriptBlock('end'));
-                else if (lower.startsWith('wait ')) blocks.push(createSculptScriptBlock('wait', { seconds: parseFloat(line.split(/\s+/)[1]) || 1 }));
-                else if (lower.startsWith('object move')) { const p = line.split(/\s+/); blocks.push(createSculptScriptBlock('move', { x: parseFloat(p[2]) || 0, y: parseFloat(p[3]) || 0, z: parseFloat(p[4]) || 0 })); }
-                else if (lower.startsWith('object rotate')) { const p = line.split(/\s+/); blocks.push(createSculptScriptBlock('rotate', { x: parseFloat(p[2]) || 0, y: parseFloat(p[3]) || 0, z: parseFloat(p[4]) || 0 })); }
-                else if (lower.startsWith('object color')) blocks.push(createSculptScriptBlock('color', { color: line.split(/\s+/)[2] || '#ffcc00' }));
-                else if (lower.startsWith('player health')) blocks.push(createSculptScriptBlock('player_health', { amount: parseFloat(line.split(/\s+/)[2]) || 100 }));
-                else if (lower.startsWith('player heal')) blocks.push(createSculptScriptBlock('player_heal', { amount: parseFloat(line.split(/\s+/)[2]) || 10 }));
-                else if (lower.startsWith('player damage')) blocks.push(createSculptScriptBlock('player_damage', { amount: parseFloat(line.split(/\s+/)[2]) || 10 }));
-                else if (lower.startsWith('player speed')) blocks.push(createSculptScriptBlock('player_speed', { amount: parseFloat(line.split(/\s+/)[2]) || 0.15 }));
-                else if (lower.startsWith('player jump')) blocks.push(createSculptScriptBlock('player_jump', { amount: parseFloat(line.split(/\s+/)[2]) || 0.5 }));
-                else if (lower.startsWith('player teleport')) { const p = line.split(/\s+/); blocks.push(createSculptScriptBlock('player_teleport', { x: parseFloat(p[2]) || 0, y: parseFloat(p[3]) || 0, z: parseFloat(p[4]) || 0 })); }
-                else if (lower.startsWith('ui message')) blocks.push(createSculptScriptBlock('ui_message', { text: line.replace(/^ui message\s+/i, '').replace(/^"|"$/g, '') }));
-                else if (lower.startsWith('ui notify')) blocks.push(createSculptScriptBlock('ui_notify', { text: line.replace(/^ui notify\s+/i, '').replace(/^"|"$/g, '') }));
-                else if (lower.startsWith('ui create label')) {
-                    const m = line.match(/^ui create label\s+(\S+)\s+"([^"]*)"\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)/i);
-                    if (m) blocks.push(createSculptScriptBlock('ui_create_label', { id: m[1], text: m[2], x: parseFloat(m[3]), y: parseFloat(m[4]), w: parseFloat(m[5]), h: parseFloat(m[6]) }));
-                    else blocks.push(createSculptScriptBlock('custom', { command: line }));
-                }
-                else if (lower.startsWith('ui create button')) {
-                    const m = line.match(/^ui create button\s+(\S+)\s+"([^"]*)"\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+([-\d.]+)\s+(\S+)/i);
-                    if (m) blocks.push(createSculptScriptBlock('ui_create_button', { id: m[1], text: m[2], x: parseFloat(m[3]), y: parseFloat(m[4]), w: parseFloat(m[5]), h: parseFloat(m[6]), functionName: m[7] }));
-                    if (m) blocks.push(createSculptScriptBlock('ui_create_button', { id: m[1], text: m[2], x: parseFloat(m[3]), y: parseFloat(m[4]), w: parseFloat(m[5]), h: parseFloat(m[6]), eventName: m[7] }));
-                    else blocks.push(createSculptScriptBlock('custom', { command: line }));
-                }
-                else if (lower.startsWith('ui create bar')) {
-                    const p = line.split(/\s+/);
-                    blocks.push(createSculptScriptBlock('ui_create_bar', { id: p[3] || 'hud_bar', x: parseFloat(p[4]) || 0, y: parseFloat(p[5]) || 0, w: parseFloat(p[6]) || 220, h: parseFloat(p[7]) || 20, value: parseFloat(p[8]) || 100 }));
-                }
-                else if (lower.startsWith('ui settext')) {
-                    const m = line.match(/^ui settext\s+(\S+)\s+"([^"]*)"/i);
-                    blocks.push(createSculptScriptBlock('ui_set_text', { id: m ? m[1] : 'hud_label', text: m ? m[2] : '' }));
-                }
-                else if (lower.startsWith('ui setvalue')) {
-                    const p = line.split(/\s+/);
-                    blocks.push(createSculptScriptBlock('ui_set_value', { id: p[2] || 'hud_bar', value: parseFloat(p[3]) || 0 }));
-                }
-                else if (lower.startsWith('ui visible')) {
-                    const p = line.split(/\s+/);
-                    blocks.push(createSculptScriptBlock('ui_visible', { id: p[2] || 'hud_label', visible: parseFloat(p[3]) || 0 }));
-                }
-                else if (lower.startsWith('blaster damage')) blocks.push(createSculptScriptBlock('blaster_damage', { amount: parseFloat(line.split(/\s+/)[2]) || 20 }));
-                else if (lower.startsWith('blaster speed')) blocks.push(createSculptScriptBlock('blaster_speed', { amount: parseFloat(line.split(/\s+/)[2]) || 2.5 }));
-                else if (lower.startsWith('blaster spread')) blocks.push(createSculptScriptBlock('blaster_spread', { amount: parseFloat(line.split(/\s+/)[2]) || 0 }));
-                else if (lower.startsWith('blaster firerate')) blocks.push(createSculptScriptBlock('blaster_fire_rate', { amount: parseFloat(line.split(/\s+/)[2]) || 150 }));
-                else if (lower.startsWith('blaster lifetime')) blocks.push(createSculptScriptBlock('blaster_lifetime', { amount: parseFloat(line.split(/\s+/)[2]) || 100 }));
-                else if (lower.startsWith('blaster color')) blocks.push(createSculptScriptBlock('blaster_color', { color: line.split(/\s+/)[2] || '#ffff00' }));
-                else if (lower.startsWith('blaster shoot')) blocks.push(createSculptScriptBlock('blaster_shoot'));
-                else if (lower.startsWith('vehicle speed')) blocks.push(createSculptScriptBlock('vehicle_speed', { amount: parseFloat(line.split(/\s+/)[2]) || 1 }));
-                else if (lower.startsWith('vehicle turn')) blocks.push(createSculptScriptBlock('vehicle_turn', { amount: parseFloat(line.split(/\s+/)[2]) || 0.04 }));
-                else if (lower.startsWith('set ')) {
-                    const eq = line.indexOf('=');
-                    blocks.push(createSculptScriptBlock('set_var', { name: line.slice(4, eq).trim(), value: line.slice(eq + 1).trim() }));
-                } else if (lower.startsWith('call ')) blocks.push(createSculptScriptBlock('call', { name: line.replace(/^call\s+/i, '') }));
-                else blocks.push(createSculptScriptBlock('custom', { command: line }));
-            });
-            sculptscriptBlocks = blocks.length ? blocks : [createSculptScriptBlock('event'), createSculptScriptBlock('ui_message'), createSculptScriptBlock('end')];
-            renderSculptScriptWorkspace();
-        };
+        // Legacy visual block scripting removed: Playsculpt now uses JavaScript editing only.
 
         const openScriptEditor = (id) => {
             const obj = edData.objects.find(o => o.id === id);
             if (!obj) return;
-            document.getElementById('script-editor-title').innerText = `Script: ${obj.name}`;
+            document.getElementById('script-editor-title').innerText = `JavaScript: ${obj.name}`;
             document.getElementById('script-editor-target-id').value = id;
             document.getElementById('script-editor-panel').style.display = 'flex';
-            loadSculptScriptBlocks(obj.script || '');
+            document.getElementById('script-js-editor').value = obj.scriptJs || '';
         };
 
         const saveScript = () => {
             const id = document.getElementById('script-editor-target-id').value;
-            const scriptText = compileSculptScriptBlocks();
+            const scriptText = String(document.getElementById('script-js-editor').value || '').slice(0, 12000);
             const obj = edData.objects.find(o => o.id === id);
             if (obj) {
-                obj.script = scriptText;
+                obj.scriptJs = scriptText;
                 recordEdit();
-                renderExplorer(); // Refresh to show/hide the yellow dot indicator
+                renderExplorer();
                 document.getElementById('script-editor-panel').style.display = 'none';
             }
         };
@@ -5717,6 +5336,7 @@ const promptClearEditor = () => {
             currentEditGameId = null; 
             edData = { settings: { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
+            (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
         };
        
@@ -5981,7 +5601,7 @@ playerObj = {
         // Tool System Variables
         let playerInventory = [];
         let equippedToolIndex = -1;
-        let playInput = { justClicked: false };
+        let playInput = { justClicked: false, justJumped: false, justInteract: false };
 
         const keys = { w: false, a: false, s: false, d: false, q: false, e: false, space: false };
 
@@ -6017,6 +5637,7 @@ playerObj = {
             }
 
             if (document.getElementById('view-play').classList.contains('active')) {
+                if (e.code === 'KeyE') playInput.justInteract = true;
                 const num = parseInt(e.key);
                 if (!isNaN(num) && num >= 1 && num <= 9) equipTool(num - 1); 
             }
@@ -6045,6 +5666,30 @@ if (e.code === 'Space') {
                 keys.space = false; // FIX: Release the spacebar!
             }
         });
+
+        function setupSmartObjectDragDrop() {
+            const container = document.getElementById('editor-container-3d');
+            if (!container || container.dataset.smartDropReady === '1') return;
+            container.dataset.smartDropReady = '1';
+            container.addEventListener('dragover', (e) => e.preventDefault());
+            container.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const templateId = e.dataTransfer.getData('text/plain');
+                if (!SMART_OBJECT_TEMPLATES[templateId]) return;
+                const rect = container.getBoundingClientRect();
+                const mouse = new THREE.Vector2(
+                    ((e.clientX - rect.left) / rect.width) * 2 - 1,
+                    -((e.clientY - rect.top) / rect.height) * 2 + 1
+                );
+                const ray = new THREE.Raycaster();
+                ray.setFromCamera(mouse, edCamera);
+                const hits = ray.intersectObjects(editorMeshes, true);
+                let point = null;
+                if (hits.length) point = { x: hits[0].point.x, y: hits[0].point.y, z: hits[0].point.z };
+                addSmartObject(templateId, point);
+            });
+        };
+
 
         const renderPlayToolbar = () => {
             const tb = document.getElementById('play-toolbar');
@@ -6415,11 +6060,12 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     });
 
                if (objData.script && objData.script.trim() !== '') {
-                        const engine = new SculptScript(objData.script, { mesh: mesh, player: playerObj, ui: uiRuntimeManager });
-                        engine.parse();
+                        const scriptSource = objData.scriptJs || objData.script || '';
+                    if (scriptSource.trim() !== '') {
+                        const engine = new JavaScriptBehaviorEngine(scriptSource, () => ({ mesh, player: playerObj, ui: uiRuntimeManager, showModal, damagePlayer }));
                         mesh.userData.sculptEngine = engine;
-                        // Fire 'on start' event immediately!
                         engine.triggerEvent('start');
+                    }
                     }
                     playScene.add(group); playMeshes.push(group);
 
@@ -6441,14 +6087,15 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: objData.noCollide || false };
+mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: objData.noCollide || false, smart: objData.smart || null, smartState: {} };
                     
             if (objData.script && objData.script.trim() !== '') {
-                        const engine = new SculptScript(objData.script, { mesh: mesh, player: playerObj, ui: uiRuntimeManager });
-                        engine.parse();
+                        const scriptSource = objData.scriptJs || objData.script || '';
+                    if (scriptSource.trim() !== '') {
+                        const engine = new JavaScriptBehaviorEngine(scriptSource, () => ({ mesh, player: playerObj, ui: uiRuntimeManager, showModal, damagePlayer }));
                         mesh.userData.sculptEngine = engine;
-                        // Fire 'on start' event immediately!
                         engine.triggerEvent('start');
+                    }
                     }
 
                     if (objData.type === 'tool') { playerInventory.push({ data: objData, mesh: mesh }); playMeshes.push(mesh); } 
@@ -6498,6 +6145,7 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
 
             playerMesh = createPlayerMesh(currentUser ? currentUser.color : '#e74c3c', currentUser ? currentUser.equipped : null);
             playerMesh.scale.set(0.5, 0.5, 0.5); playScene.add(playerMesh); renderPlayToolbar();
+            window.smartRuntime = { lastInteractAt: 0 };
         };
 
   const startPlaySync = () => {
@@ -6775,6 +6423,82 @@ const updateChatBubbles = () => {
             return null;
         };
 
+
+
+
+        const canUseSmartObjectForTeam = (smart) => {
+            if (!smart) return true;
+            if (!currentUser || !currentUser.team) return smart.team === 'all' || smart.team === 'neutral';
+            return smart.team === 'all' || smart.team === 'neutral' || smart.team === currentUser.team;
+        };
+
+        const applySmartObjectBehavior = (mesh) => {
+            const smart = mesh.userData.smart;
+            if (!smart || !canUseSmartObjectForTeam(smart)) return;
+            const dist = mesh.position.distanceTo(new THREE.Vector3(playerObj.x, playerObj.y + 2, playerObj.z));
+            if (dist > (smart.range || 4)) return;
+            const now = Date.now();
+            const interactPressed = !!playInput.justInteract;
+            if (smart.kind === 'checkpoint') {
+                activeLevel.spawn = { x: mesh.position.x, y: mesh.position.y + 2, z: mesh.position.z, scale: { x: 4, y: 1, z: 4 } };
+                mesh.material && mesh.material.color && mesh.material.color.set('#2ecc71');
+            } else if (smart.kind === 'jumpPad') {
+                if (playerObj.vy <= 0.2) playerObj.vy = Math.max(playerObj.vy, Math.min(20, smart.power || 8));
+            } else if (smart.kind === 'gun') {
+                if (interactPressed && !mesh.userData.smartState.claimed && now - (window.smartRuntime.lastInteractAt || 0) > 350) {
+                    window.smartRuntime.lastInteractAt = now;
+                    playerObj.blasterDamage = Math.max(5, smart.power || 20);
+                    playerObj.blasterFireRate = Math.max(70, 240 - (smart.power || 20));
+                    mesh.userData.smartState.claimed = true;
+                    if (mesh.material) mesh.material.transparent = true, mesh.material.opacity = 0.35;
+                }
+            } else if (smart.kind === 'vehicleSpawner' && interactPressed && now - (window.smartRuntime.lastInteractAt || 0) > 500) {
+                window.smartRuntime.lastInteractAt = now;
+                let vehicle = mesh.userData.smartState.spawnedVehicle;
+                if (!vehicle || !vehicle.parent) {
+                    vehicle = new THREE.Group();
+                    vehicle.position.set(mesh.position.x, mesh.position.y + 1.6, mesh.position.z + 5);
+                    vehicle.userData = { type: 'vehicle', vSpeed: 1.2, vTurn: 0.05, owner: currentUser ? currentUser.username : null };
+                    const body = new THREE.Mesh(new THREE.BoxGeometry(4, 1, 7), getMaterialForType('Plastic', '#2980b9'));
+                    const seat = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.5, 1.2), getMaterialForType('Plastic', '#2c3e50'));
+                    seat.position.set(0, 1, 0.4);
+                    seat.userData = { type: 'seat' };
+                    vehicle.add(body); vehicle.add(seat);
+                    playScene.add(vehicle);
+                    playMeshes.push(vehicle); playMeshes.push(seat);
+                    mesh.userData.smartState.spawnedVehicle = vehicle;
+                    playScene.updateMatrixWorld(true);
+                    playColliders = playMeshes.filter(m => !m.userData?.isTool && !m.userData?.noCollide && m.userData?.type !== 'seat' && m.userData?.type !== 'aircraftSeat' && m.userData?.type !== 'vehicle' && m.userData?.type !== 'aircraft' && !['wedge', 'triangle', 'ladder'].includes(m.userData?.type)).map(m => { m.updateMatrixWorld(true); return { box: new THREE.Box3().setFromObject(m), mesh: m }; });
+                }
+            } else if (smart.kind === 'door') {
+                const autoOpen = dist < (smart.range || 4);
+                const target = autoOpen ? -THREE.MathUtils.degToRad(Math.max(10, Math.min(170, smart.power || 90))) : 0;
+                mesh.rotation.y += (target - mesh.rotation.y) * 0.2;
+                mesh.userData.noCollide = autoOpen;
+            } else if (smart.kind === 'npc' && interactPressed && now - (window.smartRuntime.lastInteractAt || 0) > 700) {
+                window.smartRuntime.lastInteractAt = now;
+                showModal(smart.title || 'NPC', `${smart.title || 'Hello!'} offers +${smart.power || 10} health.`);
+                playerObj.health = Math.min(100, playerObj.health + (smart.power || 10));
+            } else if (smart.kind === 'shop' && interactPressed && now - (window.smartRuntime.lastInteractAt || 0) > 700) {
+                window.smartRuntime.lastInteractAt = now;
+                const buff = Math.max(5, smart.power || 50);
+                playerObj.speed = Math.min(0.6, playerObj.speed + buff / 1000);
+                showModal('Shop Purchase', `${smart.title || 'Shop'} sold a speed buff (+${(buff / 1000).toFixed(2)}).`);
+            } else if (smart.kind === 'teleporter' && interactPressed && now - (window.smartRuntime.lastInteractAt || 0) > 700) {
+                window.smartRuntime.lastInteractAt = now;
+                const cp = (activeLevel.objects || []).find(o => o.smart && o.smart.kind === 'checkpoint' && o.id !== mesh.userData.id);
+                if (cp) {
+                    playerObj.x = cp.position.x; playerObj.y = cp.position.y + 4; playerObj.z = cp.position.z;
+                }
+            }
+        };
+
+        const updateSmartObjectBehaviors = () => {
+            playMeshes.forEach((mesh) => {
+                if (!mesh.userData || !mesh.userData.smart) return;
+                applySmartObjectBehavior(mesh);
+            });
+        };
 
     const updatePhysics3D = () => {
             if (playerObj.seatCooldown > 0) playerObj.seatCooldown--;
@@ -7247,6 +6971,7 @@ const animatePlay = () => {
                     if (window.playLadders) { window.playLadders = playMeshes.filter(m => m.userData.type === 'ladder').map(m => { m.updateMatrixWorld(true); return new THREE.Box3().setFromObject(m); }); }
                 }
                 updatePhysics3D();
+                updateSmartObjectBehaviors();
                 updatePlayerHealthHUD();
 
 if (playerMesh) {
@@ -7287,7 +7012,7 @@ if (playerMesh) {
                 }
 
                
-              playInput.justClicked = false; playInput.justJumped = false;
+              playInput.justClicked = false; playInput.justJumped = false; playInput.justInteract = false;
 
               updateChatBubbles();
 

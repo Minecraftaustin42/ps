@@ -192,6 +192,81 @@ const verifyPassword = (password, salt, hash) => {
     return hash === verifyHash;
 };
 
+
+const sanitizeText = (value, maxLen = 80) => String(value || '').replace(/[<>]/g, '').trim().slice(0, maxLen);
+const sanitizeNumber = (value, fallback, min, max) => {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return fallback;
+    return Math.max(min, Math.min(max, num));
+};
+
+const sanitizeGameData = (gameData) => {
+    const safe = {
+        settings: {
+            gravity: sanitizeNumber(gameData?.settings?.gravity, 0.35, 0, 5),
+            skyColor: /^#[0-9a-fA-F]{6}$/.test(gameData?.settings?.skyColor || '') ? gameData.settings.skyColor : '#87CEEB',
+            brightness: sanitizeNumber(gameData?.settings?.brightness, 1, 0.1, 3)
+        },
+        spawn: gameData?.spawn ? {
+            x: sanitizeNumber(gameData.spawn.x, 0, -5000, 5000),
+            y: sanitizeNumber(gameData.spawn.y, 2, -5000, 5000),
+            z: sanitizeNumber(gameData.spawn.z, 0, -5000, 5000),
+            scale: {
+                x: sanitizeNumber(gameData.spawn.scale?.x, 4, 0.1, 200),
+                y: sanitizeNumber(gameData.spawn.scale?.y, 1, 0.1, 200),
+                z: sanitizeNumber(gameData.spawn.scale?.z, 4, 0.1, 200)
+            }
+        } : { x: 0, y: 2, z: 0, scale: { x: 4, y: 1, z: 4 } },
+        objects: [],
+        uiLayout: Array.isArray(gameData?.uiLayout) ? gameData.uiLayout.slice(0, 150) : []
+    };
+
+    const objects = Array.isArray(gameData?.objects) ? gameData.objects.slice(0, 2500) : [];
+    objects.forEach((obj) => {
+        if (!obj || typeof obj !== 'object') return;
+        const cleanObj = {
+            id: typeof obj.id === 'string' ? obj.id.slice(0, 80) : crypto.randomUUID(),
+            name: sanitizeText(obj.name || obj.type || 'Object', 48),
+            type: sanitizeText(obj.type || 'block', 24),
+            position: {
+                x: sanitizeNumber(obj.position?.x, 0, -10000, 10000),
+                y: sanitizeNumber(obj.position?.y, 0, -10000, 10000),
+                z: sanitizeNumber(obj.position?.z, 0, -10000, 10000)
+            },
+            rotation: {
+                x: sanitizeNumber(obj.rotation?.x, 0, -Math.PI * 4, Math.PI * 4),
+                y: sanitizeNumber(obj.rotation?.y, 0, -Math.PI * 4, Math.PI * 4),
+                z: sanitizeNumber(obj.rotation?.z, 0, -Math.PI * 4, Math.PI * 4)
+            },
+            scale: {
+                x: sanitizeNumber(obj.scale?.x, 1, 0.05, 500),
+                y: sanitizeNumber(obj.scale?.y, 1, 0.05, 500),
+                z: sanitizeNumber(obj.scale?.z, 1, 0.05, 500)
+            },
+            color: /^#[0-9a-fA-F]{6}$/.test(obj.color || '') ? obj.color : '#3498db',
+            material: sanitizeText(obj.material || 'Plastic', 24),
+            script: String(obj.script || '').slice(0, 12000),
+            isAnchored: obj.isAnchored !== false,
+            canCollide: obj.canCollide !== false,
+            noCollide: !!obj.noCollide
+        };
+
+        if (obj.smart && typeof obj.smart === 'object') {
+            cleanObj.smart = {
+                kind: sanitizeText(obj.smart.kind || 'custom', 24),
+                title: sanitizeText(obj.smart.title || cleanObj.name, 40),
+                power: sanitizeNumber(obj.smart.power, 0, 0, 1000),
+                range: sanitizeNumber(obj.smart.range, 4, 1, 30),
+                team: ['all', 'red', 'blue', 'neutral'].includes(obj.smart.team) ? obj.smart.team : 'all',
+                advanced: !!obj.smart.advanced
+            };
+        }
+        safe.objects.push(cleanObj);
+    });
+
+    return safe;
+};
+
 function createNotification(userId, type, data) {
     db.notifications.push({
         id: crypto.randomUUID(),
@@ -1661,12 +1736,13 @@ app.post('/api/games/:id/publish', requireAuth, (req, res) => {
     if (!canEdit) return res.status(403).json({ error: 'Not authorized.' });
 
     const { gameData, genre } = req.body;
-    game.gameData = gameData;
+    const safeGameData = sanitizeGameData(gameData || {});
+    game.gameData = safeGameData;
     if (genre) game.genre = genre;
     game.lastEditTime = Date.now();
 
     if (!game.versions) game.versions = [];
-    game.versions.push({ versionId: game.versions.length + 1, timestamp: Date.now(), gameData: JSON.parse(JSON.stringify(gameData)) });
+    game.versions.push({ versionId: game.versions.length + 1, timestamp: Date.now(), gameData: JSON.parse(JSON.stringify(safeGameData)) });
 
     saveDB();
     res.json({ success: true, versionId: game.versions.length });
@@ -1772,6 +1848,8 @@ app.get('/api/games/trending', (req, res) => {
 app.post('/api/games', requireAuth, (req, res) => {
     const { title, gameData, genre, groupId, icon, thumbnails } = req.body;
     if (!title || !gameData) return res.status(400).json({ error: 'Missing game data.' });
+    const safeGameData = sanitizeGameData(gameData);
+    const safeTitle = sanitizeText(title, 80);
     
     const user = db.users.find(u => u.id === req.userId);
     let authorName = user.username;
@@ -1784,10 +1862,10 @@ app.post('/api/games', requireAuth, (req, res) => {
     }
 
     const newGame = {
-        id: crypto.randomUUID(), title, authorId: user.id, authorName: authorName, genre: genre || 'Sandbox',
-        groupId: groupId || null, gameData, lastEditTime: Date.now(), collaborators: [], likes: [], plays: 0, updates: [],
+        id: crypto.randomUUID(), title: safeTitle, authorId: user.id, authorName: authorName, genre: genre || 'Sandbox',
+        groupId: groupId || null, gameData: safeGameData, lastEditTime: Date.now(), collaborators: [], likes: [], plays: 0, updates: [],
         createdAt: new Date().toISOString(),
-        versions: [{ versionId: 1, timestamp: Date.now(), gameData }],
+        versions: [{ versionId: 1, timestamp: Date.now(), gameData: safeGameData }],
         analytics: { uniquePlayers: [], totalSessionTimeSeconds: 0, fallOffs: 0, peakCCU: 0, desktopSessions: 0, mobileSessions: 0, totalJumps: 0 },
         
         // NEW: Image fields
@@ -2206,7 +2284,7 @@ app.post('/api/games/:id/sync', requireAuth, (req, res) => {
 
     let appliedUpdate = false;
     if (gameData && lastLocalEditTime > game.lastEditTime) {
-        game.gameData = gameData;
+        game.gameData = sanitizeGameData(gameData);
         if (genre) game.genre = genre;
         game.lastEditTime = lastLocalEditTime;
         saveDB(); appliedUpdate = true;
