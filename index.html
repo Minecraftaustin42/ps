@@ -193,6 +193,7 @@
         #studio-mobile-controls { display:none; position:absolute; left:0; right:0; bottom:10px; z-index:260; pointer-events:none; }
         .studio-mobile-pill { background:rgba(0,0,0,0.62); color:#fff; padding:6px 10px; border-radius:16px; font-size:12px; font-weight:700; }
         .studio-mobile-btn { pointer-events:auto; background:rgba(52,152,219,0.86); color:#fff; border:2px solid rgba(255,255,255,0.7); border-radius:14px; padding:6px 10px; font-size:12px; font-weight:700; min-width:66px; text-align:center; }
+        #studio-mobile-quick-insert { display:none; position:absolute; top:10px; right:10px; z-index:270; width:170px; pointer-events:auto; }
         #studio-joystick-base { pointer-events:auto; width:120px; height:120px; border-radius:50%; background:rgba(0,0,0,0.38); border:2px solid rgba(255,255,255,0.28); position:relative; touch-action:none; }
         #studio-joystick-stick { width:58px; height:58px; border-radius:50%; background:rgba(255,255,255,0.85); position:absolute; left:31px; top:31px; transition:transform .12s; }
         .dash-friends-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
@@ -266,6 +267,7 @@
             .modal-overlay { padding: 12px; }
             .modal-box { width: 100%; max-width: 96vw; padding: 16px; }
             #studio-mobile-controls { display:block; }
+            #studio-mobile-quick-insert { display:block; }
         }
     </style>
 </head>
@@ -401,6 +403,10 @@
                 <button class="btn" style="background:#2ecc71; border-bottom-color:#27ae60;" onclick="citySelectNeighborhood('Greenridge')"> <strong>Greenridge</strong><br><span style="font-size:12px; font-weight:normal;">Peaceful, trees, suburban</span></button>
                 <button class="btn" style="background:#e67e22; border-bottom-color:#d35400;" onclick="citySelectNeighborhood('Sandfall')"> <strong>Sandfall</strong><br><span style="font-size:12px; font-weight:normal;">Dry, desert neighborhood</span></button>
                 <button class="btn" style="background:#7f8c8d; border-bottom-color:#2c3e50;" onclick="citySelectNeighborhood('Industrial District')"> <strong>Industrial District</strong><br><span style="font-size:12px; font-weight:normal;">Factories, roads, heavy industry</span></button>
+            </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
             <div id="city-returning-step" style="display:none; margin-top: 20px;">
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
@@ -1207,7 +1213,7 @@
                             <button class="tool-btn" style="color:#9b59b6;font-weight:bold;" onclick="addPart('aircraftSeat')">Air Seat</button>
                             <button class="tool-btn" style="color:#9b59b6;font-weight:bold;" onclick="addPart('tool')">Tool</button>
                             <button class="tool-btn" style="color:#1abc9c;font-weight:bold;" onclick="toggleSmartObjectSidebar()">Smart Objects</button>
-                            <button class="tool-btn" style="color:#27ae60;font-weight:bold;" onclick="toggleTerrainEditor()">Terrain</button>
+                            <button class="tool-btn" style="color:#95a5a6;font-weight:bold;" disabled title="Terrain editing coming soon">Terrain (Soon)</button>
                             <button class="btn btn-sm btn-warning" onclick="groupAsVehicle()">Group Vehicle</button>
                             <button class="btn btn-sm btn-info" onclick="groupAsAircraft()">Group Aircraft</button>
                         </div>
@@ -1240,6 +1246,20 @@
 
             <div class="studio-layout">
                 <div id="editor-container-3d" tabindex="0">
+<select id="studio-mobile-quick-insert" class="form-control" onchange="if(this.value){ addPart(this.value); this.value=''; }">
+    <option value="">+ Quick Insert Part...</option>
+    <option value="block">Cube</option>
+    <option value="sphere">Sphere</option>
+    <option value="cylinder">Cylinder</option>
+    <option value="cone">Cone</option>
+    <option value="triangle">Triangle</option>
+    <option value="wedge">Wedge</option>
+    <option value="ladder">Ladder</option>
+    <option value="spawn">Spawn</option>
+    <option value="seat">Seat</option>
+    <option value="aircraftSeat">Air Seat</option>
+    <option value="tool">Tool</option>
+</select>
 
 
 
@@ -1411,7 +1431,7 @@
                                 <div id="studio-joystick-stick"></div>
                             </div>
                             <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
-                                <div class="studio-mobile-pill">Best in landscape mode 📱↔️</div>
+                                <div class="studio-mobile-pill" id="studio-landscape-pill">Best in landscape mode 📱↔️ <button onclick="closeStudioLandscapeHint()" style="margin-left:6px; background:transparent; color:#fff; border:none; font-weight:700; pointer-events:auto;">✕</button></div>
                                 <div style="display:flex; gap:6px; pointer-events:auto;">
                                     <button class="studio-mobile-btn" onclick="setTransformMode('select')">Select</button>
                                     <button class="studio-mobile-btn" onclick="setTransformMode('translate')">Move</button>
@@ -2204,6 +2224,7 @@ const toggleMultiSelect = () => {
                     <div id="joystick-base" style="position: absolute; bottom: 30px; left: 30px; width: 140px; height: 140px; background: rgba(0,0,0,0.4); border-radius: 50%; pointer-events: auto; touch-action: none; border: 3px solid rgba(255,255,255,0.2);">
                         <div id="joystick-stick" style="position: absolute; top: 35px; left: 35px; width: 70px; height: 70px; background: rgba(255,255,255,0.8); border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: transform 0.1s ease-out;"></div>
                     </div>
+                    <div id="mobile-look-zone" style="position:absolute; top:0; right:0; width:52%; height:78%; pointer-events:auto; touch-action:none;"></div>
                     <div id="mobile-jump-btn" style="position: absolute; bottom: 40px; right: 30px; width: 90px; height: 90px; background: rgba(46, 204, 113, 0.6); border-radius: 50%; pointer-events: auto; touch-action: none; border: 3px solid rgba(46, 204, 113, 0.9); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 32px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: background 0.1s;">?</div>
                 `;
                 ui.style.position = 'absolute';
@@ -2216,10 +2237,13 @@ const toggleMultiSelect = () => {
                 const base = document.getElementById('joystick-base');
                 const stick = document.getElementById('joystick-stick');
                 const jumpBtn = document.getElementById('mobile-jump-btn');
+                const lookZone = document.getElementById('mobile-look-zone');
 
                 let baseRadius = 70;
                 let baseCenter = { x: 0, y: 0 };
                 let activeTouchId = null;
+                let lookTouchId = null;
+                let lookPrev = null;
 
                 const resetJoystick = () => {
                     stick.style.transition = 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
@@ -2267,15 +2291,54 @@ const toggleMultiSelect = () => {
                     
                     stick.style.transform = `translate(${dx}px, ${dy}px)`;
                     
-                    const threshold = 15;
-                    keys.w = dy < -threshold;
-                    keys.s = dy > threshold;
-                    keys.a = dx < -threshold;
-                    keys.d = dx > threshold;
+                    const magnitude = Math.sqrt(dx * dx + dy * dy);
+                    keys.w = magnitude > 16;
+                    keys.s = false;
+                    keys.a = false;
+                    keys.d = false;
                 };
 
                 jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playInput.justJumped = true; jumpBtn.style.background = 'rgba(46, 204, 113, 0.9)'; }, { passive: false });
                 jumpBtn.addEventListener('touchend', (e) => { e.preventDefault(); jumpBtn.style.background = 'rgba(46, 204, 113, 0.6)'; }, { passive: false });
+
+                const onLookMove = (touch) => {
+                    if (!lookPrev || !window.playControls) {
+                        lookPrev = { x: touch.clientX, y: touch.clientY };
+                        return;
+                    }
+                    const dx = touch.clientX - lookPrev.x;
+                    const dy = touch.clientY - lookPrev.y;
+                    window.playControls.rotateLeft(dx * 0.006);
+                    window.playControls.rotateUp(dy * 0.004);
+                    window.playControls.update();
+                    lookPrev = { x: touch.clientX, y: touch.clientY };
+                };
+
+                lookZone.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    if (lookTouchId !== null) return;
+                    const touch = e.changedTouches[0];
+                    lookTouchId = touch.identifier;
+                    lookPrev = { x: touch.clientX, y: touch.clientY };
+                }, { passive: false });
+                lookZone.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        const t = e.changedTouches[i];
+                        if (t.identifier === lookTouchId) onLookMove(t);
+                    }
+                }, { passive: false });
+                const endLook = (e) => {
+                    e.preventDefault();
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        if (e.changedTouches[i].identifier === lookTouchId) {
+                            lookTouchId = null;
+                            lookPrev = null;
+                        }
+                    }
+                };
+                lookZone.addEventListener('touchend', endLook, { passive: false });
+                lookZone.addEventListener('touchcancel', endLook, { passive: false });
             }
             document.getElementById('mobile-controls').style.display = 'block';
         };
@@ -3799,7 +3862,18 @@ let customGizmo = null;
             }, { passive: false });
             base.addEventListener('touchend', (e) => { e.preventDefault(); resetStick(); }, { passive: false });
             base.addEventListener('touchcancel', (e) => { e.preventDefault(); resetStick(); }, { passive: false });
+
+            if (localStorage.getItem('ps_hide_landscape_hint') === '1') {
+                const pill = document.getElementById('studio-landscape-pill');
+                if (pill) pill.style.display = 'none';
+            }
         };
+        const closeStudioLandscapeHint = () => {
+            localStorage.setItem('ps_hide_landscape_hint', '1');
+            const pill = document.getElementById('studio-landscape-pill');
+            if (pill) pill.style.display = 'none';
+        };
+        window.closeStudioLandscapeHint = closeStudioLandscapeHint;
 
         const initEditor = () => {
             const container = document.getElementById('editor-container-3d');
@@ -5015,7 +5089,8 @@ const dir = new THREE.Vector3();
             } else {
                 edData.objects.push({
                     id: newId, name: type.charAt(0).toUpperCase() + type.slice(1), type: type,
-                    position: { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 4, z: 4 }, color: '#3498db'
+                    position: { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 4, z: 4 }, color: '#3498db',
+                    isAnchored: true, canCollide: true
                 });
             }
             
@@ -5204,6 +5279,10 @@ document.addEventListener('keydown', (e) => {
                         
                         document.getElementById('prop-material').value = objData.material || 'Plastic';
                         document.getElementById('prop-material').disabled = false;
+                        document.getElementById('prop-anchored').checked = objData.isAnchored !== false;
+                        document.getElementById('prop-cancollide').checked = objData.canCollide !== false;
+                        const currentOpacity = typeof primary.material?.opacity === 'number' ? primary.material.opacity : 1;
+                        document.getElementById('prop-transparency').value = (1 - currentOpacity).toFixed(1);
                         const smartSection = document.getElementById('smart-props-section');
                         if (objData.smart && objData.smart.kind) {
                             ensureSmartLogicDefaults(objData);
@@ -5726,6 +5805,7 @@ if (item.type === 'button' && item.onClickEvent) {
             // --- ADD THESE TWO LINES ---
             objData.isAnchored = mesh.userData.isAnchored;
             objData.canCollide = mesh.userData.canCollide;
+            objData.noCollide = mesh.userData.canCollide === false;
             // ---------------------------
         }
     }
@@ -6587,7 +6667,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: objData.noCollide || false, smart: objData.smart || null, smartState: {} };
+mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: (objData.noCollide || objData.canCollide === false), smart: objData.smart || null, smartState: {} };
                     
             if (objData.script && objData.script.trim() !== '') {
                         const scriptSource = objData.scriptJs || objData.script || '';
@@ -8996,6 +9076,7 @@ document.getElementById('prop-cancollide').addEventListener('change', (e) => {
     selectedObjects.forEach(mesh => {
         if (mesh.userData.isSpawn) return;
         mesh.userData.canCollide = e.target.checked;
+        mesh.userData.noCollide = !e.target.checked;
     });
     recordEdit();
 });
