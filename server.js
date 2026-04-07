@@ -2603,7 +2603,7 @@ app.post('/api/games/:id/chat', requireAuth, (req, res) => {
 
 app.post('/api/games/:id/play-sync', requireAuth, (req, res) => {
     const gameId = req.params.id;
-    const { x, y, z, rotY, sceneId, color } = req.body;
+    const { x, y, z, rotY, sceneId, color, bodyColors } = req.body;
     const user = db.users.find(u => u.id === req.userId);
 
 if (!activePlayers[gameId]) activePlayers[gameId] = {};
@@ -2617,6 +2617,7 @@ activePlayers[gameId][req.userId] = {
     x, y, z, rotY, sceneId, username: user.username, 
     color: color || user.color || '#e74c3c', 
     equipped: user.equipped,
+    bodyColors: bodyColors || null,
     timestamp: Date.now(),
     activeChatBubble: lastChatMessage ? {
         text: lastChatMessage.text,

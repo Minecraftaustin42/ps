@@ -445,6 +445,10 @@
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
                 <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -1020,6 +1024,25 @@
             <div class="card">
                 <h2 class="card-title">Avatar Accessories</h2>
                 <p style="margin-top:-8px; color:#666;">Equip or unequip accessories for your avatar. Changes sync into multiplayer.</p>
+                <div style="padding:10px; border:1px solid #e8eef5; border-radius:6px; margin-bottom:12px;">
+                    <div style="font-weight:700; margin-bottom:8px;">Body Paint</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
+                        <button class="btn btn-sm" onclick="selectAvatarPart('head')">Head</button>
+                        <button class="btn btn-sm" onclick="selectAvatarPart('torso')">Torso</button>
+                        <button class="btn btn-sm" onclick="selectAvatarPart('leftArm')">Left Arm</button>
+                        <button class="btn btn-sm" onclick="selectAvatarPart('rightArm')">Right Arm</button>
+                        <button class="btn btn-sm" onclick="selectAvatarPart('leftLeg')">Left Leg</button>
+                        <button class="btn btn-sm" onclick="selectAvatarPart('rightLeg')">Right Leg</button>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn btn-sm" style="background:#e74c3c;" onclick="paintAvatarPart('#e74c3c')">Ruby</button>
+                        <button class="btn btn-sm" style="background:#3498db;" onclick="paintAvatarPart('#3498db')">Ocean</button>
+                        <button class="btn btn-sm" style="background:#2ecc71;" onclick="paintAvatarPart('#2ecc71')">Mint</button>
+                        <button class="btn btn-sm" style="background:#f39c12;" onclick="paintAvatarPart('#f39c12')">Gold</button>
+                        <button class="btn btn-sm" style="background:#9b59b6;" onclick="paintAvatarPart('#9b59b6')">Violet</button>
+                    </div>
+                    <div style="font-size:12px; color:#666; margin-top:6px;">Selected part: <span id="avatar-part-selected">Head</span></div>
+                </div>
                 <div id="avatar-view-grid" class="game-grid"></div>
             </div>
         </div>
@@ -4470,6 +4493,8 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             try {
                 const me = await apiCall('/me');
                 if (currentUser) currentUser.equipped = me.equipped || null;
+                if (currentUser && me.color) currentUser.color = me.color;
+                ensureAvatarBodyColors();
                 const items = me.inventory || [];
                 grid.innerHTML = items.length ? '' : '<p>You do not own any avatar accessories yet.</p>';
                 items.forEach(i => {
@@ -4484,6 +4509,47 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                 });
             } catch (e) {
                 grid.innerHTML = '<p>Could not load avatar equipment.</p>';
+            }
+        };
+
+        let selectedAvatarPart = 'head';
+        const ensureAvatarBodyColors = () => {
+            if (!currentUser) return;
+            if (!currentUser.bodyColors) {
+                currentUser.bodyColors = {
+                    head: currentUser.color || '#e74c3c',
+                    torso: '#3498db',
+                    leftArm: '#2ecc71',
+                    rightArm: '#f39c12',
+                    leftLeg: '#9b59b6',
+                    rightLeg: '#e74c3c'
+                };
+            }
+        };
+        const selectAvatarPart = (part) => {
+            selectedAvatarPart = part;
+            const label = document.getElementById('avatar-part-selected');
+            if (label) label.innerText = part;
+        };
+        const paintAvatarPart = (color) => {
+            if (!currentUser) return;
+            ensureAvatarBodyColors();
+            currentUser.bodyColors[selectedAvatarPart] = color;
+            const vals = Object.values(currentUser.bodyColors || {});
+            const allSame = vals.length > 0 && vals.every(v => v === vals[0]);
+            if (allSame) {
+                currentUser.bodyColors.torso = '#3498db';
+                showModal('Body Paint Rule', 'Full-body single-color paint is not allowed. Torso color was adjusted.');
+            }
+            loadAvatarTab();
+            if (playerMesh && playerMesh.parent) {
+                const updated = createPlayerMesh(currentUser.color || '#e74c3c', currentUser.equipped, currentUser.bodyColors);
+                updated.scale.copy(playerMesh.scale);
+                updated.position.copy(playerMesh.position);
+                updated.rotation.copy(playerMesh.rotation);
+                playerMesh.parent.add(updated);
+                playerMesh.parent.remove(playerMesh);
+                playerMesh = updated;
             }
         };
 
@@ -4520,32 +4586,40 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             if (accAnimationId) cancelAnimationFrame(accAnimationId);
         };
 
-        const createPlayerMesh = (color, equippedId) => {
+        const createPlayerMesh = (color, equippedId, bodyColors = null) => {
             const group = new THREE.Group();
-            const mat = new THREE.MeshLambertMaterial({ color: color || '#e74c3c' });
+            const palette = bodyColors || {
+                head: color || '#e74c3c',
+                torso: color || '#e74c3c',
+                leftArm: color || '#e74c3c',
+                rightArm: color || '#e74c3c',
+                leftLeg: color || '#e74c3c',
+                rightLeg: color || '#e74c3c'
+            };
+            const partMat = (key) => new THREE.MeshLambertMaterial({ color: palette[key] || color || '#e74c3c' });
 
-            const head = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), mat);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), partMat('head'));
             head.position.set(0, 4, 0); 
             group.add(head);
 
-            const torso = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), mat);
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), partMat('torso'));
             torso.position.set(0, 0, 0);
             group.add(torso);
 
             const lArmPivot = new THREE.Group(); lArmPivot.position.set(-3, 1, 0);
-            const lArm = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), mat); lArm.position.set(0, -1.5, 0);
+            const lArm = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), partMat('leftArm')); lArm.position.set(0, -1.5, 0);
             lArmPivot.add(lArm); group.add(lArmPivot);
 
             const rArmPivot = new THREE.Group(); rArmPivot.position.set(3, 1, 0);
-            const rArm = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), mat); rArm.position.set(0, -1.5, 0);
+            const rArm = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), partMat('rightArm')); rArm.position.set(0, -1.5, 0);
             rArmPivot.add(rArm); group.add(rArmPivot);
 
             const lLegPivot = new THREE.Group(); lLegPivot.position.set(-1, -2, 0);
-            const lLeg = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), mat); lLeg.position.set(0, -2, 0);
+            const lLeg = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), partMat('leftLeg')); lLeg.position.set(0, -2, 0);
             lLegPivot.add(lLeg); group.add(lLegPivot);
 
             const rLegPivot = new THREE.Group(); rLegPivot.position.set(1, -2, 0);
-            const rLeg = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), mat); rLeg.position.set(0, -2, 0);
+            const rLeg = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), partMat('rightLeg')); rLeg.position.set(0, -2, 0);
             rLegPivot.add(rLeg); group.add(rLegPivot);
 
             group.userData = { lArmPivot, rArmPivot, lLegPivot, rLegPivot, swingTime: 0 };
@@ -5284,7 +5358,8 @@ let currentEditMode = 'translate';
             sprite.material.needsUpdate = true;
             const sx = Math.max(1, objData.scale?.x || 4);
             const sy = Math.max(0.6, (objData.textSize || 40) / 40);
-            sprite.scale.set(sx * 3.2, Math.max(2, sy * 2.4), 1);
+            const lenFactor = Math.max(0.9, Math.min(1.8, (String(objData.text || 'Text').length || 4) / 14));
+            sprite.scale.set(sx * lenFactor, Math.max(1.8, sy * 2.1), 1);
         };
 
       const addPart = (type) => {
@@ -6283,7 +6358,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
             teamSyncInterval = setInterval(async () => {
                 if(!currentEditGameId || !currentUser) return;
                 try {
-                    const collabCursor = selectedObjects[0] ? { x: selectedObjects[0].position.x, y: selectedObjects[0].position.y, z: selectedObjects[0].position.z } : { x: edCamera.position.x, y: edCamera.position.y, z: edCamera.position.z };
+                    const collabCursor = { x: edCamera.position.x, y: edCamera.position.y, z: edCamera.position.z };
                     const res = await apiCall(`/games/${currentEditGameId}/sync`, 'POST', { gameData: edData, genre: document.getElementById('editor-genre').value, lastLocalEditTime: lastLocalEditTime, cursor: collabCursor });
                     if (!res.acceptedLocalUpdate && res.lastEditTime > lastLocalEditTime) {
                         edData = res.gameData; lastLocalEditTime = res.lastEditTime; buildEditorScene();
@@ -6292,7 +6367,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     const status = document.getElementById('autosave-status');
                     if (status && lastLocalEditTime > 0) { status.innerText = 'Autosaved'; setTimeout(() => status.innerText = '', 1000); }
                 } catch(e) {}
-            }, 700);
+            }, 10);
         };
         const stopTeamSync = () => {
             if (teamSyncInterval) clearInterval(teamSyncInterval);
@@ -7009,7 +7084,7 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
             window.playSlopes = playMeshes.filter(m => ['wedge', 'triangle'].includes(m.userData.type));
             window.playSlopes.forEach(m => { if (m.material) m.material.side = THREE.DoubleSide; });
 
-            playerMesh = createPlayerMesh(currentUser ? currentUser.color : '#e74c3c', currentUser ? currentUser.equipped : null);
+            playerMesh = createPlayerMesh(currentUser ? currentUser.color : '#e74c3c', currentUser ? currentUser.equipped : null, currentUser ? currentUser.bodyColors : null);
             playerMesh.scale.set(0.5, 0.5, 0.5); playScene.add(playerMesh); renderPlayToolbar();
             window.smartRuntime = { lastInteractAt: 0 };
         };
@@ -7023,14 +7098,15 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
         playSyncInFlight = true;
 
         try {
-            const others = await apiCall(`/games/${currentPlayGameId}/play-sync`, 'POST', {
-                x: playerObj.x,
-                y: playerObj.y,
-                z: playerObj.z,
-                rotY: playerObj.rotY,
-                sceneId: 'main',
-                color: currentUser.color || '#e74c3c'
-            });
+                const others = await apiCall(`/games/${currentPlayGameId}/play-sync`, 'POST', {
+                    x: playerObj.x,
+                    y: playerObj.y,
+                    z: playerObj.z,
+                    rotY: playerObj.rotY,
+                    sceneId: 'main',
+                    color: currentUser.color || '#e74c3c',
+                    bodyColors: currentUser.bodyColors || null
+                });
 
             if (serverLeaderboardOpen) {
                 fetchServerLeaderboardPlayers();
@@ -7047,7 +7123,7 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
 
                 others.forEach(o => {
                     if (!otherPlayerMeshes[o.userId]) {
-                        const mesh = createPlayerMesh(o.color, o.equipped);
+                        const mesh = createPlayerMesh(o.color, o.equipped, o.bodyColors || null);
                         playScene.add(mesh);
                         mesh.scale.set(0.5, 0.5, 0.5);
 
@@ -7058,7 +7134,7 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
                         };
                     } else if (otherPlayerMeshes[o.userId].equipped !== (o.equipped || null)) {
                         const oldMesh = otherPlayerMeshes[o.userId].mesh;
-                        const replacement = createPlayerMesh(o.color, o.equipped);
+                        const replacement = createPlayerMesh(o.color, o.equipped, o.bodyColors || null);
                         replacement.scale.set(0.5, 0.5, 0.5);
                         replacement.position.copy(oldMesh.position);
                         replacement.rotation.copy(oldMesh.rotation);
@@ -9414,6 +9490,8 @@ document.getElementById('prop-anchored').addEventListener('change', (e) => {
     selectedObjects.forEach(mesh => {
         if (mesh.userData.isSpawn) return;
         mesh.userData.isAnchored = e.target.checked;
+        const objData = edData.objects.find(o => o.id === mesh.userData.id);
+        if (objData) objData.isAnchored = e.target.checked;
     });
     recordEdit();
 });
@@ -9425,6 +9503,11 @@ document.getElementById('prop-cancollide').addEventListener('change', (e) => {
         if (mesh.userData.isSpawn) return;
         mesh.userData.canCollide = e.target.checked;
         mesh.userData.noCollide = !e.target.checked;
+        const objData = edData.objects.find(o => o.id === mesh.userData.id);
+        if (objData) {
+            objData.canCollide = e.target.checked;
+            objData.noCollide = !e.target.checked;
+        }
     });
     recordEdit();
 });
