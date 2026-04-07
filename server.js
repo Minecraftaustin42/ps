@@ -13,7 +13,7 @@ app.use("/seo", express.static(path.join(__dirname, "public", "seo")));
 // In-memory databases
 const DB_FILE = path.join(__dirname, 'db.json');
 let db = {
-    users: [], sessions: {}, games: [], shopItems: [], groups: [], cityPlots: [], datastores: {},
+    users: [], sessions: {}, games: [], shopItems: [], clothingItems: [], groups: [], cityPlots: [], datastores: {},
     globalChat: [], toolboxItems: [], // NEW
     notifications: [],
     moderation: { bans: {}, ipBans: [], warnings: {} },  // <-- ADD THIS LINE
@@ -44,6 +44,7 @@ if (!db.friendPetDaily) db.friendPetDaily = {};
         db = { ...db, ...loaded };
         
         if (!db.shopItems) db.shopItems = [];
+        if (!db.clothingItems) db.clothingItems = [];
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} };
         if (!db.groups) db.groups = [];
 if (!db.sounds) db.sounds = [];
@@ -60,6 +61,7 @@ if (!u.toolboxInventory) u.toolboxInventory = [];
             if (!u.badges) u.badges = [];
             if (!u.messages) u.messages = [];
             if (!u.inventory) u.inventory = [];
+            if (!u.clothingInventory) u.clothingInventory = [];
 
 // Add this right after parsing db.json
 if (typeof db.lastUserIdNum === 'undefined') {
@@ -81,6 +83,13 @@ if (typeof u.lastSpinDate === 'undefined') u.lastSpinDate = 0; // NEW: Lucky Spi
 
 if (typeof u.lastPlayDate === 'undefined') u.lastPlayDate = 0;
             if (typeof u.cityData === 'undefined') u.cityData = null; // NEW: Track if user is in Sculpt City
+            if (u.cityData) {
+                if (typeof u.cityData.tutorialComplete === 'undefined') u.cityData.tutorialComplete = false;
+                if (typeof u.cityData.bucks !== 'undefined') {
+                    u.coins = (u.coins || 0) + (u.cityData.bucks || 0);
+                    delete u.cityData.bucks;
+                }
+            }
 
 if (typeof u.loginStreak === 'undefined') u.loginStreak = 0;
             if (typeof u.lastLoginDate === 'undefined') u.lastLoginDate = 0;
@@ -91,29 +100,6 @@ if (typeof u.loginStreak === 'undefined') u.loginStreak = 0;
                 u.friends = u.friends.map(id => ({ id, addedAt: Date.now() }));
             }
         });
-
-
-// ==========================================
-// ONE-TIME REWARD SCRIPT FOR "rer"
-// ==========================================
-const targetUser = db.users.find(u => u.username === "rer");
-if (targetUser) {
-    // 1. Give 10,000 Sculpt Coins
-    targetUser.coins = (targetUser.coins || 0) + 10000;
-    
-    // 2. Ensure they have City Data, then give 1,000,000 Bucks
-    if (!targetUser.cityData) {
-        targetUser.cityData = { bucks: 0, vehicles: ['sedan_1'] };
-    }
-    targetUser.cityData.bucks = (targetUser.cityData.bucks || 0) + 1000000;
-    
-    // 3. Save to database
-    saveDB();
-    console.log(`SUCCESS: Gave 1,000,000 Bucks and 10,000 Coins to ${targetUser.username}!`);
-} else {
-    console.log(`ERROR: User "rer" not found in the database.`);
-}
-// ==========================================
 
 
         db.games.forEach(g => { 
@@ -581,7 +567,7 @@ if (typeof db.lastUserIdNum !== 'number') {
 userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
-        inventory: [], bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
 
@@ -925,7 +911,7 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({
         id: user.id, username: user.username, color: user.color, badges: user.badges, coins: user.coins,
         requests, friends: friendsList, recentlyPlayed: recentGames, bookmarkedGames, 
-        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups,
+        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [],
         lastSpinDate: user.lastSpinDate,
         loginStreak: user.loginStreak, playStreak: user.playStreak, lastLoginDate: user.lastLoginDate,
         toolboxInventory: user.toolboxInventory // NEW
@@ -1788,7 +1774,8 @@ app.post('/api/groups/:id/payout', requireAuth, (req, res) => {
 // --- Shop & Economy Routes ---
 
 app.get('/api/shop/items', (req, res) => {
-    res.json(db.shopItems.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    const approved = (db.shopItems || []).filter(i => (i.status || 'approved') === 'approved');
+    res.json(approved.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
 });
 
 app.post('/api/shop/items', requireAuth, (req, res) => {
@@ -1796,19 +1783,26 @@ app.post('/api/shop/items', requireAuth, (req, res) => {
     if (!name || !image) return res.status(400).json({ error: 'Missing required data.' });
 
     const user = db.users.find(u => u.id === req.userId);
-    if (user.coins < 15) return res.status(400).json({ error: 'Insufficient Funds.' });
-    user.coins -= 15;
+    const accountAgeMs = Date.now() - (user.createdAt || 0);
+    const minAgeMs = 3 * 24 * 60 * 60 * 1000;
+    if (accountAgeMs < minAgeMs) {
+        const hoursLeft = Math.ceil((minAgeMs - accountAgeMs) / (60 * 60 * 1000));
+        return res.status(403).json({ error: `Account must be at least 3 days old to upload accessories. (${hoursLeft}h remaining)` });
+    }
+    if (user.coins < 20) return res.status(400).json({ error: 'Insufficient Funds. Uploading costs 20 SC.' });
+    user.coins -= 20;
 
     const newItem = {
         id: crypto.randomUUID(), name, description: description || '', price: parseInt(price) || 0,
-        authorId: user.id, authorName: user.username, image, createdAt: new Date().toISOString()
+        authorId: user.id, authorName: user.username, image, createdAt: new Date().toISOString(),
+        status: 'pending', moderation: { reviewedBy: null, reviewedAt: null, reason: '' }
     };
     
     db.shopItems.push(newItem);
     user.inventory.push(newItem.id); 
     saveDB();
     
-    res.json({ message: 'Accessory published successfully!', item: newItem, coins: user.coins });
+    res.json({ message: 'Accessory submitted for moderation review.', item: newItem, coins: user.coins });
 });
 
 app.post('/api/shop/buy/:id', requireAuth, (req, res) => {
@@ -1816,13 +1810,48 @@ app.post('/api/shop/buy/:id', requireAuth, (req, res) => {
     const user = db.users.find(u => u.id === req.userId);
     
     if (!item) return res.status(404).json({ error: 'Item not found.' });
+    if ((item.status || 'approved') !== 'approved') return res.status(400).json({ error: 'This item is not approved for sale yet.' });
     if (user.inventory.includes(item.id)) return res.status(400).json({ error: 'You already own this item.' });
     if (user.coins < item.price) return res.status(400).json({ error: 'Insufficient Funds.' });
     
     user.coins -= item.price;
     user.inventory.push(item.id);
+    const author = db.users.find(u => u.id === item.authorId);
+    if (author) author.coins = (author.coins || 0) + item.price;
     saveDB();
     res.json({ message: 'Item purchased successfully!', coins: user.coins });
+});
+
+app.get('/api/clothing/items', (req, res) => {
+    const approved = (db.clothingItems || []).filter(i => i.visibility === 'public' && (i.status || 'approved') === 'approved');
+    res.json(approved.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+});
+
+app.post('/api/clothing/items', requireAuth, (req, res) => {
+    const { name, description, price, type, visibility, designImage } = req.body;
+    if (!name || !description || !designImage) return res.status(400).json({ error: 'Missing required clothing data.' });
+    if (!['shirt', 'pants'].includes(type)) return res.status(400).json({ error: 'Invalid clothing type.' });
+    if (!['public', 'private'].includes(visibility)) return res.status(400).json({ error: 'Invalid visibility.' });
+    const user = db.users.find(u => u.id === req.userId);
+    const item = {
+        id: crypto.randomUUID(),
+        name,
+        description,
+        price: Math.max(0, parseInt(price) || 0),
+        type,
+        visibility,
+        designImage,
+        authorId: user.id,
+        authorName: user.username,
+        createdAt: new Date().toISOString(),
+        status: visibility === 'public' ? 'pending' : 'approved',
+        moderation: { reviewedBy: null, reviewedAt: null, reason: '' }
+    };
+    db.clothingItems.push(item);
+    if (!Array.isArray(user.clothingInventory)) user.clothingInventory = [];
+    if (!user.clothingInventory.includes(item.id)) user.clothingInventory.push(item.id);
+    saveDB();
+    res.json({ message: visibility === 'public' ? 'Clothing submitted for moderation.' : 'Private clothing created.', item });
 });
 
 // --- Game Routes ---
@@ -2103,6 +2132,61 @@ app.post('/api/moderate/images', requireAuth, (req, res) => {
     res.json({ success: true });
 });
 
+app.get('/api/moderate/accessories', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const pending = (db.shopItems || [])
+        .filter(i => (i.status || 'approved') === 'pending')
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    res.json(pending);
+});
+
+app.post('/api/moderate/accessories/:id', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const { action, reason } = req.body; // approve | reject
+    const item = (db.shopItems || []).find(i => i.id === req.params.id);
+    if (!item) return res.status(404).json({ error: 'Accessory not found.' });
+    if ((item.status || 'approved') !== 'pending') return res.status(400).json({ error: 'Accessory is not pending moderation.' });
+    if (!['approve', 'reject'].includes(action)) return res.status(400).json({ error: 'Invalid action.' });
+
+    item.status = action === 'approve' ? 'approved' : 'rejected';
+    item.moderation = {
+        reviewedBy: req.userId,
+        reviewedAt: Date.now(),
+        reason: String(reason || '').slice(0, 300)
+    };
+
+    if (action === 'reject') {
+        db.users.forEach(u => {
+            if (Array.isArray(u.inventory)) u.inventory = u.inventory.filter(id => id !== item.id);
+        });
+    }
+
+    saveDB();
+    res.json({ success: true, item });
+});
+
+app.get('/api/moderate/clothing', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const pending = (db.clothingItems || [])
+        .filter(i => i.visibility === 'public' && (i.status || 'approved') === 'pending')
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    res.json(pending);
+});
+
+app.post('/api/moderate/clothing/:id', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const { action, reason } = req.body;
+    const item = (db.clothingItems || []).find(i => i.id === req.params.id);
+    if (!item) return res.status(404).json({ error: 'Clothing not found.' });
+    if ((item.status || 'approved') !== 'pending') return res.status(400).json({ error: 'Clothing is not pending moderation.' });
+    if (!['approve', 'reject'].includes(action)) return res.status(400).json({ error: 'Invalid action.' });
+    item.status = action === 'approve' ? 'approved' : 'rejected';
+    item.moderation = { reviewedBy: req.userId, reviewedAt: Date.now(), reason: String(reason || '').slice(0, 300) };
+    if (action === 'reject') {
+        db.users.forEach(u => {
+            if (Array.isArray(u.clothingInventory)) u.clothingInventory = u.clothingInventory.filter(id => id !== item.id);
+        });
+    }
+    saveDB();
+    res.json({ success: true, item });
+});
+
 app.get('/api/games/:id', (req, res) => {
     const game = db.games.find(g => g.id === req.params.id);
     if (!game) return res.status(404).json({ error: 'Game not found.' });
@@ -2242,8 +2326,8 @@ app.get('/api/games/:id/analytics', requireAuth, (req, res) => {
 app.get('/api/city/info', requireAuth, (req, res) => {
     const user = db.users.find(u => u.id === req.userId);
     if (user.cityData) {
-        if (!user.cityData.bucks) user.cityData.bucks = 0;
         if (!user.cityData.vehicles) user.cityData.vehicles = ['sedan_1'];
+        if (typeof user.cityData.tutorialComplete === 'undefined') user.cityData.tutorialComplete = false;
     }
     res.json({ cityData: user.cityData, plots: db.cityPlots || [] });
 });
@@ -2258,8 +2342,8 @@ app.post('/api/city/claim', requireAuth, (req, res) => {
     const isTaken = db.cityPlots.find(p => p.plotX === plotX && p.plotZ === plotZ && p.neighborhood === neighborhood);
     if (isTaken) return res.status(400).json({ error: 'Plot is already taken!' });
 
-    // Initialize the player with a Starter House, 0 Bucks, and a Sedan!
-    user.cityData = { neighborhood, plotX, plotZ, houseType: 'Starter', bucks: 0, vehicles: ['sedan_1'] };
+    // Initialize the player with a Starter House and a Sedan.
+    user.cityData = { neighborhood, plotX, plotZ, houseType: 'Starter', tutorialComplete: false, vehicles: ['sedan_1'] };
     db.cityPlots.push({
         id: crypto.randomUUID(), userId: user.id, username: user.username,
         neighborhood, plotX, plotZ, houseType: 'Starter'
@@ -2277,20 +2361,18 @@ app.post('/api/city/sync', requireAuth, (req, res) => {
     // Grant Coins
     if (req.body.coinsToAdd) user.coins = (user.coins || 0) + req.body.coinsToAdd;
     
-    // Grant Bucks
-    if (user.cityData && req.body.bucksToAdd) {
-        user.cityData.bucks = (user.cityData.bucks || 0) + req.body.bucksToAdd;
-    }
-    
     // Process Vehicle Purchases
     if (user.cityData && req.body.vehicleToBuy) {
         if (!user.cityData.vehicles) user.cityData.vehicles = ['sedan_1'];
-        if (user.cityData.bucks >= req.body.cost) {
-            user.cityData.bucks -= req.body.cost;
+        if (user.coins >= req.body.cost) {
+            user.coins -= req.body.cost;
             user.cityData.vehicles.push(req.body.vehicleToBuy);
         } else {
-            return res.status(400).json({error: 'Not enough Bucks!'});
+            return res.status(400).json({error: 'Not enough Sculpt Coins!'});
         }
+    }
+    if (user.cityData && req.body.tutorialComplete === true) {
+        user.cityData.tutorialComplete = true;
     }
     
     saveDB();
@@ -2579,7 +2661,7 @@ app.post('/api/games/:id/chat', requireAuth, (req, res) => {
 
 app.post('/api/games/:id/play-sync', requireAuth, (req, res) => {
     const gameId = req.params.id;
-    const { x, y, z, rotY, sceneId, color } = req.body;
+    const { x, y, z, rotY, sceneId, color, bodyColors } = req.body;
     const user = db.users.find(u => u.id === req.userId);
 
 if (!activePlayers[gameId]) activePlayers[gameId] = {};
@@ -2593,6 +2675,7 @@ activePlayers[gameId][req.userId] = {
     x, y, z, rotY, sceneId, username: user.username, 
     color: color || user.color || '#e74c3c', 
     equipped: user.equipped,
+    bodyColors: bodyColors || null,
     timestamp: Date.now(),
     activeChatBubble: lastChatMessage ? {
         text: lastChatMessage.text,
