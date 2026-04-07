@@ -433,6 +433,10 @@
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
                 <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -551,6 +555,8 @@
 
             <a onclick="navigate('create')">Create</a>
             <a onclick="navigate('shop')">Shop</a>
+            <a onclick="navigate('inventory')">Inventory</a>
+            <a onclick="navigate('avatar')">Avatar</a>
             <a onclick="navigate('friends')">Friends</a>
             <a onclick="navigate('messages')">Messages</a>
             <a id="nav-mod-panel" onclick="openModPanel()" style="display:none;">Mod Panel</a>
@@ -992,6 +998,21 @@
             <div class="card">
                 <h2 class="card-title">My Inbox</h2>
                 <div id="messages-list"></div>
+            </div>
+        </div>
+
+        <div id="view-inventory" class="view">
+            <div class="card">
+                <h2 class="card-title">My Inventory</h2>
+                <div id="inventory-view-grid" class="game-grid"></div>
+            </div>
+        </div>
+
+        <div id="view-avatar" class="view">
+            <div class="card">
+                <h2 class="card-title">Avatar Accessories</h2>
+                <p style="margin-top:-8px; color:#666;">Equip or unequip accessories for your avatar. Changes sync into multiplayer.</p>
+                <div id="avatar-view-grid" class="game-grid"></div>
             </div>
         </div>
 
@@ -2545,6 +2566,10 @@ else if (viewId === 'groups') {
                 loadFriendsTab();
             } else if (viewId === 'messages') {
                 loadMessages();
+            } else if (viewId === 'inventory') {
+                loadInventoryTab();
+            } else if (viewId === 'avatar') {
+                loadAvatarTab();
             } else if (viewId === 'settings') {
                 if (currentUser) document.getElementById('setting-username').value = currentUser.username;
            } else if (viewId === 'create') {
@@ -4329,6 +4354,7 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
         // --- 3D Shop Accessory Maker ---
         let accScene, accCamera, accRenderer, accControls;
         let accVoxels = []; // {x, y, z, color}
+        let accPartInsertIndex = 0;
         let accRollOverMesh, accGridHelper;
         let accMode = 'draw'; 
         let accAnimationId = null;
@@ -4347,9 +4373,20 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
         const loadShop = async () => {
             try {
                 const items = await apiCall('/shop/items');
+                const searchValue = ((document.getElementById('shop-search') || {}).value || '').trim().toLowerCase();
+                const sortValue = ((document.getElementById('shop-sort') || {}).value || 'newest');
+                let filtered = items.filter(i => {
+                    if (!searchValue) return true;
+                    const haystack = `${i.name || ''} ${i.description || ''} ${i.authorName || ''}`.toLowerCase();
+                    return haystack.includes(searchValue);
+                });
+                if (sortValue === 'price_low') filtered.sort((a, b) => (a.price || 0) - (b.price || 0));
+                else if (sortValue === 'price_high') filtered.sort((a, b) => (b.price || 0) - (a.price || 0));
+                else if (sortValue === 'name') filtered.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+                else filtered.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
                 const grid = document.getElementById('shop-grid');
-                grid.innerHTML = items.length === 0 ? '<p>No items in the marketplace yet.</p>' : '';
-                items.forEach(i => {
+                grid.innerHTML = filtered.length === 0 ? '<p>No matching items found.</p>' : '';
+                filtered.forEach(i => {
                     cacheAccessoryImage(i.id, i.image);
                     const cached = accImageCache[i.id];
                     const imgSrc = cached && cached.img ? cached.img : i.image; 
@@ -4373,16 +4410,83 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                 const res = await apiCall(`/me/equip`, 'POST', { itemId: isEquipped ? null : itemId });
                 if(currentUser) currentUser.equipped = res.equipped;
                 loadProfile(currentUser.username); 
+                if (document.getElementById('view-avatar').classList.contains('active')) loadAvatarTab();
             } catch(e) {}
+        };
+
+        const loadInventoryTab = async () => {
+            const grid = document.getElementById('inventory-view-grid');
+            if (!grid) return;
+            grid.innerHTML = '<p>Loading inventory...</p>';
+            try {
+                const me = await apiCall('/me/profile');
+                const items = me.inventory || [];
+                grid.innerHTML = items.length ? '' : '<p>You do not own any avatar accessories yet.</p>';
+                items.forEach(i => {
+                    cacheAccessoryImage(i.id, i.image);
+                    const cached = accImageCache[i.id];
+                    const imgSrc = cached && cached.img ? cached.img : i.image;
+                    const card = document.createElement('div');
+                    card.className = 'game-card';
+                    card.innerHTML = `<img src="${imgSrc}" class="shop-img"><h3>${i.name}</h3><p style="font-size:12px;">${i.description || ''}</p><p style="font-size:11px; color:#777;">By ${i.authorName || 'Unknown'}</p>`;
+                    grid.appendChild(card);
+                });
+            } catch (e) {
+                grid.innerHTML = '<p>Could not load inventory.</p>';
+            }
+        };
+
+        const loadAvatarTab = async () => {
+            const grid = document.getElementById('avatar-view-grid');
+            if (!grid) return;
+            grid.innerHTML = '<p>Loading avatar items...</p>';
+            try {
+                const me = await apiCall('/me/profile');
+                if (currentUser) currentUser.equipped = me.equipped || null;
+                const items = me.inventory || [];
+                grid.innerHTML = items.length ? '' : '<p>You do not own any avatar accessories yet.</p>';
+                items.forEach(i => {
+                    cacheAccessoryImage(i.id, i.image);
+                    const cached = accImageCache[i.id];
+                    const imgSrc = cached && cached.img ? cached.img : i.image;
+                    const isEquipped = me.equipped === i.id;
+                    const card = document.createElement('div');
+                    card.className = 'game-card';
+                    card.innerHTML = `<img src="${imgSrc}" class="shop-img"><h3>${i.name}</h3><p style="font-size:12px;">${i.description || ''}</p><button class="btn btn-sm ${isEquipped ? 'btn-danger' : 'btn-success'}" onclick="equipItem('${i.id}', ${isEquipped})">${isEquipped ? 'Unequip' : 'Equip'}</button>`;
+                    grid.appendChild(card);
+                });
+            } catch (e) {
+                grid.innerHTML = '<p>Could not load avatar equipment.</p>';
+            }
         };
 
         const setAccTool = (mode) => {
             accMode = mode;
             document.querySelectorAll('#tab-shop-make .tool-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById('acc-tool-' + mode).classList.add('active');
-            if(accRollOverMesh) {
-                accRollOverMesh.material.color.setHex(accMode === 'erase' ? 0xff0000 : 0x2ecc71);
+            const activeBtn = document.getElementById('acc-tool-' + mode);
+            if (activeBtn) activeBtn.classList.add('active');
+        };
+
+        const addAccPart = () => {
+            const partType = ((document.getElementById('acc-part-type') || {}).value || 'block');
+            const color = ((document.getElementById('acc-color') || {}).value || '#ffffff');
+            const anchorX = (accPartInsertIndex % 7) - 3;
+            const anchorY = Math.floor(accPartInsertIndex / 7) % 3;
+            const anchorZ = Math.floor(accPartInsertIndex / 21) % 5 - 2;
+            accPartInsertIndex += 1;
+            const addVoxel = (x, y, z) => {
+                if (!accVoxels.find(v => v.x === x && v.y === y && v.z === z)) accVoxels.push({ x, y, z, color });
+            };
+            if (partType === 'sphere') {
+                [[0,0,0],[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]].forEach(([x,y,z]) => addVoxel(anchorX + x, anchorY + y, anchorZ + z));
+            } else if (partType === 'cylinder') {
+                [[0,-1,0],[0,0,0],[0,1,0],[1,0,0],[-1,0,0]].forEach(([x,y,z]) => addVoxel(anchorX + x, anchorY + y, anchorZ + z));
+            } else if (partType === 'cone') {
+                [[0,-1,0],[0,0,0],[1,-1,0],[-1,-1,0],[0,-1,1],[0,-1,-1]].forEach(([x,y,z]) => addVoxel(anchorX + x, anchorY + y, anchorZ + z));
+            } else {
+                addVoxel(anchorX, anchorY, anchorZ);
             }
+            if (window.buildAccVoxels) window.buildAccVoxels();
         };
 
         const stopAccEditorLoop = () => {
@@ -4599,7 +4703,7 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             }
         };
 
-        const clearAcc = () => { accVoxels = []; if(window.buildAccVoxels) window.buildAccVoxels(); };
+        const clearAcc = () => { accVoxels = []; accPartInsertIndex = 0; if(window.buildAccVoxels) window.buildAccVoxels(); };
 
         const uploadAccessory = async () => {
             const name = document.getElementById('acc-name').value.trim();
@@ -6814,19 +6918,30 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
                 }
             }
 
-            others.forEach(o => {
-                if (!otherPlayerMeshes[o.userId]) {
-                    const mesh = createPlayerMesh(o.color, o.equipped);
-                    playScene.add(mesh);
-                    mesh.scale.set(0.5, 0.5, 0.5);
+                others.forEach(o => {
+                    if (!otherPlayerMeshes[o.userId]) {
+                        const mesh = createPlayerMesh(o.color, o.equipped);
+                        playScene.add(mesh);
+                        mesh.scale.set(0.5, 0.5, 0.5);
 
-                    otherPlayerMeshes[o.userId] = {
-                        mesh,
-                        username: o.username
-                    };
-                }
+                        otherPlayerMeshes[o.userId] = {
+                            mesh,
+                            username: o.username,
+                            equipped: o.equipped || null
+                        };
+                    } else if (otherPlayerMeshes[o.userId].equipped !== (o.equipped || null)) {
+                        const oldMesh = otherPlayerMeshes[o.userId].mesh;
+                        const replacement = createPlayerMesh(o.color, o.equipped);
+                        replacement.scale.set(0.5, 0.5, 0.5);
+                        replacement.position.copy(oldMesh.position);
+                        replacement.rotation.copy(oldMesh.rotation);
+                        playScene.remove(oldMesh);
+                        playScene.add(replacement);
+                        otherPlayerMeshes[o.userId].mesh = replacement;
+                        otherPlayerMeshes[o.userId].equipped = o.equipped || null;
+                    }
 
-                const pm = otherPlayerMeshes[o.userId].mesh;
+                    const pm = otherPlayerMeshes[o.userId].mesh;
                 pm.position.set(o.x, o.y + 3, o.z);
                 pm.rotation.y = o.rotY || 0;
 
