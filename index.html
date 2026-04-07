@@ -461,6 +461,10 @@
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
                 <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -1115,6 +1119,7 @@
                     <button class="btn" onclick="navigate('library')">Play Community Games</button>
                     <button class="btn btn-info" onclick="playRandomGame()">Random Game</button>
 <button class="btn btn-warning" onclick="openLuckySpin()">Lucky Spin</button>
+                    <button class="btn btn-sm btn-info" onclick="showRandomBuilderTip()">Builder Tip</button>
                 </div>
             </div>
 
@@ -5222,6 +5227,15 @@ Keep playing together for more daily rewards.`, 'Aww!');
                 grid.innerHTML = '<p style="color:#e74c3c;">Failed to load friend activity.</p>';
             }
         };
+        const showRandomBuilderTip = () => {
+            const tips = [
+                'Try mixing Neon + Fog for a cinematic sci-fi mood.',
+                'Press F in Studio to frame selected objects quickly.',
+                'Use low gravity zones to create floaty parkour routes.',
+                'Hidden shortcuts: Ctrl+D duplicate, Ctrl+Z undo, Ctrl+Y redo.'
+            ];
+            showModal('Builder Tip', tips[Math.floor(Math.random() * tips.length)]);
+        };
 
         const loadDashboardGames = async () => {
             try {
@@ -5366,6 +5380,7 @@ const studioMobileState = { active: false, x: 0, y: 0, initialized: false };
         let isEditingSettings = false;
         let historyStack = [];
         let historyIndex = -1;
+        let teamCollaboratorsOnline = 0;
 
 let currentEditMode = 'translate';
         let selectionBoxHelper = null;
@@ -5528,6 +5543,9 @@ let currentEditMode = 'translate';
         };
 
         const undo = () => {
+            if (currentEditGameId && teamCollaboratorsOnline > 0) {
+                return showModal('Team Create Undo', 'Undo is temporarily disabled during active team sessions to avoid reverting teammates\' changes.');
+            }
             if (historyIndex > 0) {
                 historyIndex--; edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
                 buildEditorScene(); recordEdit(false);
@@ -5535,6 +5553,9 @@ let currentEditMode = 'translate';
         };
 
         const redo = () => {
+            if (currentEditGameId && teamCollaboratorsOnline > 0) {
+                return showModal('Team Create Redo', 'Redo is temporarily disabled during active team sessions to avoid overriding teammates\' progress.');
+            }
             if (historyIndex < historyStack.length - 1) {
                 historyIndex++; edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
                 buildEditorScene(); recordEdit(false);
@@ -6690,6 +6711,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         edData = res.gameData; lastLocalEditTime = res.lastEditTime; buildEditorScene();
                     }
                     renderCollaboratorCursors((res.activeEditorsData || res.cursors || res.teamCursors || res.collaborators || []).filter(c => c && c.username && c.username !== currentUser.username));
+                    teamCollaboratorsOnline = (res.activeEditorsData || []).filter(c => c && c.username && c.username !== currentUser.username).length;
                     const status = document.getElementById('autosave-status');
                     if (status && lastLocalEditTime > 0) { status.innerText = 'Autosaved'; setTimeout(() => status.innerText = '', 1000); }
                 } catch(e) {
@@ -6701,6 +6723,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
         };
         const stopTeamSync = () => {
             if (teamSyncInterval) clearInterval(teamSyncInterval);
+            teamCollaboratorsOnline = 0;
             Object.keys(collabMeshes).forEach(k => { if (collabMeshes[k] && collabMeshes[k].parent) collabMeshes[k].parent.remove(collabMeshes[k]); delete collabMeshes[k]; });
         };
 
@@ -6824,6 +6847,11 @@ playerObj = {
                         window.StudioCamera.yaw = euler.y;
                         window.StudioCamera.pitch = euler.x;
                     }
+                } else if (e.key.toLowerCase() === 'r' && selectedObjects.length > 0) {
+                    const randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+                    document.getElementById('prop-color').value = randomColor;
+                    updateSelectedProperties();
+                    showModal('Color Surprise', `Applied random color ${randomColor} to selected object(s).`);
                 }
             }
 
