@@ -1772,7 +1772,8 @@ app.post('/api/groups/:id/payout', requireAuth, (req, res) => {
 // --- Shop & Economy Routes ---
 
 app.get('/api/shop/items', (req, res) => {
-    res.json(db.shopItems.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    const approved = (db.shopItems || []).filter(i => (i.status || 'approved') === 'approved');
+    res.json(approved.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
 });
 
 app.post('/api/shop/items', requireAuth, (req, res) => {
@@ -1780,19 +1781,26 @@ app.post('/api/shop/items', requireAuth, (req, res) => {
     if (!name || !image) return res.status(400).json({ error: 'Missing required data.' });
 
     const user = db.users.find(u => u.id === req.userId);
-    if (user.coins < 15) return res.status(400).json({ error: 'Insufficient Funds.' });
-    user.coins -= 15;
+    const accountAgeMs = Date.now() - (user.createdAt || 0);
+    const minAgeMs = 3 * 24 * 60 * 60 * 1000;
+    if (accountAgeMs < minAgeMs) {
+        const hoursLeft = Math.ceil((minAgeMs - accountAgeMs) / (60 * 60 * 1000));
+        return res.status(403).json({ error: `Account must be at least 3 days old to upload accessories. (${hoursLeft}h remaining)` });
+    }
+    if (user.coins < 20) return res.status(400).json({ error: 'Insufficient Funds. Uploading costs 20 SC.' });
+    user.coins -= 20;
 
     const newItem = {
         id: crypto.randomUUID(), name, description: description || '', price: parseInt(price) || 0,
-        authorId: user.id, authorName: user.username, image, createdAt: new Date().toISOString()
+        authorId: user.id, authorName: user.username, image, createdAt: new Date().toISOString(),
+        status: 'pending', moderation: { reviewedBy: null, reviewedAt: null, reason: '' }
     };
     
     db.shopItems.push(newItem);
     user.inventory.push(newItem.id); 
     saveDB();
     
-    res.json({ message: 'Accessory published successfully!', item: newItem, coins: user.coins });
+    res.json({ message: 'Accessory submitted for moderation review.', item: newItem, coins: user.coins });
 });
 
 app.post('/api/shop/buy/:id', requireAuth, (req, res) => {
@@ -1800,11 +1808,14 @@ app.post('/api/shop/buy/:id', requireAuth, (req, res) => {
     const user = db.users.find(u => u.id === req.userId);
     
     if (!item) return res.status(404).json({ error: 'Item not found.' });
+    if ((item.status || 'approved') !== 'approved') return res.status(400).json({ error: 'This item is not approved for sale yet.' });
     if (user.inventory.includes(item.id)) return res.status(400).json({ error: 'You already own this item.' });
     if (user.coins < item.price) return res.status(400).json({ error: 'Insufficient Funds.' });
     
     user.coins -= item.price;
     user.inventory.push(item.id);
+    const author = db.users.find(u => u.id === item.authorId);
+    if (author) author.coins = (author.coins || 0) + item.price;
     saveDB();
     res.json({ message: 'Item purchased successfully!', coins: user.coins });
 });
@@ -2085,6 +2096,37 @@ app.post('/api/moderate/images', requireAuth, (req, res) => {
     
     saveDB();
     res.json({ success: true });
+});
+
+app.get('/api/moderate/accessories', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const pending = (db.shopItems || [])
+        .filter(i => (i.status || 'approved') === 'pending')
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    res.json(pending);
+});
+
+app.post('/api/moderate/accessories/:id', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const { action, reason } = req.body; // approve | reject
+    const item = (db.shopItems || []).find(i => i.id === req.params.id);
+    if (!item) return res.status(404).json({ error: 'Accessory not found.' });
+    if ((item.status || 'approved') !== 'pending') return res.status(400).json({ error: 'Accessory is not pending moderation.' });
+    if (!['approve', 'reject'].includes(action)) return res.status(400).json({ error: 'Invalid action.' });
+
+    item.status = action === 'approve' ? 'approved' : 'rejected';
+    item.moderation = {
+        reviewedBy: req.userId,
+        reviewedAt: Date.now(),
+        reason: String(reason || '').slice(0, 300)
+    };
+
+    if (action === 'reject') {
+        db.users.forEach(u => {
+            if (Array.isArray(u.inventory)) u.inventory = u.inventory.filter(id => id !== item.id);
+        });
+    }
+
+    saveDB();
+    res.json({ success: true, item });
 });
 
 app.get('/api/games/:id', (req, res) => {

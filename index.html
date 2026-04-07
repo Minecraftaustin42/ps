@@ -424,6 +424,10 @@
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
                 <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -496,6 +500,14 @@
             <p style="font-size: 16px; margin-top: 20px;">Login Streak: <strong id="dr-streak" style="color:#e74c3c;"></strong> days</p>
             <p style="font-size: 12px; color: #7f8c8d; margin-top: 5px;">(Log in 7 days in a row for +150 SC!)</p>
             <button class="btn btn-success mt-20" onclick="document.getElementById('daily-reward-modal').style.display='none'" style="width: 100%;">Claim Coins</button>
+        </div>
+    </div>
+
+    <div id="accessory-review-modal" class="modal-overlay">
+        <div class="modal-box" style="max-width:560px; width:95%;">
+            <h3 style="margin-top:0;">Accessory 3D Preview</h3>
+            <div id="accessory-review-3d" style="width:100%; aspect-ratio:1/1; background:#0f172a; border-radius:6px; border:1px solid #2c3e50;"></div>
+            <button class="btn btn-danger mt-10" style="width:100%;" onclick="closeAccessoryPreview()">Close</button>
         </div>
     </div>
 
@@ -657,6 +669,11 @@
 
             <div id="mod-warnings-list"></div>
             <div id="mod-ban-status"></div>
+            <div style="margin-top:15px; border-top:1px solid #ddd; padding-top:12px;">
+                <h3 style="margin:0 0 8px 0;">Accessory Review Queue</h3>
+                <button class="btn btn-sm btn-info" onclick="loadAccessoryModerationQueue()">Refresh Queue</button>
+                <div id="mod-accessory-queue" style="margin-top:10px; max-height:260px; overflow:auto;"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -940,7 +957,8 @@
                             <div class="form-group"><input type="text" id="acc-name" class="form-control" placeholder="Item Name"></div>
                             <div class="form-group"><input type="text" id="acc-desc" class="form-control" placeholder="Short Description"></div>
                             <div class="form-group"><input type="number" id="acc-price" class="form-control" placeholder="Price (0 for free)"></div>
-                            <button class="btn btn-success" style="width:100%;" onclick="uploadAccessory()">Upload (Costs 15 SC)</button>
+                            <p style="font-size:12px; color:#666; margin:0 0 8px 0;">Requirements: Account age 3+ days • Upload fee 20 SC • Manual moderation review required.</p>
+                            <button class="btn btn-success" style="width:100%;" onclick="uploadAccessory()">Upload (Costs 20 SC)</button>
                         </div>
                     </div>
                 </div>
@@ -4484,9 +4502,10 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             };
 
             const dom = accRenderer.domElement;
+            dom.style.touchAction = 'none';
 
             dom.addEventListener('pointerdown', (e) => {
-                if (e.button !== 0) return; // Only process left click for drawing
+                if (e.pointerType !== 'touch' && e.button !== 0) return; // Left click or touch
                 isDrawingAcc = true;
                 
                 const rect = dom.getBoundingClientRect();
@@ -4563,11 +4582,12 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
         const uploadAccessory = async () => {
             const name = document.getElementById('acc-name').value.trim();
             const desc = document.getElementById('acc-desc').value.trim();
-            const price = parseInt(document.getElementById('acc-price').value) || 0;
+            const price = Math.max(0, parseInt(document.getElementById('acc-price').value) || 0);
 
             if(!name) return showModal('Error', 'Please enter a name for your accessory.');
+            if(!desc) return showModal('Error', 'Please enter a description for your accessory.');
             if(accVoxels.length === 0) return showModal('Error', 'Build something first!');
-            if(getCoins() < 15) return showModal('Insufficient Funds', 'It costs 15 SculptCoins to upload an item.');
+            if(getCoins() < 20) return showModal('Insufficient Funds', 'It costs 20 Sculpt Coins to upload an item.');
 
             accRollOverMesh.visible = false;
             accGridHelper.visible = false;
@@ -4583,7 +4603,7 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
 
             try {
                 await apiCall('/shop/items', 'POST', { name, description: desc, price, image: payloadStr });
-                showModal('Uploaded!', 'Your accessory is now in the Marketplace!', 'View Shop', () => {
+                showModal('Submitted!', 'Accessory submitted for manual moderation review.', 'View Shop', () => {
                     document.getElementById('acc-name').value = ''; document.getElementById('acc-desc').value = ''; document.getElementById('acc-price').value = '';
                     clearAcc(); switchShopTab('market'); loadShop();
                 });
@@ -6097,6 +6117,7 @@ playerObj = {
         let playMeshes = []; 
         let playColliders = []; 
         let lastPlayFrameAt = performance.now();
+        let playSyncInFlight = false;
         let otherPlayerMeshes = {}; 
         let playSyncInterval = null;
         let isPlayActive = false;
@@ -6745,6 +6766,8 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
 
     playSyncInterval = setInterval(async () => {
         if (!isPlayActive || !currentPlayGameId || !currentUser) return;
+        if (playSyncInFlight) return;
+        playSyncInFlight = true;
 
         try {
             const others = await apiCall(`/games/${currentPlayGameId}/play-sync`, 'POST', {
@@ -6795,7 +6818,8 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
             });
 
         } catch (e) {}
-    }, 2);
+        finally { playSyncInFlight = false; }
+    }, 120);
 };
 
 
@@ -9548,6 +9572,7 @@ async function openModPanel() {
         if (state.unlocked) {
             document.getElementById('mod-panel-lock-screen').style.display = 'none';
             document.getElementById('mod-panel-content').style.display = 'block';
+            loadAccessoryModerationQueue();
         }
     } catch {}
     startModWatchdog();
@@ -9560,6 +9585,7 @@ async function unlockModPanel() {
         await apiCall('/mod-panel/unlock','POST',{code});
         document.getElementById('mod-panel-lock-screen').style.display = 'none';
         document.getElementById('mod-panel-content').style.display = 'block';
+        loadAccessoryModerationQueue();
     } catch {
         navigate('dashboard');
     }
@@ -9603,6 +9629,91 @@ async function runModerationAction(action) {
 
     alert(res.message);
     lookupModerationUser();
+}
+
+let accessoryPreviewRenderer = null;
+let accessoryPreviewScene = null;
+let accessoryPreviewCamera = null;
+let accessoryPreviewAnim = null;
+
+async function loadAccessoryModerationQueue() {
+    const host = document.getElementById('mod-accessory-queue');
+    if (!host) return;
+    host.innerHTML = 'Loading...';
+    try {
+        const items = await apiCall('/moderate/accessories', 'GET');
+        if (!items.length) {
+            host.innerHTML = '<div style="color:#777;">No pending accessories.</div>';
+            return;
+        }
+        host.innerHTML = items.map(i => `
+            <div style="border:1px solid #ddd; border-radius:6px; padding:8px; margin-bottom:8px; background:#fafafa;">
+                <div><strong>${i.name}</strong> • ${i.price} SC</div>
+                <div style="font-size:12px; color:#666;">By ${i.authorName}</div>
+                <div style="font-size:12px; margin:4px 0;">${i.description || ''}</div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button class="btn btn-sm btn-info" onclick="openAccessoryPreview('${i.id}')">3D View</button>
+                    <button class="btn btn-sm btn-success" onclick="moderateAccessory('${i.id}','approve')">Approve</button>
+                    <button class="btn btn-sm btn-danger" onclick="moderateAccessory('${i.id}','reject')">Reject</button>
+                </div>
+            </div>
+        `).join('');
+        window.__modAccessoryQueue = items;
+    } catch (e) {
+        host.innerHTML = '<div style="color:#c0392b;">Failed to load queue.</div>';
+    }
+}
+
+async function moderateAccessory(id, action) {
+    const reason = action === 'reject' ? (prompt('Reject reason (optional):') || '') : '';
+    await apiCall(`/moderate/accessories/${id}`, 'POST', { action, reason });
+    loadAccessoryModerationQueue();
+}
+
+function openAccessoryPreview(itemId) {
+    const item = (window.__modAccessoryQueue || []).find(i => i.id === itemId);
+    if (!item) return;
+    let payload = {};
+    try { payload = JSON.parse(item.image || '{}'); } catch(e) {}
+    const voxels = payload.voxels || [];
+
+    const container = document.getElementById('accessory-review-3d');
+    document.getElementById('accessory-review-modal').style.display = 'flex';
+    if (!accessoryPreviewRenderer) {
+        accessoryPreviewScene = new THREE.Scene();
+        accessoryPreviewScene.background = new THREE.Color('#87CEEB');
+        accessoryPreviewCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+        accessoryPreviewCamera.position.set(8, 8, 10);
+        accessoryPreviewRenderer = new THREE.WebGLRenderer({ antialias: true });
+        container.appendChild(accessoryPreviewRenderer.domElement);
+        const light = new THREE.DirectionalLight(0xffffff, 1.0); light.position.set(4, 8, 6); accessoryPreviewScene.add(light);
+        accessoryPreviewScene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    }
+    accessoryPreviewScene.children.slice().forEach(child => {
+        if (!child.isLight) accessoryPreviewScene.remove(child);
+    });
+    const geo = new THREE.BoxGeometry(0.26, 0.26, 0.26);
+    voxels.forEach(v => {
+        const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: v.color || '#3498db' }));
+        m.position.set((v.x || 0) * 0.26, ((v.y || 0) * 0.26) + 1.5, (v.z || 0) * 0.26);
+        accessoryPreviewScene.add(m);
+    });
+    accessoryPreviewRenderer.setSize(container.clientWidth, container.clientHeight);
+    accessoryPreviewCamera.aspect = container.clientWidth / container.clientHeight;
+    accessoryPreviewCamera.updateProjectionMatrix();
+    const animate = () => {
+        if (document.getElementById('accessory-review-modal').style.display !== 'flex') return;
+        accessoryPreviewAnim = requestAnimationFrame(animate);
+        accessoryPreviewScene.rotation.y += 0.01;
+        accessoryPreviewRenderer.render(accessoryPreviewScene, accessoryPreviewCamera);
+    };
+    if (accessoryPreviewAnim) cancelAnimationFrame(accessoryPreviewAnim);
+    animate();
+}
+
+function closeAccessoryPreview() {
+    document.getElementById('accessory-review-modal').style.display = 'none';
+    if (accessoryPreviewAnim) cancelAnimationFrame(accessoryPreviewAnim);
 }
 
 
