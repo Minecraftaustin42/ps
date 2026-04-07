@@ -8,6 +8,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
     <style>
         /* 2016 Nostalgic CSS / Flat Design Era */
         @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Audiowide&display=swap');
@@ -190,6 +191,12 @@
         .studio-toolbar-group { border:1px solid #d6dde5; border-radius:6px; background:#fff; padding:8px; min-width:190px; }
         .studio-toolbar-group h5 { margin:0 0 6px 0; font-size:12px; color:#2c3e50; text-transform:uppercase; letter-spacing:0.3px; }
         .studio-toolbar-actions { display:flex; gap:6px; flex-wrap:wrap; }
+        #studio-mobile-controls { display:none; position:absolute; left:0; right:0; bottom:10px; z-index:260; pointer-events:none; }
+        .studio-mobile-pill { background:rgba(0,0,0,0.62); color:#fff; padding:6px 10px; border-radius:16px; font-size:12px; font-weight:700; }
+        .studio-mobile-btn { pointer-events:auto; background:rgba(52,152,219,0.86); color:#fff; border:2px solid rgba(255,255,255,0.7); border-radius:14px; padding:6px 10px; font-size:12px; font-weight:700; min-width:66px; text-align:center; }
+        #studio-mobile-quick-insert { display:none; position:absolute; top:10px; right:10px; z-index:270; width:170px; pointer-events:auto; }
+        #studio-joystick-base { pointer-events:auto; width:120px; height:120px; border-radius:50%; background:rgba(0,0,0,0.38); border:2px solid rgba(255,255,255,0.28); position:relative; touch-action:none; }
+        #studio-joystick-stick { width:58px; height:58px; border-radius:50%; background:rgba(255,255,255,0.85); position:absolute; left:31px; top:31px; transition:transform .12s; }
         .dash-friends-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
 
         .landing-welcome { text-align:center; margin-bottom:18px; }
@@ -221,7 +228,47 @@
 
 
         @media(max-width: 768px) {
-            .play-sidebar { height: auto; max-height: 300px; }
+            body { font-size: 15px; }
+            .container { margin: 12px auto; padding: 8px; }
+            .card { padding: 16px; margin-bottom: 12px; }
+            .card-title { flex-direction: column; align-items: flex-start; }
+
+            .navbar { height: auto; min-height: 56px; padding: 6px 10px; flex-wrap: wrap; gap: 8px; }
+            .navbar-brand { font-size: 20px; margin-right: 10px; }
+            .nav-links { gap: 10px; flex-wrap: wrap; align-items: center; }
+            .nav-links a { line-height: 1.4; padding: 6px 0; }
+            .search-bar { width: min(220px, 58vw); font-size: 16px; }
+            .sculpt-coins { font-size: 14px; }
+
+            .tabs { gap: 6px; }
+            .tab { padding: 10px 12px; font-size: 13px; }
+            .btn, .tool-btn { min-height: 42px; font-size: 14px; }
+            .btn-sm { min-height: 36px; }
+            .form-control { font-size: 16px; }
+
+            .play-layout { gap: 12px; }
+            .play-game-card { padding: 10px; }
+            .play-sidebar { height: auto; max-height: 260px; width: 100%; max-width: none; }
+            #play-container-3d { aspect-ratio: 4/3; min-height: 320px; }
+            #play-toolbar { gap: 6px; bottom: 10px; }
+            .toolbar-slot { width: 52px; height: 52px; }
+            .mobile-btn { width: 58px; height: 58px; font-size: 20px; }
+
+            .studio-layout { height: auto; min-height: 620px; flex-direction: column; }
+            #editor-container-3d { margin-right: 0; min-height: 360px; width: 100%; aspect-ratio: 4/3; }
+            .explorer-panel { position: relative; width: 100%; height: 250px; right: auto; top: auto; border-left: none; border-top: 1px solid #ccc; }
+            .explorer-item { padding: 10px 12px; font-size: 14px; }
+            .toolbar { gap: 8px; }
+            .studio-toolbar-grid { gap: 8px; }
+            .studio-toolbar-group { min-width: 100%; }
+            .studio-toolbar-actions .btn, .studio-toolbar-actions .tool-btn { flex: 1 1 46%; }
+
+            .game-grid { grid-template-columns: 1fr; gap: 12px; }
+            .user-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 8px; }
+            .modal-overlay { padding: 12px; }
+            .modal-box { width: 100%; max-width: 96vw; padding: 16px; }
+            #studio-mobile-controls { display:block; }
+            #studio-mobile-quick-insert { display:block; }
         }
     </style>
 </head>
@@ -357,6 +404,10 @@
                 <button class="btn" style="background:#2ecc71; border-bottom-color:#27ae60;" onclick="citySelectNeighborhood('Greenridge')"> <strong>Greenridge</strong><br><span style="font-size:12px; font-weight:normal;">Peaceful, trees, suburban</span></button>
                 <button class="btn" style="background:#e67e22; border-bottom-color:#d35400;" onclick="citySelectNeighborhood('Sandfall')"> <strong>Sandfall</strong><br><span style="font-size:12px; font-weight:normal;">Dry, desert neighborhood</span></button>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -379,7 +430,7 @@
 
     <div id="inventory-modal" class="modal-overlay">
         <div class="modal-box" style="border: 4px solid #f39c12; background: #fdfdfd; max-width: 500px; width: 90%;">
-<h2 style="color: #2c3e50; margin-top:0;">My Inventory <span style="float:right; color:#27ae60; font-size:18px;"><span id="modal-bucks">0</span> Bucks</span></h2>
+<h2 style="color: #2c3e50; margin-top:0;">My Inventory <span style="float:right; color:#f39c12; font-size:18px;"><span id="modal-city-coins">0</span> Sculpt Coins</span></h2>
             <div id="inventory-list" style="margin-top: 20px; display:flex; flex-direction:column; gap:10px; max-height: 350px; overflow-y: auto;">
                 </div>
             <button class="btn btn-danger mt-20" style="width: 100%; font-size: 16px;" onclick="document.getElementById('inventory-modal').style.display='none'">Close</button>
@@ -432,6 +483,14 @@
         </div>
     </div>
 
+    <div id="accessory-review-modal" class="modal-overlay">
+        <div class="modal-box" style="max-width:560px; width:95%;">
+            <h3 style="margin-top:0;">Accessory 3D Preview</h3>
+            <div id="accessory-review-3d" style="width:100%; aspect-ratio:1/1; background:#0f172a; border-radius:6px; border:1px solid #2c3e50;"></div>
+            <button class="btn btn-danger mt-10" style="width:100%;" onclick="closeAccessoryPreview()">Close</button>
+        </div>
+    </div>
+
     <!-- Navbar -->
     <div class="navbar">
         <div class="navbar-brand" onclick="navigate('dashboard')">Playsculpt</div>
@@ -441,7 +500,6 @@
         <div class="nav-links" id="nav-logged-in" style="display:none;">
             <input type="text" class="search-bar" id="nav-search" placeholder="Search Users..." onkeydown="if(event.key==='Enter') executeUserSearch()">
             <div class="sculpt-coins"><span id="nav-coins">0</span> SC</div>
-<div class="sculpt-coins" style="color: #2ecc71;"><span id="nav-bucks">0</span> Bucks</div>
 <div class="sculpt-coins" style="color: #3498db; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'" onclick="openOnlineModal()">
                 <span id="nav-online">1</span> Online
             </div>
@@ -468,8 +526,13 @@
 
             <a onclick="navigate('create')">Create</a>
             <a onclick="navigate('shop')">Shop</a>
+            <a onclick="navigate('inventory')">Inventory</a>
+            <a onclick="navigate('avatar')">Avatar</a>
             <a onclick="navigate('friends')">Friends</a>
             <a onclick="navigate('messages')">Messages</a>
+            <a onclick="navigate('academy')">Academy</a>
+            <a onclick="navigate('jams')">Jams</a>
+            <a onclick="navigate('blueprints')">Blueprints</a>
             <a id="nav-mod-panel" onclick="openModPanel()" style="display:none;">Mod Panel</a>
             <a onclick="navigateProfile()">Profile</a>
             <a onclick="navigate('settings')">Settings</a>
@@ -591,6 +654,16 @@
 
             <div id="mod-warnings-list"></div>
             <div id="mod-ban-status"></div>
+            <div style="margin-top:15px; border-top:1px solid #ddd; padding-top:12px;">
+                <h3 style="margin:0 0 8px 0;">Accessory Review Queue</h3>
+                <button class="btn btn-sm btn-info" onclick="loadAccessoryModerationQueue()">Refresh Queue</button>
+                <div id="mod-accessory-queue" style="margin-top:10px; max-height:260px; overflow:auto;"></div>
+            </div>
+            <div style="margin-top:15px; border-top:1px solid #ddd; padding-top:12px;">
+                <h3 style="margin:0 0 8px 0;">Clothing Review Queue</h3>
+                <button class="btn btn-sm btn-info" onclick="loadClothingModerationQueue()">Refresh Queue</button>
+                <div id="mod-clothing-queue" style="margin-top:10px; max-height:260px; overflow:auto;"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -849,9 +922,19 @@
                 <div class="tabs" style="margin-bottom:0;">
                     <div class="tab active" onclick="switchShopTab('market')">Marketplace</div>
                     <div class="tab" onclick="switchShopTab('make')">Create Accessory</div>
+                    <div class="tab" onclick="switchShopTab('clothing')">Create Clothing</div>
                 </div>
                 
                 <div id="tab-shop-market" class="tab-content active" style="padding-top: 20px;">
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+                        <input id="shop-search" class="form-control" style="max-width:260px;" placeholder="Search avatar items..." oninput="loadShop()">
+                        <select id="shop-sort" class="form-control" style="max-width:180px;" onchange="loadShop()">
+                            <option value="newest">Newest</option>
+                            <option value="price_low">Price: Low to High</option>
+                            <option value="price_high">Price: High to Low</option>
+                            <option value="name">Name A-Z</option>
+                        </select>
+                    </div>
                     <div id="shop-grid" class="game-grid"></div>
                 </div>
 
@@ -861,12 +944,20 @@
                             <h4>Design 3D Accessory</h4>
                             <div class="toolbar" style="margin-bottom: 5px;">
                                 <input type="color" id="acc-color" value="#ffffff" style="cursor:pointer; width:30px; height:30px; padding:0; border:none;">
-                                <button class="tool-btn active" id="acc-tool-draw" onclick="setAccTool('draw')">Draw</button>
-                                <button class="tool-btn" id="acc-tool-erase" onclick="setAccTool('erase')">Erase</button>
+                                <select id="acc-part-type" class="form-control" style="width:130px;">
+                                    <option value="block">Cube</option>
+                                    <option value="sphere">Sphere</option>
+                                    <option value="cylinder">Cylinder</option>
+                                    <option value="cone">Cone</option>
+                                </select>
+                                <button class="tool-btn" onclick="addAccPart()">+ Add Part</button>
+                                <button class="tool-btn active" id="acc-tool-translate" onclick="setAccTool('translate')">Move</button>
+                                <button class="tool-btn" id="acc-tool-rotate" onclick="setAccTool('rotate')">Rotate</button>
+                                <button class="tool-btn" id="acc-tool-scale" onclick="setAccTool('scale')">Scale</button>
                                 <button class="tool-btn btn-danger" onclick="clearAcc()">Clear</button>
                             </div>
                             <div id="acc-editor-3d"></div>
-                            <p style="font-size:11px; color:#777; margin-top:5px;">Right-Click & Drag to rotate camera. Left-Click to place or erase blocks.</p>
+                            <p style="font-size:11px; color:#777; margin-top:5px;">Select a part, then use Move/Rotate/Scale transform controls.</p>
                         </div>
 
                         <div style="width: 100%; max-width: 250px;">
@@ -874,7 +965,42 @@
                             <div class="form-group"><input type="text" id="acc-name" class="form-control" placeholder="Item Name"></div>
                             <div class="form-group"><input type="text" id="acc-desc" class="form-control" placeholder="Short Description"></div>
                             <div class="form-group"><input type="number" id="acc-price" class="form-control" placeholder="Price (0 for free)"></div>
-                            <button class="btn btn-success" style="width:100%;" onclick="uploadAccessory()">Upload (Costs 15 SC)</button>
+                            <p style="font-size:12px; color:#666; margin:0 0 8px 0;">Requirements: Account age 3+ days • Upload fee 20 SC • Manual moderation review required.</p>
+                            <button class="btn btn-success" style="width:100%;" onclick="uploadAccessory()">Upload (Costs 20 SC)</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="tab-shop-clothing" class="tab-content" style="padding-top: 20px;">
+                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                        <div style="flex:1; min-width:280px;">
+                            <div id="clothing-editor-3d" style="width:100%; aspect-ratio:1/1; background:#111827; border:1px solid #334155; border-radius:6px;"></div>
+                            <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+                                <button class="btn btn-sm" onclick="toggleClothingLimb('head')">Toggle Head</button>
+                                <button class="btn btn-sm" onclick="toggleClothingLimb('torso')">Toggle Torso</button>
+                                <button class="btn btn-sm" onclick="toggleClothingLimb('arms')">Toggle Arms</button>
+                                <button class="btn btn-sm" onclick="toggleClothingLimb('legs')">Toggle Legs</button>
+                            </div>
+                        </div>
+                        <div style="width:320px; max-width:100%;">
+                            <input id="cloth-name" class="form-control mb-10" placeholder="Clothing name">
+                            <input id="cloth-desc" class="form-control mb-10" placeholder="Description">
+                            <input id="cloth-price" class="form-control mb-10" type="number" placeholder="Price (SC)">
+                            <select id="cloth-type" class="form-control mb-10"><option value="shirt">Shirt</option><option value="pants">Pants</option></select>
+                            <select id="cloth-visibility" class="form-control mb-10"><option value="public">Public (requires moderation)</option><option value="private">Private (creator only)</option></select>
+                            <select id="cloth-tool" class="form-control mb-10">
+                                <option value="brush">Brush</option><option value="line">Line</option><option value="circle">Circle</option><option value="box">Box</option><option value="polyline">Polygonal Line</option><option value="fill">Fill</option><option value="text">Text</option><option value="eyedropper">Eyedropper</option><option value="erase_brush">Eraser Brush</option><option value="erase_box">Eraser Box</option><option value="erase_circle">Eraser Circle</option>
+                            </select>
+                            <input id="cloth-color" class="form-control mb-10" type="color" value="#ff0000">
+                            <input id="cloth-size" class="form-control mb-10" type="number" value="12" min="1" max="64" placeholder="Tool size">
+                            <label style="display:flex; gap:6px; align-items:center; font-size:12px; margin-bottom:8px;"><input type="checkbox" id="cloth-symmetry"> Mirror Left/Right Limbs</label>
+                            <label style="display:flex; gap:6px; align-items:center; font-size:12px; margin-bottom:8px;"><input type="checkbox" id="cloth-auto-rotate"> Auto-rotate mannequin</label>
+                            <label style="font-size:12px; display:block; margin-bottom:8px;">Zoom <input id="cloth-zoom" type="range" min="8" max="28" value="14" oninput="setClothingZoom(this.value)"></label>
+                            <div style="display:flex; gap:6px; margin-bottom:8px;">
+                                <button class="btn btn-sm" onclick="undoClothing()">Undo</button>
+                                <button class="btn btn-sm" onclick="redoClothing()">Redo</button>
+                                <button class="btn btn-sm btn-danger" onclick="clearClothingPart()">Clear Limb</button>
+                            </div>
+                            <button class="btn btn-success" style="width:100%;" onclick="submitClothing()">Publish / Save Clothing</button>
                         </div>
                     </div>
                 </div>
@@ -886,6 +1012,43 @@
             <div class="card">
                 <h2 class="card-title">My Inbox</h2>
                 <div id="messages-list"></div>
+            </div>
+        </div>
+
+        <div id="view-inventory" class="view">
+            <div class="card">
+                <h2 class="card-title">My Inventory</h2>
+                <div id="inventory-view-grid" class="game-grid"></div>
+            </div>
+        </div>
+
+        <div id="view-avatar" class="view">
+            <div class="card">
+                <h2 class="card-title">Avatar Accessories</h2>
+                <p style="margin-top:-8px; color:#666;">Equip or unequip accessories for your avatar. Changes sync into multiplayer.</p>
+                <div style="padding:10px; border:1px solid #e8eef5; border-radius:6px; margin-bottom:12px;">
+                    <div style="font-weight:700; margin-bottom:8px;">Body Paint</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
+                        <button class="btn btn-sm" onclick="selectAvatarPart('head')">Head</button>
+                        <button class="btn btn-sm" onclick="selectAvatarPart('torso')">Torso</button>
+                        <button class="btn btn-sm" onclick="selectAvatarPart('leftArm')">Left Arm</button>
+                        <button class="btn btn-sm" onclick="selectAvatarPart('rightArm')">Right Arm</button>
+                        <button class="btn btn-sm" onclick="selectAvatarPart('leftLeg')">Left Leg</button>
+                        <button class="btn btn-sm" onclick="selectAvatarPart('rightLeg')">Right Leg</button>
+                    </div>
+                    <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                        <button class="btn btn-sm" style="background:#e74c3c;" onclick="paintAvatarPart('#e74c3c')">Ruby</button>
+                        <button class="btn btn-sm" style="background:#3498db;" onclick="paintAvatarPart('#3498db')">Ocean</button>
+                        <button class="btn btn-sm" style="background:#2ecc71;" onclick="paintAvatarPart('#2ecc71')">Mint</button>
+                        <button class="btn btn-sm" style="background:#f39c12;" onclick="paintAvatarPart('#f39c12')">Gold</button>
+                        <button class="btn btn-sm" style="background:#9b59b6;" onclick="paintAvatarPart('#9b59b6')">Violet</button>
+                        <button class="btn btn-sm" style="background:#D2B48C; color:#222;" onclick="paintAvatarPart('#D2B48C')">Tan</button>
+                        <button class="btn btn-sm" style="background:#5C3A21;" onclick="paintAvatarPart('#5C3A21')">Dark Brown</button>
+                    </div>
+                    <div style="font-size:12px; color:#666; margin-top:6px;">Selected part: <span id="avatar-part-selected">Head</span></div>
+                    <div id="avatar-part-colors" style="font-size:12px; color:#555; margin-top:6px;"></div>
+                </div>
+                <div id="avatar-view-grid" class="game-grid"></div>
             </div>
         </div>
 
@@ -902,6 +1065,7 @@
                     <button class="btn" onclick="navigate('library')">Play Community Games</button>
                     <button class="btn btn-info" onclick="playRandomGame()">Random Game</button>
 <button class="btn btn-warning" onclick="openLuckySpin()">Lucky Spin</button>
+                    <button class="btn btn-sm btn-info" onclick="showRandomBuilderTip()">Builder Tip</button>
                 </div>
             </div>
 
@@ -909,6 +1073,10 @@
                 <h2 class="section-title" style="color: #f39c12; margin-top:0;">Sponsored Studio Assets</h2>
                 <div id="dash-sponsored-assets" style="display: flex; gap: 15px; overflow-x: auto; padding-bottom: 10px;">
                     </div>
+            </div>
+            <div class="card mt-20">
+                <h2 class="card-title">Creator Challenges</h2>
+                <div id="creator-challenges"></div>
             </div>
             
             <div class="card mt-20">
@@ -940,6 +1108,42 @@
             <div class="card mt-20">
                 <h2 class="card-title">Games You Can Edit</h2>
                 <div id="editable-games-grid" class="game-grid"></div>
+            </div>
+        </div>
+
+        <div id="view-academy" class="view">
+            <div class="card">
+                <h2 class="card-title">Creator Academy</h2>
+                <p style="color:#666;">Complete guided creator tracks to earn Sculpt Coins and sharpen your design skills.</p>
+                <div id="academy-tracks-grid" class="game-grid"></div>
+            </div>
+        </div>
+
+        <div id="view-jams" class="view">
+            <div class="card">
+                <h2 class="card-title">Weekly Creator Jams</h2>
+                <div id="jam-header"></div>
+                <div style="display:grid; gap:10px; margin:12px 0;">
+                    <input id="jam-game-id" class="form-control" placeholder="Your Game ID to submit">
+                    <input id="jam-title" class="form-control" placeholder="Submission title">
+                    <textarea id="jam-pitch" class="form-control" placeholder="Short pitch (what makes your build special?)"></textarea>
+                    <button class="btn btn-success" onclick="submitJamEntry()">Submit / Update Entry</button>
+                </div>
+                <div id="jam-submissions" class="game-grid"></div>
+            </div>
+        </div>
+
+        <div id="view-blueprints" class="view">
+            <div class="card">
+                <h2 class="card-title">Blueprint Exchange</h2>
+                <p style="color:#666;">Share reusable build plans and favorite the best creator templates.</p>
+                <div style="display:grid; gap:10px; margin-bottom:14px;">
+                    <input id="bp-title" class="form-control" placeholder="Blueprint title">
+                    <input id="bp-tags" class="form-control" placeholder="Tags (comma separated)">
+                    <textarea id="bp-summary" class="form-control" placeholder="Blueprint summary"></textarea>
+                    <button class="btn btn-info" onclick="publishBlueprint()">Publish Blueprint</button>
+                </div>
+                <div id="blueprint-feed" class="game-grid"></div>
             </div>
         </div>
 
@@ -1141,6 +1345,7 @@
                             <button class="tool-btn" onclick="addPart('triangle')">Triangle</button>
                             <button class="tool-btn" onclick="addPart('wedge')">Wedge</button>
                             <button class="tool-btn" onclick="addPart('ladder')">Ladder</button>
+                            <button class="tool-btn" onclick="addPart('floatingText')">Floating Text</button>
                             <button class="tool-btn" style="color:#f39c12;font-weight:bold;" onclick="addPart('spawn')">Spawn</button>
                         </div>
                     </div>
@@ -1151,7 +1356,7 @@
                             <button class="tool-btn" style="color:#9b59b6;font-weight:bold;" onclick="addPart('aircraftSeat')">Air Seat</button>
                             <button class="tool-btn" style="color:#9b59b6;font-weight:bold;" onclick="addPart('tool')">Tool</button>
                             <button class="tool-btn" style="color:#1abc9c;font-weight:bold;" onclick="toggleSmartObjectSidebar()">Smart Objects</button>
-                            <button class="tool-btn" style="color:#27ae60;font-weight:bold;" onclick="toggleTerrainEditor()">Terrain</button>
+                            <button class="tool-btn" style="color:#95a5a6;font-weight:bold;" disabled title="Terrain editing coming soon">Terrain (Soon)</button>
                             <button class="btn btn-sm btn-warning" onclick="groupAsVehicle()">Group Vehicle</button>
                             <button class="btn btn-sm btn-info" onclick="groupAsAircraft()">Group Aircraft</button>
                         </div>
@@ -1184,6 +1389,20 @@
 
             <div class="studio-layout">
                 <div id="editor-container-3d" tabindex="0">
+<select id="studio-mobile-quick-insert" class="form-control" onchange="if(this.value){ addPart(this.value); this.value=''; }">
+    <option value="">+ Quick Insert Part...</option>
+    <option value="block">Cube</option>
+    <option value="sphere">Sphere</option>
+    <option value="cylinder">Cylinder</option>
+    <option value="cone">Cone</option>
+    <option value="triangle">Triangle</option>
+    <option value="wedge">Wedge</option>
+    <option value="ladder">Ladder</option>
+    <option value="spawn">Spawn</option>
+    <option value="seat">Seat</option>
+    <option value="aircraftSeat">Air Seat</option>
+    <option value="tool">Tool</option>
+</select>
 
 
 
@@ -1326,6 +1545,44 @@
                             <label style="font-size:12px; font-weight:bold;">Ambient Brightness:</label>
                             <input type="number" id="ws-brightness" class="form-control" value="0.65" step="0.1" onchange="updateWorldSettings()">
                         </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold;">Sun Intensity:</label>
+                            <input type="number" id="ws-sun-intensity" class="form-control" value="1.1" step="0.1" onchange="updateWorldSettings()">
+                        </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold;">Fog Distance:</label>
+                            <input type="number" id="ws-fog-distance" class="form-control" value="1600" step="50" onchange="updateWorldSettings()">
+                        </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold;">Graphics Quality:</label>
+                            <select id="ws-graphics-quality" class="form-control" onchange="updateWorldSettings()">
+                                <option value="low">Low</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High</option>
+                                <option value="ultra">Ultra</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold;">Exposure:</label>
+                            <input type="number" id="ws-exposure" class="form-control" value="1.0" step="0.1" onchange="updateWorldSettings()">
+                        </div>
+                    </div>
+
+                    <div id="studio-mobile-controls">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-end; padding:0 10px; gap:8px;">
+                            <div id="studio-joystick-base">
+                                <div id="studio-joystick-stick"></div>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+                                <div class="studio-mobile-pill" id="studio-landscape-pill">Best in landscape mode 📱↔️ <button onclick="closeStudioLandscapeHint()" style="margin-left:6px; background:transparent; color:#fff; border:none; font-weight:700; pointer-events:auto;">✕</button></div>
+                                <div style="display:flex; gap:6px; pointer-events:auto;">
+                                    <button class="studio-mobile-btn" onclick="setTransformMode('select')">Select</button>
+                                    <button class="studio-mobile-btn" onclick="setTransformMode('translate')">Move</button>
+                                    <button class="studio-mobile-btn" onclick="setTransformMode('rotate')">Rotate</button>
+                                    <button class="studio-mobile-btn" onclick="setTransformMode('scale')">Scale</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 
@@ -1338,6 +1595,20 @@
                     <h4 style="margin: 0; padding: 10px; background: #2c3e50; color: #fff;">Properties</h4>
 <div id="props-content" style="padding: 10px; font-size:13px; display:none;">
                         <button class="btn btn-info btn-sm mb-10" style="width: 100%;" onclick="duplicateSelectedParts()">Duplicate Part</button>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px;">
+                            <button class="btn btn-sm" onclick="saveStudioSnapshot()">Save Snapshot</button>
+                            <button class="btn btn-sm" onclick="loadStudioSnapshot()">Load Snapshot</button>
+                            <button class="btn btn-sm" onclick="resetStudioCamera()">Reset Camera</button>
+                            <button class="btn btn-sm" onclick="alignSelectedToGround()">Align Ground</button>
+                            <button class="btn btn-sm" onclick="toggleSelectedWireframe()">Wireframe</button>
+                            <button class="btn btn-sm" onclick="copySelectedObjectId()">Copy Object ID</button>
+                            <button class="btn btn-sm" onclick="nudgeSelected('x', 1)">+X</button>
+                            <button class="btn btn-sm" onclick="nudgeSelected('x', -1)">-X</button>
+                            <button class="btn btn-sm" onclick="nudgeSelected('z', 1)">+Z</button>
+                            <button class="btn btn-sm" onclick="nudgeSelected('z', -1)">-Z</button>
+                            <button class="btn btn-sm" onclick="nudgeSelected('y', 1)">+Y</button>
+                            <button class="btn btn-sm" onclick="nudgeSelected('y', -1)">-Y</button>
+                        </div>
                         
                         <div style="background: #f9f9f9; padding: 10px; border: 1px solid #eee; border-radius: 4px; margin-bottom: 10px;">
                             <h5 style="margin: 0 0 5px 0; color: #2c3e50;">Snapping Increments</h5>
@@ -1383,6 +1654,21 @@
                             <option value="Sand">Sand / Dirt</option>
                             <option value="Slate">Slate / Stone</option>
                         </select>
+                        <div id="floating-text-props" style="display:none; margin-top:10px; background:#fff7ec; border:1px solid #f2d2a7; border-radius:4px; padding:8px;">
+                            <h5 style="margin:0 0 8px 0; color:#8a5a18;">Floating Text</h5>
+                            <div class="form-group mb-10">
+                                <label><strong>Text:</strong></label>
+                                <input id="prop-ftext" class="form-control" maxlength="120" onchange="updateSelectedProperties()">
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Font:</strong></label>
+                                <input id="prop-ffont" class="form-control" value="Arial" onchange="updateSelectedProperties()">
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Text Size:</strong></label>
+                                <input id="prop-fsize" type="number" min="8" max="160" value="40" class="form-control" onchange="updateSelectedProperties()">
+                            </div>
+                        </div>
                         <div id="smart-props-section" style="display:none; margin-top:10px; background:#f6fbff; border:1px solid #d7e7f5; border-radius:4px; padding:8px;">
                             <h5 style="margin:0 0 8px 0; color:#2c3e50;">Smart Object Logic</h5>
                             <div class="form-group mb-10">
@@ -2110,6 +2396,7 @@ const toggleMultiSelect = () => {
                     <div id="joystick-base" style="position: absolute; bottom: 30px; left: 30px; width: 140px; height: 140px; background: rgba(0,0,0,0.4); border-radius: 50%; pointer-events: auto; touch-action: none; border: 3px solid rgba(255,255,255,0.2);">
                         <div id="joystick-stick" style="position: absolute; top: 35px; left: 35px; width: 70px; height: 70px; background: rgba(255,255,255,0.8); border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: transform 0.1s ease-out;"></div>
                     </div>
+                    <div id="mobile-look-zone" style="position:absolute; top:0; right:0; width:52%; height:78%; pointer-events:auto; touch-action:none;"></div>
                     <div id="mobile-jump-btn" style="position: absolute; bottom: 40px; right: 30px; width: 90px; height: 90px; background: rgba(46, 204, 113, 0.6); border-radius: 50%; pointer-events: auto; touch-action: none; border: 3px solid rgba(46, 204, 113, 0.9); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 32px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: background 0.1s;">?</div>
                 `;
                 ui.style.position = 'absolute';
@@ -2122,10 +2409,13 @@ const toggleMultiSelect = () => {
                 const base = document.getElementById('joystick-base');
                 const stick = document.getElementById('joystick-stick');
                 const jumpBtn = document.getElementById('mobile-jump-btn');
+                const lookZone = document.getElementById('mobile-look-zone');
 
                 let baseRadius = 70;
                 let baseCenter = { x: 0, y: 0 };
                 let activeTouchId = null;
+                let lookTouchId = null;
+                let lookPrev = null;
 
                 const resetJoystick = () => {
                     stick.style.transition = 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
@@ -2173,15 +2463,54 @@ const toggleMultiSelect = () => {
                     
                     stick.style.transform = `translate(${dx}px, ${dy}px)`;
                     
-                    const threshold = 15;
-                    keys.w = dy < -threshold;
-                    keys.s = dy > threshold;
-                    keys.a = dx < -threshold;
-                    keys.d = dx > threshold;
+                    const magnitude = Math.sqrt(dx * dx + dy * dy);
+                    keys.w = magnitude > 16;
+                    keys.s = false;
+                    keys.a = false;
+                    keys.d = false;
                 };
 
                 jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playInput.justJumped = true; jumpBtn.style.background = 'rgba(46, 204, 113, 0.9)'; }, { passive: false });
                 jumpBtn.addEventListener('touchend', (e) => { e.preventDefault(); jumpBtn.style.background = 'rgba(46, 204, 113, 0.6)'; }, { passive: false });
+
+                const onLookMove = (touch) => {
+                    if (!lookPrev || !window.playControls) {
+                        lookPrev = { x: touch.clientX, y: touch.clientY };
+                        return;
+                    }
+                    const dx = touch.clientX - lookPrev.x;
+                    const dy = touch.clientY - lookPrev.y;
+                    window.playControls.rotateLeft(dx * 0.006);
+                    window.playControls.rotateUp(dy * 0.004);
+                    window.playControls.update();
+                    lookPrev = { x: touch.clientX, y: touch.clientY };
+                };
+
+                lookZone.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    if (lookTouchId !== null) return;
+                    const touch = e.changedTouches[0];
+                    lookTouchId = touch.identifier;
+                    lookPrev = { x: touch.clientX, y: touch.clientY };
+                }, { passive: false });
+                lookZone.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        const t = e.changedTouches[i];
+                        if (t.identifier === lookTouchId) onLookMove(t);
+                    }
+                }, { passive: false });
+                const endLook = (e) => {
+                    e.preventDefault();
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        if (e.changedTouches[i].identifier === lookTouchId) {
+                            lookTouchId = null;
+                            lookPrev = null;
+                        }
+                    }
+                };
+                lookZone.addEventListener('touchend', endLook, { passive: false });
+                lookZone.addEventListener('touchcancel', endLook, { passive: false });
             }
             document.getElementById('mobile-controls').style.display = 'block';
         };
@@ -2274,6 +2603,33 @@ checkDailyReward(); // <-- ADDED HERE
 
         // Interval cleanup references
         let grpWallSyncInterval = null;
+        const promptStudioAutosaveRecovery = () => {
+            if (autosaveRecoveryPrompted || currentEditGameId) return;
+            autosaveRecoveryPrompted = true;
+            let saved = null;
+            try {
+                saved = JSON.parse(localStorage.getItem('ps_autosave') || 'null');
+            } catch (e) { saved = null; }
+            if (!saved || !saved.edData) return;
+
+            const stamp = saved.savedAt ? new Date(saved.savedAt).toLocaleString() : 'recently';
+            showModal(
+                'Autosave Recovery',
+                `We found an autosave from ${stamp}. Recover it now?`,
+                'Recover',
+                () => {
+                    edData = saved.edData;
+                    if (saved.genre) document.getElementById('editor-genre').value = saved.genre;
+                    if (saved.title) document.getElementById('editor-title').value = saved.title;
+                    historyStack = []; historyIndex = -1;
+                    buildEditorScene();
+                    recordEdit(true);
+                    showModal('Recovered', 'Studio autosave restored.');
+                },
+                false,
+                true
+            );
+        };
 
         const navigate = (viewId) => {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -2292,6 +2648,7 @@ checkDailyReward(); // <-- ADDED HERE
 loadSponsoredAssetsDashboard(); // Add this line!
                 loadDashboardGames();
                 loadDashboardFriends();
+                loadCreatorChallenges();
             } else if (viewId === 'library') {
                 loadLibrary();
             } 
@@ -2317,11 +2674,21 @@ else if (viewId === 'groups') {
                 loadFriendsTab();
             } else if (viewId === 'messages') {
                 loadMessages();
+            } else if (viewId === 'inventory') {
+                loadInventoryTab();
+            } else if (viewId === 'avatar') {
+                loadAvatarTab();
+            } else if (viewId === 'academy') {
+                loadCreatorAcademy();
+            } else if (viewId === 'jams') {
+                loadCreatorJams();
+            } else if (viewId === 'blueprints') {
+                loadBlueprintExchange();
             } else if (viewId === 'settings') {
                 if (currentUser) document.getElementById('setting-username').value = currentUser.username;
            } else if (viewId === 'create') {
                 if (!currentEditGameId) {
-                    setTimeout(() => { initEditor(); window.dispatchEvent(new Event('resize')); populateGroupPublishDropdown(); }, 50);
+                    setTimeout(() => { initEditor(); window.dispatchEvent(new Event('resize')); populateGroupPublishDropdown(); promptStudioAutosaveRecovery(); }, 50);
                     document.getElementById('editor-save-btn').innerText = "Publish Game";
                     document.getElementById('btn-add-collab').style.display = "none";
                     document.getElementById('btn-versions').style.display = "none";
@@ -3632,6 +3999,65 @@ let customGizmo = null;
         };
 
 
+        const initStudioMobileControls = () => {
+            if (studioMobileState.initialized) return;
+            const isTouch = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || navigator.maxTouchPoints > 0;
+            if (!isTouch) return;
+            const base = document.getElementById('studio-joystick-base');
+            const stick = document.getElementById('studio-joystick-stick');
+            if (!base || !stick) return;
+
+            studioMobileState.initialized = true;
+            const resetStick = () => {
+                studioMobileState.active = false;
+                studioMobileState.x = 0;
+                studioMobileState.y = 0;
+                stick.style.transform = 'translate(0px, 0px)';
+            };
+
+            const updateFromTouch = (touch) => {
+                const rect = base.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                let dx = touch.clientX - cx;
+                let dy = touch.clientY - cy;
+                const radius = rect.width / 2 - 10;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                if (dist > radius) {
+                    dx = (dx / dist) * radius;
+                    dy = (dy / dist) * radius;
+                }
+                studioMobileState.active = true;
+                studioMobileState.x = dx / radius;
+                studioMobileState.y = dy / radius;
+                stick.style.transform = `translate(${dx}px, ${dy}px)`;
+            };
+
+            base.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (!e.touches[0]) return;
+                updateFromTouch(e.touches[0]);
+            }, { passive: false });
+            base.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (!e.touches[0]) return;
+                updateFromTouch(e.touches[0]);
+            }, { passive: false });
+            base.addEventListener('touchend', (e) => { e.preventDefault(); resetStick(); }, { passive: false });
+            base.addEventListener('touchcancel', (e) => { e.preventDefault(); resetStick(); }, { passive: false });
+
+            if (localStorage.getItem('ps_hide_landscape_hint') === '1') {
+                const pill = document.getElementById('studio-landscape-pill');
+                if (pill) pill.style.display = 'none';
+            }
+        };
+        const closeStudioLandscapeHint = () => {
+            localStorage.setItem('ps_hide_landscape_hint', '1');
+            const pill = document.getElementById('studio-landscape-pill');
+            if (pill) pill.style.display = 'none';
+        };
+        window.closeStudioLandscapeHint = closeStudioLandscapeHint;
+
         const initEditor = () => {
             const container = document.getElementById('editor-container-3d');
             if (edRenderer) {
@@ -3662,11 +4088,13 @@ let customGizmo = null;
 
             const ambLight = new THREE.AmbientLight( 0xffffff, 1.0 );
             ambLight.isAmbientLight = true;
+            edAmbientLight = ambLight;
             edScene.add( ambLight );
             const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
             edScene.add(hemiLight); 
-            const dirLight = new THREE.DirectionalLight( 0xffffff, 0.5 );
+            const dirLight = new THREE.DirectionalLight( 0xffffff, 0.9 );
             dirLight.position.set( 1, 0.75, 0.5 ).normalize();
+            edDirectionalLight = dirLight;
             edScene.add( dirLight );
 
 edRenderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
@@ -3678,6 +4106,7 @@ window.EnvironmentEngine.generateClouds(edScene, '#ffffff');
             edRenderer.setPixelRatio( window.devicePixelRatio );
             resizeCanvas(edRenderer, edCamera, 'editor-container-3d');
             container.appendChild( edRenderer.domElement );
+            initStudioMobileControls();
 
             // Roblox Style Studio Camera Engine
             window.StudioCamera = {
@@ -3826,12 +4255,15 @@ const dom = edRenderer.domElement;
                                 const angleDelta = (delta.x + delta.y) * 2.0; 
                                 const radSnap = THREE.MathUtils.degToRad(snapRot);
                                 const snappedAngle = Math.round(angleDelta / radSnap) * radSnap;
-
-                                // Create a precise rotation around the local axis
-                                const baseLocalAxis = new THREE.Vector3(); baseLocalAxis[axis] = 1;
-                                const rotQuat = new THREE.Quaternion().setFromAxisAngle(baseLocalAxis, snappedAngle);
-                                
-                                t.mesh.quaternion.copy(t.startQuat).multiply(rotQuat);
+                                const worldAxis = new THREE.Vector3();
+                                worldAxis[axis] = 1;
+                                worldAxis.applyQuaternion(customGizmo.quaternion).normalize();
+                                const rotQuat = new THREE.Quaternion().setFromAxisAngle(worldAxis, snappedAngle);
+                                const pivot = customGizmo.position.clone();
+                                const startOffset = t.startPos.clone().sub(pivot);
+                                const rotatedOffset = startOffset.clone().applyQuaternion(rotQuat);
+                                t.mesh.position.copy(pivot).add(rotatedOffset);
+                                t.mesh.quaternion.copy(rotQuat).multiply(t.startQuat);
                                 t.mesh.rotation.setFromQuaternion(t.mesh.quaternion, 'XYZ');
                             }
                             syncObjectDataToMesh(t.mesh);
@@ -4039,6 +4471,7 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
         // --- 3D Shop Accessory Maker ---
         let accScene, accCamera, accRenderer, accControls;
         let accVoxels = []; // {x, y, z, color}
+        let accPartInsertIndex = 0;
         let accRollOverMesh, accGridHelper;
         let accMode = 'draw'; 
         let accAnimationId = null;
@@ -4052,19 +4485,36 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             if(tabId === 'make' && accRenderer) {
                 setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
             }
+            if (tabId === 'clothing') {
+                setTimeout(() => { initClothingEditor(); window.dispatchEvent(new Event('resize')); }, 50);
+            }
         };
 
         const loadShop = async () => {
             try {
                 const items = await apiCall('/shop/items');
+                const clothingItems = await apiCall('/clothing/items');
+                const combined = [
+                    ...items.map(i => ({ ...i, __kind: 'accessory' })),
+                    ...clothingItems.map(i => ({ ...i, __kind: 'clothing' }))
+                ];
+                const searchValue = ((document.getElementById('shop-search') || {}).value || '').trim().toLowerCase();
+                const sortValue = ((document.getElementById('shop-sort') || {}).value || 'newest');
+                let filtered = combined.filter(i => {
+                    if (!searchValue) return true;
+                    const haystack = `${i.name || ''} ${i.description || ''} ${i.authorName || ''}`.toLowerCase();
+                    return haystack.includes(searchValue);
+                });
+                if (sortValue === 'price_low') filtered.sort((a, b) => (a.price || 0) - (b.price || 0));
+                else if (sortValue === 'price_high') filtered.sort((a, b) => (b.price || 0) - (a.price || 0));
+                else if (sortValue === 'name') filtered.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
+                else filtered.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
                 const grid = document.getElementById('shop-grid');
-                grid.innerHTML = items.length === 0 ? '<p>No items in the marketplace yet.</p>' : '';
-                items.forEach(i => {
-                    cacheAccessoryImage(i.id, i.image);
-                    const cached = accImageCache[i.id];
-                    const imgSrc = cached && cached.img ? cached.img : i.image; 
+                grid.innerHTML = filtered.length === 0 ? '<p>No matching items found.</p>' : '';
+                filtered.forEach(i => {
+                    const imgSrc = i.__kind === 'clothing' ? i.designImage : ((cacheAccessoryImage(i.id, i.image), (accImageCache[i.id] && accImageCache[i.id].img) ? accImageCache[i.id].img : i.image));
                     const card = document.createElement('div'); card.className = 'game-card';
-                    card.innerHTML = `<img src="${imgSrc}" class="shop-img"><h3>${i.name}</h3><p style="font-size:11px;">By <a href="javascript:void(0)" onclick="loadProfile('${i.authorName}'); navigate('profile');" style="color:#3498db;">${i.authorName}</a></p><p style="font-size:12px;">${i.description}</p><p style="color:#f39c12; font-weight:bold;">${i.price > 0 ? '' + i.price + ' SC' : 'Free'}</p><button class="btn btn-success btn-sm mt-10" onclick="buyItem('${i.id}', ${i.price})">Purchase</button>`;
+                    card.innerHTML = `<img src="${imgSrc}" class="shop-img"><h3>${i.name}</h3><p style="font-size:11px;">By <a href="javascript:void(0)" onclick="loadProfile('${i.authorName}'); navigate('profile');" style="color:#3498db;">${i.authorName}</a></p><p style="font-size:12px;">${i.description}</p><p style="font-size:11px; color:#666;">${i.__kind === 'clothing' ? i.type.toUpperCase() : 'Accessory'}</p><p style="color:#f39c12; font-weight:bold;">${i.price > 0 ? '' + i.price + ' SC' : 'Free'}</p><button class="btn btn-success btn-sm mt-10" onclick="${i.__kind === 'clothing' ? `buyClothing('${i.id}', ${i.price})` : `buyItem('${i.id}', ${i.price})`}">Purchase</button>`;
                     grid.appendChild(card);
                 });
             } catch(e) {}
@@ -4077,55 +4527,240 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                 showModal('Purchased!', 'The item is now in your profile inventory.');
             } catch(e) {}
         };
+        const buyClothing = async (itemId, price) => {
+            if (getCoins() < price) return showModal('Insufficient Funds', `You need ${price} SculptCoins to buy this.`);
+            try {
+                await apiCall(`/clothing/buy/${itemId}`, 'POST');
+                showModal('Purchased!', 'Clothing item is now in your avatar inventory.');
+            } catch (e) {}
+        };
 
         const equipItem = async (itemId, isEquipped) => {
             try {
                 const res = await apiCall(`/me/equip`, 'POST', { itemId: isEquipped ? null : itemId });
                 if(currentUser) currentUser.equipped = res.equipped;
                 loadProfile(currentUser.username); 
+                if (document.getElementById('view-avatar').classList.contains('active')) loadAvatarTab();
             } catch(e) {}
         };
+
+        const loadInventoryTab = async () => {
+            const grid = document.getElementById('inventory-view-grid');
+            if (!grid) return;
+            grid.innerHTML = '<p>Loading inventory...</p>';
+            try {
+                const me = await apiCall('/me');
+                const items = me.inventory || [];
+                grid.innerHTML = items.length ? '' : '<p>You do not own any avatar accessories yet.</p>';
+                items.forEach(i => {
+                    cacheAccessoryImage(i.id, i.image);
+                    const cached = accImageCache[i.id];
+                    const imgSrc = cached && cached.img ? cached.img : i.image;
+                    const card = document.createElement('div');
+                    card.className = 'game-card';
+                    card.innerHTML = `<img src="${imgSrc}" class="shop-img"><h3>${i.name}</h3><p style="font-size:12px;">${i.description || ''}</p><p style="font-size:11px; color:#777;">By ${i.authorName || 'Unknown'}</p>`;
+                    grid.appendChild(card);
+                });
+            } catch (e) {
+                grid.innerHTML = '<p>Could not load inventory.</p>';
+            }
+        };
+
+        const loadAvatarTab = async () => {
+            const grid = document.getElementById('avatar-view-grid');
+            if (!grid) return;
+            grid.innerHTML = '<p>Loading avatar items...</p>';
+            try {
+                const me = await apiCall('/me');
+                const clothInv = await apiCall('/me/clothing-inventory');
+                if (currentUser) currentUser.equipped = me.equipped || null;
+                if (currentUser && me.color) currentUser.color = me.color;
+                if (currentUser) {
+                    currentUser.equippedShirt = clothInv.equippedShirt || null;
+                    currentUser.equippedPants = clothInv.equippedPants || null;
+                    const s = (clothInv.items || []).find(i => i.id === currentUser.equippedShirt);
+                    const p = (clothInv.items || []).find(i => i.id === currentUser.equippedPants);
+                    currentUser.equippedShirtImage = s ? s.designImage : null;
+                    currentUser.equippedPantsImage = p ? p.designImage : null;
+                }
+                ensureAvatarBodyColors();
+                const items = me.inventory || [];
+                grid.innerHTML = items.length ? '' : '<p>You do not own any avatar accessories yet.</p>';
+                items.forEach(i => {
+                    cacheAccessoryImage(i.id, i.image);
+                    const cached = accImageCache[i.id];
+                    const imgSrc = cached && cached.img ? cached.img : i.image;
+                    const isEquipped = me.equipped === i.id;
+                    const card = document.createElement('div');
+                    card.className = 'game-card';
+                    card.innerHTML = `<img src="${imgSrc}" class="shop-img"><h3>${i.name}</h3><p style="font-size:12px;">${i.description || ''}</p><button class="btn btn-sm ${isEquipped ? 'btn-danger' : 'btn-success'}" onclick="equipItem('${i.id}', ${isEquipped})">${isEquipped ? 'Unequip' : 'Equip'}</button>`;
+                    grid.appendChild(card);
+                });
+                (clothInv.items || []).forEach(c => {
+                    const isEq = (c.type === 'shirt' && clothInv.equippedShirt === c.id) || (c.type === 'pants' && clothInv.equippedPants === c.id);
+                    const card = document.createElement('div');
+                    card.className = 'game-card';
+                    card.innerHTML = `<img src="${c.designImage}" class="shop-img"><h3>${c.name}</h3><p style="font-size:12px;">${c.type.toUpperCase()} • ${c.visibility}</p><button class="btn btn-sm ${isEq ? 'btn-danger' : 'btn-success'}" onclick="equipClothing('${c.id}', ${isEq})">${isEq ? 'Unequip' : 'Wear'}</button>`;
+                    grid.appendChild(card);
+                });
+            } catch (e) {
+                grid.innerHTML = '<p>Could not load avatar equipment.</p>';
+            }
+        };
+
+        const equipClothing = async (itemId, isEquipped) => {
+            try {
+                const res = await apiCall('/clothing/equip', 'POST', { itemId: isEquipped ? null : itemId });
+                if (currentUser) {
+                    currentUser.equippedShirt = res.equippedShirt || null;
+                    currentUser.equippedPants = res.equippedPants || null;
+                }
+                loadAvatarTab();
+            } catch (e) {}
+        };
+
+        let selectedAvatarPart = 'head';
+        const ensureAvatarBodyColors = () => {
+            if (!currentUser) return;
+            if (!currentUser.bodyColors) {
+                currentUser.bodyColors = {
+                    head: currentUser.color || '#e74c3c',
+                    torso: '#3498db',
+                    leftArm: '#2ecc71',
+                    rightArm: '#f39c12',
+                    leftLeg: '#9b59b6',
+                    rightLeg: '#e74c3c'
+                };
+            }
+            const panel = document.getElementById('avatar-part-colors');
+            if (panel) {
+                const bc = currentUser.bodyColors;
+                panel.innerHTML = `Head: <span style="color:${bc.head}">${bc.head}</span> • Torso: <span style="color:${bc.torso}">${bc.torso}</span> • LArm: <span style="color:${bc.leftArm}">${bc.leftArm}</span> • RArm: <span style="color:${bc.rightArm}">${bc.rightArm}</span> • LLeg: <span style="color:${bc.leftLeg}">${bc.leftLeg}</span> • RLeg: <span style="color:${bc.rightLeg}">${bc.rightLeg}</span>`;
+            }
+        };
+        const selectAvatarPart = (part) => {
+            selectedAvatarPart = part;
+            const label = document.getElementById('avatar-part-selected');
+            if (label) label.innerText = part;
+        };
+        const paintAvatarPart = (color) => {
+            if (!currentUser) return;
+            ensureAvatarBodyColors();
+            currentUser.bodyColors[selectedAvatarPart] = color;
+            const vals = Object.values(currentUser.bodyColors || {});
+            const allSame = vals.length > 0 && vals.every(v => v === vals[0]);
+            if (allSame) {
+                currentUser.bodyColors.leftLeg = '#2ecc71';
+                currentUser.bodyColors.rightLeg = '#f39c12';
+                showModal('Body Paint Rule', 'Full-body single-color paint is not allowed. Both legs were adjusted.');
+            }
+            loadAvatarTab();
+            if (playerMesh && playerMesh.parent) {
+                const updated = createPlayerMesh(currentUser.color || '#e74c3c', currentUser.equipped, currentUser.bodyColors, { shirtImage: currentUser.equippedShirtImage || null, pantsImage: currentUser.equippedPantsImage || null });
+                updated.scale.copy(playerMesh.scale);
+                updated.position.copy(playerMesh.position);
+                updated.rotation.copy(playerMesh.rotation);
+                playerMesh.parent.add(updated);
+                playerMesh.parent.remove(playerMesh);
+                playerMesh = updated;
+            }
+        };
+        window.selectAvatarPart = selectAvatarPart;
+        window.paintAvatarPart = paintAvatarPart;
 
         const setAccTool = (mode) => {
             accMode = mode;
             document.querySelectorAll('#tab-shop-make .tool-btn').forEach(b => b.classList.remove('active'));
-            document.getElementById('acc-tool-' + mode).classList.add('active');
-            if(accRollOverMesh) {
-                accRollOverMesh.material.color.setHex(accMode === 'erase' ? 0xff0000 : 0x2ecc71);
+            const activeBtn = document.getElementById('acc-tool-' + mode);
+            if (activeBtn) activeBtn.classList.add('active');
+        };
+
+        const addAccPart = () => {
+            const partType = ((document.getElementById('acc-part-type') || {}).value || 'block');
+            const color = ((document.getElementById('acc-color') || {}).value || '#ffffff');
+            const anchorX = (accPartInsertIndex % 7) - 3;
+            const anchorY = Math.floor(accPartInsertIndex / 7) % 3;
+            const anchorZ = Math.floor(accPartInsertIndex / 21) % 5 - 2;
+            accPartInsertIndex += 1;
+            const addVoxel = (x, y, z) => {
+                if (!accVoxels.find(v => v.x === x && v.y === y && v.z === z)) accVoxels.push({ x, y, z, color });
+            };
+            if (partType === 'sphere') {
+                [[0,0,0],[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]].forEach(([x,y,z]) => addVoxel(anchorX + x, anchorY + y, anchorZ + z));
+            } else if (partType === 'cylinder') {
+                [[0,-1,0],[0,0,0],[0,1,0],[1,0,0],[-1,0,0]].forEach(([x,y,z]) => addVoxel(anchorX + x, anchorY + y, anchorZ + z));
+            } else if (partType === 'cone') {
+                [[0,-1,0],[0,0,0],[1,-1,0],[-1,-1,0],[0,-1,1],[0,-1,-1]].forEach(([x,y,z]) => addVoxel(anchorX + x, anchorY + y, anchorZ + z));
+            } else {
+                addVoxel(anchorX, anchorY, anchorZ);
             }
+            if (window.buildAccVoxels) window.buildAccVoxels();
         };
 
         const stopAccEditorLoop = () => {
             if (accAnimationId) cancelAnimationFrame(accAnimationId);
         };
 
-        const createPlayerMesh = (color, equippedId) => {
+        const clothingTextureCache = {};
+        const getClothingTexture = (src) => {
+            if (!src) return null;
+            if (!clothingTextureCache[src]) {
+                const tex = new THREE.TextureLoader().load(src);
+                tex.wrapS = THREE.ClampToEdgeWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
+                clothingTextureCache[src] = tex;
+            }
+            return clothingTextureCache[src];
+        };
+        const createPlayerMesh = (color, equippedId, bodyColors = null, clothing = null) => {
             const group = new THREE.Group();
-            const mat = new THREE.MeshLambertMaterial({ color: color || '#e74c3c' });
+            const palette = bodyColors || {
+                head: color || '#e74c3c',
+                torso: color || '#e74c3c',
+                leftArm: color || '#e74c3c',
+                rightArm: color || '#e74c3c',
+                leftLeg: color || '#e74c3c',
+                rightLeg: color || '#e74c3c'
+            };
+            const partMat = (key) => new THREE.MeshLambertMaterial({ color: palette[key] || color || '#e74c3c' });
 
-            const head = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), mat);
+            const head = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), partMat('head'));
+            head.userData.avatarPart = 'head';
             head.position.set(0, 4, 0); 
             group.add(head);
 
-            const torso = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), mat);
+            const torso = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), partMat('torso'));
+            torso.userData.avatarPart = 'torso';
             torso.position.set(0, 0, 0);
             group.add(torso);
 
             const lArmPivot = new THREE.Group(); lArmPivot.position.set(-3, 1, 0);
-            const lArm = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), mat); lArm.position.set(0, -1.5, 0);
+            const lArm = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), partMat('leftArm')); lArm.position.set(0, -1.5, 0);
+            lArm.userData.avatarPart = 'leftArm';
             lArmPivot.add(lArm); group.add(lArmPivot);
 
             const rArmPivot = new THREE.Group(); rArmPivot.position.set(3, 1, 0);
-            const rArm = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), mat); rArm.position.set(0, -1.5, 0);
+            const rArm = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), partMat('rightArm')); rArm.position.set(0, -1.5, 0);
+            rArm.userData.avatarPart = 'rightArm';
             rArmPivot.add(rArm); group.add(rArmPivot);
 
             const lLegPivot = new THREE.Group(); lLegPivot.position.set(-1, -2, 0);
-            const lLeg = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), mat); lLeg.position.set(0, -2, 0);
+            const lLeg = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), partMat('leftLeg')); lLeg.position.set(0, -2, 0);
+            lLeg.userData.avatarPart = 'leftLeg';
             lLegPivot.add(lLeg); group.add(lLegPivot);
 
             const rLegPivot = new THREE.Group(); rLegPivot.position.set(1, -2, 0);
-            const rLeg = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), mat); rLeg.position.set(0, -2, 0);
+            const rLeg = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), partMat('rightLeg')); rLeg.position.set(0, -2, 0);
+            rLeg.userData.avatarPart = 'rightLeg';
             rLegPivot.add(rLeg); group.add(rLegPivot);
+
+            if (clothing && clothing.shirtImage) {
+                const shirtTex = getClothingTexture(clothing.shirtImage);
+                [torso, lArm, rArm].forEach(m => { if (shirtTex) m.material.map = shirtTex, m.material.needsUpdate = true; });
+            }
+            if (clothing && clothing.pantsImage) {
+                const pantsTex = getClothingTexture(clothing.pantsImage);
+                [lLeg, rLeg].forEach(m => { if (pantsTex) m.material.map = pantsTex, m.material.needsUpdate = true; });
+            }
 
             group.userData = { lArmPivot, rArmPivot, lLegPivot, rLegPivot, swingTime: 0 };
 
@@ -4234,9 +4869,10 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             };
 
             const dom = accRenderer.domElement;
+            dom.style.touchAction = 'none';
 
             dom.addEventListener('pointerdown', (e) => {
-                if (e.button !== 0) return; // Only process left click for drawing
+                if (e.pointerType !== 'touch' && e.button !== 0) return; // Left click or touch
                 isDrawingAcc = true;
                 
                 const rect = dom.getBoundingClientRect();
@@ -4258,7 +4894,8 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                             buildAccVoxels();
                         }
                     } else if (accMode === 'draw') {
-                        const vCoords = getVoxelCoordsFromPoint(intersect.point, intersect.face.normal);
+                        const normal = intersect.face && intersect.face.normal ? intersect.face.normal : new THREE.Vector3(0, 1, 0);
+                        const vCoords = getVoxelCoordsFromPoint(intersect.point, normal);
                         if (vCoords.x >= -8 && vCoords.x <= 7 && vCoords.y >= -8 && vCoords.y <= 7 && vCoords.z >= -8 && vCoords.z <= 7) {
                             if(!accVoxels.find(v => v.x === vCoords.x && v.y === vCoords.y && v.z === vCoords.z)) {
                                 accVoxels.push({ x: vCoords.x, y: vCoords.y, z: vCoords.z, color: document.getElementById('acc-color').value });
@@ -4277,13 +4914,15 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                 const intersects = raycaster.intersectObjects(accObjects, false);
                 
                 if (intersects.length > 0) {
-                    const vCoords = getVoxelCoordsFromPoint(intersects[0].point, intersects[0].face.normal);
+                    const normal = intersects[0].face && intersects[0].face.normal ? intersects[0].face.normal : new THREE.Vector3(0, 1, 0);
+                    const vCoords = getVoxelCoordsFromPoint(intersects[0].point, normal);
                     accRollOverMesh.position.set(vCoords.x * 0.26, vCoords.y * 0.26 + 4, vCoords.z * 0.26);
                 }
 
                 if (isDrawingAcc && accMode === 'draw') {
                     if (intersects.length > 0) {
-                        const vCoords = getVoxelCoordsFromPoint(intersects[0].point, intersects[0].face.normal);
+                        const normal = intersects[0].face && intersects[0].face.normal ? intersects[0].face.normal : new THREE.Vector3(0, 1, 0);
+                        const vCoords = getVoxelCoordsFromPoint(intersects[0].point, normal);
                         if (vCoords.x >= -8 && vCoords.x <= 7 && vCoords.y >= -8 && vCoords.y <= 7 && vCoords.z >= -8 && vCoords.z <= 7) {
                             if(!accVoxels.find(v => v.x === vCoords.x && v.y === vCoords.y && v.z === vCoords.z)) {
                                 accVoxels.push({ x: vCoords.x, y: vCoords.y, z: vCoords.z, color: document.getElementById('acc-color').value });
@@ -4308,16 +4947,17 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             }
         };
 
-        const clearAcc = () => { accVoxels = []; if(window.buildAccVoxels) window.buildAccVoxels(); };
+        const clearAcc = () => { accVoxels = []; accPartInsertIndex = 0; if(window.buildAccVoxels) window.buildAccVoxels(); };
 
         const uploadAccessory = async () => {
             const name = document.getElementById('acc-name').value.trim();
             const desc = document.getElementById('acc-desc').value.trim();
-            const price = parseInt(document.getElementById('acc-price').value) || 0;
+            const price = Math.max(0, parseInt(document.getElementById('acc-price').value) || 0);
 
             if(!name) return showModal('Error', 'Please enter a name for your accessory.');
+            if(!desc) return showModal('Error', 'Please enter a description for your accessory.');
             if(accVoxels.length === 0) return showModal('Error', 'Build something first!');
-            if(getCoins() < 15) return showModal('Insufficient Funds', 'It costs 15 SculptCoins to upload an item.');
+            if(getCoins() < 20) return showModal('Insufficient Funds', 'It costs 20 Sculpt Coins to upload an item.');
 
             accRollOverMesh.visible = false;
             accGridHelper.visible = false;
@@ -4333,12 +4973,206 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
 
             try {
                 await apiCall('/shop/items', 'POST', { name, description: desc, price, image: payloadStr });
-                showModal('Uploaded!', 'Your accessory is now in the Marketplace!', 'View Shop', () => {
+                showModal('Submitted!', 'Accessory submitted for manual moderation review.', 'View Shop', () => {
                     document.getElementById('acc-name').value = ''; document.getElementById('acc-desc').value = ''; document.getElementById('acc-price').value = '';
                     clearAcc(); switchShopTab('market'); loadShop();
                 });
             } catch(e) {}
         };
+
+        // --- Clothing Designer ---
+        let clothScene, clothCamera, clothRenderer, clothControls, clothModel;
+        let clothRaycaster = new THREE.Raycaster();
+        let clothMouse = new THREE.Vector2();
+        const clothParts = ['head', 'torso', 'leftArm', 'rightArm', 'leftLeg', 'rightLeg'];
+        const clothState = {};
+        clothParts.forEach(p => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024; canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            clothState[p] = { canvas, ctx, texture: new THREE.CanvasTexture(canvas), undo: [], redo: [] };
+        });
+        let clothDrawing = false, clothStart = null, clothPolyLast = null;
+        let clothActivePart = 'torso';
+        let clothAutoRotate = false;
+        const clothHidden = { head: false, torso: false, arms: false, legs: false };
+        const clothMirrorPart = { leftArm: 'rightArm', rightArm: 'leftArm', leftLeg: 'rightLeg', rightLeg: 'leftLeg' };
+
+        const partState = (part) => clothState[part] || clothState.torso;
+        const pushClothingUndo = (part = clothActivePart) => {
+            const st = partState(part);
+            st.undo.push(st.ctx.getImageData(0, 0, st.canvas.width, st.canvas.height));
+            if (st.undo.length > 30) st.undo.shift();
+            st.redo = [];
+        };
+        const undoClothing = (part = clothActivePart) => {
+            const st = partState(part);
+            if (!st.undo.length) return;
+            st.redo.push(st.ctx.getImageData(0, 0, st.canvas.width, st.canvas.height));
+            const state = st.undo.pop();
+            st.ctx.putImageData(state, 0, 0);
+            st.texture.needsUpdate = true;
+        };
+        const redoClothing = (part = clothActivePart) => {
+            const st = partState(part);
+            if (!st.redo.length) return;
+            st.undo.push(st.ctx.getImageData(0, 0, st.canvas.width, st.canvas.height));
+            const state = st.redo.pop();
+            st.ctx.putImageData(state, 0, 0);
+            st.texture.needsUpdate = true;
+        };
+        const clothToolStyle = () => {
+            const size = Math.max(1, parseInt(document.getElementById('cloth-size')?.value || 12, 10));
+            const color = document.getElementById('cloth-color')?.value || '#ff0000';
+            const tool = document.getElementById('cloth-tool')?.value || 'brush';
+            return { size, color, tool };
+        };
+        const uvToCanvas = (uv, part = clothActivePart) => {
+            const st = partState(part);
+            return ({ x: Math.floor(uv.x * st.canvas.width), y: Math.floor((1 - uv.y) * st.canvas.height) });
+        };
+        const drawClothingAt = (p1, p2 = null, commit = false, part = clothActivePart) => {
+            const { size, color, tool } = clothToolStyle();
+            const st = partState(part);
+            const clothCtx = st.ctx;
+            clothCtx.lineWidth = size;
+            clothCtx.lineCap = 'round';
+            clothCtx.strokeStyle = color;
+            clothCtx.fillStyle = color;
+            if (tool.startsWith('erase')) {
+                clothCtx.globalCompositeOperation = 'destination-out';
+            } else {
+                clothCtx.globalCompositeOperation = 'source-over';
+            }
+            if (tool === 'brush' || tool === 'erase_brush') {
+                clothCtx.beginPath(); clothCtx.arc(p1.x, p1.y, size / 2, 0, Math.PI * 2); clothCtx.fill();
+            } else if (tool === 'line') {
+                if (!p2) return;
+                clothCtx.beginPath(); clothCtx.moveTo(p1.x, p1.y); clothCtx.lineTo(p2.x, p2.y); clothCtx.stroke();
+            } else if (tool === 'circle' || tool === 'erase_circle') {
+                if (!p2) return;
+                const r = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                clothCtx.beginPath(); clothCtx.arc(p1.x, p1.y, r, 0, Math.PI * 2); clothCtx.stroke();
+            } else if (tool === 'box' || tool === 'erase_box') {
+                if (!p2) return;
+                clothCtx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+            } else if (tool === 'polyline') {
+                if (!p2) return;
+                clothCtx.beginPath(); clothCtx.moveTo(p1.x, p1.y); clothCtx.lineTo(p2.x, p2.y); clothCtx.stroke();
+            } else if (tool === 'fill') {
+                clothCtx.fillRect(0, 0, st.canvas.width, st.canvas.height);
+            } else if (tool === 'text') {
+                const text = prompt('Enter text');
+                if (text) { clothCtx.font = `${Math.max(10, size * 2)}px Arial`; clothCtx.fillText(text, p1.x, p1.y); }
+            } else if (tool === 'eyedropper') {
+                const px = clothCtx.getImageData(p1.x, p1.y, 1, 1).data;
+                const hex = '#' + [px[0], px[1], px[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+                const colorInput = document.getElementById('cloth-color');
+                if (colorInput) colorInput.value = hex;
+            }
+            clothCtx.globalCompositeOperation = 'source-over';
+            st.texture.needsUpdate = true;
+            if (commit) pushClothingUndo(part);
+            if (document.getElementById('cloth-symmetry')?.checked && clothMirrorPart[part]) {
+                const mirror = clothMirrorPart[part];
+                const mst = partState(mirror);
+                mst.ctx.clearRect(0, 0, mst.canvas.width, mst.canvas.height);
+                mst.ctx.drawImage(st.canvas, 0, 0);
+                mst.texture.needsUpdate = true;
+            }
+        };
+        const initClothingEditor = () => {
+            const host = document.getElementById('clothing-editor-3d');
+            if (!host) return;
+            if (!clothRenderer) {
+                clothScene = new THREE.Scene(); clothScene.background = new THREE.Color('#111827');
+                clothCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000); clothCamera.position.set(10, 10, 14);
+                clothRenderer = new THREE.WebGLRenderer({ antialias: true }); clothRenderer.setSize(host.clientWidth, host.clientWidth);
+                host.appendChild(clothRenderer.domElement);
+                clothControls = new THREE.OrbitControls(clothCamera, clothRenderer.domElement);
+                clothScene.add(new THREE.AmbientLight(0xffffff, 0.9));
+                const dl = new THREE.DirectionalLight(0xffffff, 1.0); dl.position.set(4, 8, 6); clothScene.add(dl);
+                clothModel = createPlayerMesh('#e74c3c', null);
+                clothModel.traverse(n => {
+                    if (!n.isMesh) return;
+                    const part = n.userData.avatarPart || 'torso';
+                    n.material = new THREE.MeshLambertMaterial({ map: partState(part).texture });
+                });
+                clothScene.add(clothModel);
+                const renderLoop = () => { if (clothRenderer && document.getElementById('tab-shop-clothing').classList.contains('active')) { requestAnimationFrame(renderLoop); clothAutoRotate = !!document.getElementById('cloth-auto-rotate')?.checked; if (clothAutoRotate && clothModel) clothModel.rotation.y += 0.01; clothControls.update(); clothRenderer.render(clothScene, clothCamera);} };
+                renderLoop();
+                const dom = clothRenderer.domElement;
+                dom.addEventListener('pointerdown', (e) => {
+                    clothDrawing = true; clothStart = null;
+                    const hit = clothRayHit(e);
+                    if (hit) {
+                        clothControls.enabled = false;
+                        clothActivePart = hit.object.userData.avatarPart || 'torso';
+                        clothStart = uvToCanvas(hit.uv, clothActivePart);
+                        if (document.getElementById('cloth-tool').value !== 'polyline') pushClothingUndo(clothActivePart);
+                        if (document.getElementById('cloth-tool').value === 'brush' || document.getElementById('cloth-tool').value === 'erase_brush' || document.getElementById('cloth-tool').value === 'fill' || document.getElementById('cloth-tool').value === 'text') drawClothingAt(clothStart, null, document.getElementById('cloth-tool').value !== 'brush' && document.getElementById('cloth-tool').value !== 'erase_brush', clothActivePart);
+                    } else {
+                        clothControls.enabled = true; // orbit sky only
+                    }
+                });
+                dom.addEventListener('pointermove', (e) => { if (!clothDrawing) return; const hit = clothRayHit(e); if (!hit) return; const part = hit.object.userData.avatarPart || clothActivePart; const p = uvToCanvas(hit.uv, part); const tool = document.getElementById('cloth-tool').value; if (tool === 'brush' || tool === 'erase_brush') drawClothingAt(p, null, false, part); });
+                dom.addEventListener('pointerup', (e) => { const hit = clothRayHit(e); const part = hit ? (hit.object.userData.avatarPart || clothActivePart) : clothActivePart; const p = hit ? uvToCanvas(hit.uv, part) : null; const tool = document.getElementById('cloth-tool').value; if (clothStart && p && !(tool === 'brush' || tool === 'erase_brush' || tool === 'fill' || tool === 'text')) { if (tool === 'polyline' && clothPolyLast) drawClothingAt(clothPolyLast, p, true, part); else drawClothingAt(clothStart, p, true, part); if (tool === 'polyline') clothPolyLast = p; } clothDrawing = false; clothControls.enabled = true; });
+            }
+        };
+        const clothRayHit = (e) => {
+            const rect = clothRenderer.domElement.getBoundingClientRect();
+            clothMouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            clothMouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            clothRaycaster.setFromCamera(clothMouse, clothCamera);
+            const hits = clothRaycaster.intersectObjects(clothModel ? clothModel.children : [], true);
+            return hits.find(h => h.uv);
+        };
+        const toggleClothingLimb = (part) => {
+            if (!clothModel) return;
+            clothHidden[part] = !clothHidden[part];
+            const vis = !clothHidden[part];
+            clothModel.traverse(n => {
+                if (!n.isMesh) return;
+                if (part === 'head' && n.position.y > 3) n.visible = vis;
+                if (part === 'torso' && Math.abs(n.position.y) < 2) n.visible = vis;
+                if (part === 'arms' && Math.abs(n.position.x) > 2.2 && n.position.y > -2) n.visible = vis;
+                if (part === 'legs' && n.position.y < -1) n.visible = vis;
+            });
+        };
+        const submitClothing = async () => {
+            const root = document.getElementById('tab-shop-clothing');
+            const name = root.querySelector('#cloth-name').value.trim();
+            const description = root.querySelector('#cloth-desc').value.trim();
+            const price = Math.max(0, parseInt(root.querySelector('#cloth-price').value || '0', 10));
+            const type = root.querySelector('#cloth-type').value;
+            const visibility = root.querySelector('#cloth-visibility').value;
+            if (!name || !description) return showModal('Error', 'Name and description are required.');
+            const designImage = (type === 'shirt' ? partState('torso').canvas : partState('leftLeg').canvas).toDataURL('image/png');
+            try {
+                await apiCall('/clothing/items', 'POST', { name, description, price, type, visibility, designImage });
+                showModal('Created', visibility === 'public' ? 'Clothing submitted for moderation and added to your inventory.' : 'Private clothing created and added to your inventory.');
+                root.querySelector('#cloth-name').value = ''; root.querySelector('#cloth-desc').value = ''; root.querySelector('#cloth-price').value = '';
+            } catch (e) {}
+        };
+        const clearClothingPart = () => {
+            const st = partState(clothActivePart);
+            pushClothingUndo(clothActivePart);
+            st.ctx.clearRect(0, 0, st.canvas.width, st.canvas.height);
+            st.ctx.fillStyle = '#ffffff';
+            st.ctx.fillRect(0, 0, st.canvas.width, st.canvas.height);
+            st.texture.needsUpdate = true;
+        };
+        const setClothingZoom = (val) => {
+            if (!clothCamera) return;
+            clothCamera.position.set(10, 10, parseFloat(val) || 14);
+        };
+        window.toggleClothingLimb = toggleClothingLimb;
+        window.undoClothing = undoClothing;
+        window.redoClothing = redoClothing;
+        window.submitClothing = submitClothing;
+        window.clearClothingPart = clearClothingPart;
+        window.setClothingZoom = setClothingZoom;
 
         // --- Dashboard & Library ---
         const loadDashboardFriends = async () => {
@@ -4400,6 +5234,184 @@ Keep playing together for more daily rewards.`, 'Aww!');
                 grid.innerHTML = '<p style="color:#e74c3c;">Failed to load friend activity.</p>';
             }
         };
+        const showRandomBuilderTip = () => {
+            const tips = [
+                'Try mixing Neon + Fog for a cinematic sci-fi mood.',
+                'Press F in Studio to frame selected objects quickly.',
+                'Use low gravity zones to create floaty parkour routes.',
+                'Hidden shortcuts: Ctrl+D duplicate, Ctrl+Z undo, Ctrl+Y redo.',
+                'Use group publishing to release multiplayer maps for your clan.',
+                'Set Spawn above the ground to avoid instant collision bugs.',
+                'Use Tool parts for pickup gameplay like blasters and wands.',
+                'Name objects clearly so scripting is easier later.',
+                'Combine checkpoints with teleports for race game loops.',
+                'Lower fog distance to improve performance on mobile maps.',
+                'Use smooth plastic for cleaner stylized lighting.',
+                'Try adding one moving platform to teach traversal.',
+                'Use sound IDs in scripts for feedback on interactions.',
+                'Keep collision off for decorative micro-details.',
+                'Build with snap=1, then detail with snap=0.25.',
+                'Use map updates to post devlogs and patch notes.',
+                'For PvP maps, separate red/blue spawns with shields.',
+                'Use speed zones sparingly so movement still feels fair.',
+                'Terrain + painted roads can make districts feel alive.',
+                'Mix scripted smart objects with static scenery for performance.',
+                'Use groups to co-build and split map systems by role.',
+                'Test with graphics quality set to Low before publishing.',
+                'Set sun intensity slightly lower for horror/night vibes.'
+            ];
+            showModal('Builder Tip', tips[Math.floor(Math.random() * tips.length)]);
+        };
+        const loadCreatorChallenges = async () => {
+            const host = document.getElementById('creator-challenges');
+            if (!host) return;
+            try {
+                const data = await apiCall('/challenges/daily');
+                host.innerHTML = data.challenges.map(c => `
+                    <div style="display:flex; justify-content:space-between; border:1px solid #eee; border-radius:6px; padding:8px; margin-bottom:8px;">
+                        <div>
+                            ${c.text}
+                            <div style="font-size:12px; color:#777;">Reward: ${c.reward} SC</div>
+                            <div style="font-size:11px; color:${c.completed ? '#2ecc71' : '#e67e22'};">${c.completed ? 'Completed' : 'In progress'}</div>
+                        </div>
+                        <button class="btn btn-sm ${c.claimed ? '' : 'btn-success'}" ${c.claimed || !c.completed ? 'disabled' : ''} onclick="claimCreatorChallenge('${c.id}')">${c.claimed ? 'Claimed' : 'Claim'}</button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                host.innerHTML = '<p style="color:#e74c3c;">Could not load daily challenges.</p>';
+            }
+        };
+        const claimCreatorChallenge = async (id) => {
+            try {
+                const res = await apiCall('/challenges/claim', 'POST', { id });
+                showModal('Challenge Claimed', `+${res.reward} SC`);
+                if (currentUser) currentUser.coins = res.coins;
+                updateCoinsUI();
+                loadCreatorChallenges();
+            } catch (e) { showModal('Challenge', e.message || 'Could not claim.'); }
+        };
+        window.claimCreatorChallenge = claimCreatorChallenge;
+
+        const loadCreatorAcademy = async () => {
+            const grid = document.getElementById('academy-tracks-grid');
+            if (!grid) return;
+            grid.innerHTML = '<p>Loading academy tracks...</p>';
+            try {
+                const data = await apiCall('/academy/tracks');
+                grid.innerHTML = data.tracks.map(t => `
+                    <div class="game-card">
+                        <h3>${t.title}</h3>
+                        <p style="font-size:13px; color:#555;">${t.description}</p>
+                        <p style="font-size:12px; color:#888;">Reward: ${t.reward} SC</p>
+                        <button class="btn btn-sm btn-success" ${t.claimed ? 'disabled' : ''} onclick="completeAcademyTrack('${t.id}')">${t.claimed ? 'Claimed' : 'Complete Track'}</button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                grid.innerHTML = '<p style="color:#e74c3c;">Failed to load academy tracks.</p>';
+            }
+        };
+
+        const completeAcademyTrack = async (trackId) => {
+            try {
+                const res = await apiCall('/academy/complete', 'POST', { trackId });
+                showModal('Track Completed', `You earned ${res.reward} SC.`);
+                loadCreatorAcademy();
+            } catch (e) {}
+        };
+        window.completeAcademyTrack = completeAcademyTrack;
+
+        const loadCreatorJams = async () => {
+            const host = document.getElementById('jam-submissions');
+            const head = document.getElementById('jam-header');
+            if (!host || !head) return;
+            host.innerHTML = '<p>Loading jam...</p>';
+            try {
+                const data = await apiCall('/jams/current');
+                const jam = data.jam;
+                const timeLeft = Math.max(0, jam.endsAt - Date.now());
+                const hoursLeft = Math.floor(timeLeft / (1000 * 60 * 60));
+                head.innerHTML = `<p><strong>${jam.title}</strong> • Theme: <strong>${jam.theme}</strong> • ${hoursLeft}h left</p>`;
+                if (data.userSubmission) {
+                    document.getElementById('jam-game-id').value = data.userSubmission.gameId || '';
+                    document.getElementById('jam-title').value = data.userSubmission.title || '';
+                    document.getElementById('jam-pitch').value = data.userSubmission.pitch || '';
+                }
+                host.innerHTML = jam.submissions.length ? jam.submissions.map(s => `
+                    <div class="game-card">
+                        <h3>${s.title || 'Untitled Entry'}</h3>
+                        <p style="font-size:12px; color:#777;">by ${s.authorName}</p>
+                        <p style="font-size:13px;">${s.pitch || ''}</p>
+                        <button class="btn btn-sm btn-info" onclick="voteJamSubmission('${s.id}')">Vote (${s.voteCount || 0})</button>
+                    </div>
+                `).join('') : '<p>No submissions yet. Be the first!</p>';
+            } catch (e) {
+                host.innerHTML = '<p style="color:#e74c3c;">Failed to load jam.</p>';
+            }
+        };
+
+        const submitJamEntry = async () => {
+            const gameId = document.getElementById('jam-game-id').value.trim();
+            const title = document.getElementById('jam-title').value.trim();
+            const pitch = document.getElementById('jam-pitch').value.trim();
+            if (!gameId) return showModal('Missing Game ID', 'Enter a Game ID to submit.');
+            try {
+                await apiCall('/jams/submit', 'POST', { gameId, title, pitch });
+                showModal('Submitted', 'Your jam entry is live.');
+                loadCreatorJams();
+            } catch (e) {}
+        };
+        window.submitJamEntry = submitJamEntry;
+
+        const voteJamSubmission = async (submissionId) => {
+            try {
+                await apiCall('/jams/vote', 'POST', { submissionId });
+                loadCreatorJams();
+            } catch (e) {}
+        };
+        window.voteJamSubmission = voteJamSubmission;
+
+        const loadBlueprintExchange = async () => {
+            const feed = document.getElementById('blueprint-feed');
+            if (!feed) return;
+            feed.innerHTML = '<p>Loading blueprints...</p>';
+            try {
+                const data = await apiCall('/blueprints/feed');
+                feed.innerHTML = data.blueprints.length ? data.blueprints.map(bp => `
+                    <div class="game-card">
+                        <h3>${bp.title}</h3>
+                        <p style="font-size:12px; color:#777;">by ${bp.authorName}</p>
+                        <p style="font-size:13px;">${bp.summary || ''}</p>
+                        <p style="font-size:12px; color:#666;">Tags: ${(bp.tags || []).join(', ') || 'none'}</p>
+                        <button class="btn btn-sm btn-warning" onclick="toggleBlueprintFavorite('${bp.id}')">${bp.favorited ? '★ Favorited' : '☆ Favorite'} (${bp.favorites || 0})</button>
+                    </div>
+                `).join('') : '<p>No blueprints yet. Publish the first one.</p>';
+            } catch (e) {
+                feed.innerHTML = '<p style="color:#e74c3c;">Failed to load blueprints.</p>';
+            }
+        };
+
+        const publishBlueprint = async () => {
+            const title = document.getElementById('bp-title').value.trim();
+            const summary = document.getElementById('bp-summary').value.trim();
+            const tags = document.getElementById('bp-tags').value.split(',').map(t => t.trim()).filter(Boolean);
+            if (!title) return showModal('Missing title', 'Add a title for your blueprint.');
+            try {
+                await apiCall('/blueprints', 'POST', { title, summary, tags });
+                document.getElementById('bp-title').value = '';
+                document.getElementById('bp-summary').value = '';
+                document.getElementById('bp-tags').value = '';
+                loadBlueprintExchange();
+            } catch (e) {}
+        };
+        window.publishBlueprint = publishBlueprint;
+
+        const toggleBlueprintFavorite = async (id) => {
+            try {
+                await apiCall(`/blueprints/${id}/favorite`, 'POST', {});
+                loadBlueprintExchange();
+            } catch (e) {}
+        };
+        window.toggleBlueprintFavorite = toggleBlueprintFavorite;
 
         const loadDashboardGames = async () => {
             try {
@@ -4531,6 +5543,10 @@ let edData = {
         let edAnimationId = null;
 
 let edScene, edCamera, edRenderer, edControls; // Removed transformControl
+let edAmbientLight = null, edDirectionalLight = null;
+let playAmbientLight = null, playDirectionalLight = null;
+let autosaveRecoveryPrompted = false;
+const studioMobileState = { active: false, x: 0, y: 0, initialized: false };
 
         let raycaster, mouse;
         let editorMeshes = []; 
@@ -4540,6 +5556,7 @@ let edScene, edCamera, edRenderer, edControls; // Removed transformControl
         let isEditingSettings = false;
         let historyStack = [];
         let historyIndex = -1;
+        let teamCollaboratorsOnline = 0;
 
 let currentEditMode = 'translate';
         let selectionBoxHelper = null;
@@ -4666,7 +5683,7 @@ let currentEditMode = 'translate';
         // Auto-convert old grid games into the new freeform format
        // Auto-convert old grid games into the new freeform format
         const migrateLevelDataTo3D = (levelData) => {
-            let newData = { settings: { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
+            let newData = { settings: { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
             if (levelData.settings) newData.settings = levelData.settings;
             if (levelData.objects) { 
                 (levelData.objects || []).forEach(ensureSmartLogicDefaults);
@@ -4697,11 +5714,14 @@ let currentEditMode = 'translate';
                 if (historyStack.length > 30) historyStack.shift(); else historyIndex++;
             }
             if (!currentEditGameId) {
-                localStorage.setItem('ps_autosave', JSON.stringify({ edData, genre: document.getElementById('editor-genre').value, title: document.getElementById('editor-title').value }));
+                localStorage.setItem('ps_autosave', JSON.stringify({ edData, genre: document.getElementById('editor-genre').value, title: document.getElementById('editor-title').value, savedAt: Date.now() }));
             }
         };
 
         const undo = () => {
+            if (currentEditGameId && teamCollaboratorsOnline > 0) {
+                return showModal('Team Create Undo', 'Undo is temporarily disabled during active team sessions to avoid reverting teammates\' changes.');
+            }
             if (historyIndex > 0) {
                 historyIndex--; edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
                 buildEditorScene(); recordEdit(false);
@@ -4709,6 +5729,9 @@ let currentEditMode = 'translate';
         };
 
         const redo = () => {
+            if (currentEditGameId && teamCollaboratorsOnline > 0) {
+                return showModal('Team Create Redo', 'Redo is temporarily disabled during active team sessions to avoid overriding teammates\' progress.');
+            }
             if (historyIndex < historyStack.length - 1) {
                 historyIndex++; edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
                 buildEditorScene(); recordEdit(false);
@@ -4821,6 +5844,43 @@ let currentEditMode = 'translate';
         };
         window.addSmartObject = addSmartObject;
 
+        const createFloatingTextTexture = (text, color, fontFamily, fontSize) => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.font = `700 ${Math.max(8, Math.min(160, fontSize || 40))}px ${fontFamily || 'Arial'}`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.lineWidth = 10;
+            ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+            ctx.strokeText(text || 'Text', canvas.width / 2, canvas.height / 2);
+            ctx.fillStyle = color || '#ffffff';
+            ctx.fillText(text || 'Text', canvas.width / 2, canvas.height / 2);
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.needsUpdate = true;
+            return texture;
+        };
+
+        const applyFloatingTextVisual = (mesh, objData) => {
+            if (!mesh || !objData || objData.type !== 'floatingText') return;
+            let sprite = mesh.userData.floatingTextSprite || null;
+            if (!sprite) {
+                sprite = new THREE.Sprite(new THREE.SpriteMaterial({ transparent: true }));
+                sprite.position.set(0, Math.max(0.8, (objData.scale?.y || 2) * 0.55), 0);
+                mesh.add(sprite);
+                mesh.userData.floatingTextSprite = sprite;
+            }
+            if (sprite.material.map) sprite.material.map.dispose();
+            sprite.material.map = createFloatingTextTexture(objData.text || 'Text', objData.color || '#ffffff', objData.fontFamily || 'Arial', objData.textSize || 40);
+            sprite.material.needsUpdate = true;
+            const sx = Math.max(1, objData.scale?.x || 4);
+            const sy = Math.max(0.6, (objData.textSize || 40) / 40);
+            const lenFactor = Math.max(0.9, Math.min(1.8, (String(objData.text || 'Text').length || 4) / 14));
+            sprite.scale.set(sx * lenFactor, Math.max(1.8, sy * 2.1), 1);
+        };
+
       const addPart = (type) => {
             // Find exactly where the camera is looking
 const dir = new THREE.Vector3();
@@ -4839,8 +5899,19 @@ const dir = new THREE.Vector3();
             } else {
                 edData.objects.push({
                     id: newId, name: type.charAt(0).toUpperCase() + type.slice(1), type: type,
-                    position: { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 4, z: 4 }, color: '#3498db'
+                    position: { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 4, z: 4 }, color: '#3498db',
+                    isAnchored: true, canCollide: true
                 });
+                if (type === 'floatingText') {
+                    const created = edData.objects[edData.objects.length - 1];
+                    created.name = 'Floating Text';
+                    created.scale = { x: 6, y: 2, z: 0.5 };
+                    created.color = '#ffffff';
+                    created.material = 'Neon';
+                    created.text = 'Sample Text';
+                    created.fontFamily = 'Arial';
+                    created.textSize = 40;
+                }
             }
             
             buildEditorScene(); 
@@ -4896,7 +5967,6 @@ const loadSponsoredAssetsDashboard = async () => {
                         const newObj = JSON.parse(JSON.stringify(objData));
                         newObj.id = crypto.randomUUID();
                         newObj.name = newObj.name + ' (Copy)';
-                        newObj.position.x += 1.5; newObj.position.y += 1.5; // Offset slightly
                         edData.objects.push(newObj);
                         newSelectionIds.push(newObj.id);
                     }
@@ -4913,6 +5983,51 @@ const loadSponsoredAssetsDashboard = async () => {
                 renderExplorer(); recordEdit();
             }
         };
+
+        const saveStudioSnapshot = () => {
+            localStorage.setItem('ps_studio_snapshot', JSON.stringify({ edData, title: document.getElementById('editor-title').value, genre: document.getElementById('editor-genre').value, savedAt: Date.now() }));
+            showModal('Snapshot Saved', 'Studio snapshot saved locally.');
+        };
+        const loadStudioSnapshot = () => {
+            try {
+                const snap = JSON.parse(localStorage.getItem('ps_studio_snapshot') || 'null');
+                if (!snap || !snap.edData) return showModal('No Snapshot', 'No studio snapshot found.');
+                edData = migrateLevelDataTo3D(snap.edData);
+                if (snap.title) document.getElementById('editor-title').value = snap.title;
+                if (snap.genre) document.getElementById('editor-genre').value = snap.genre;
+                buildEditorScene(); recordEdit(true);
+                showModal('Snapshot Loaded', 'Studio snapshot restored.');
+            } catch (e) { showModal('Error', 'Failed to parse snapshot.'); }
+        };
+        const resetStudioCamera = () => {
+            if (!edCamera) return;
+            edCamera.position.set(25, 25, 25);
+            if (edControls) edControls.target.set(0, 0, 0);
+            edCamera.lookAt(0, 0, 0);
+        };
+        const alignSelectedToGround = () => {
+            selectedObjects.forEach(m => { m.position.y = Math.max(m.scale.y / 2, 0.5); syncObjectDataToMesh(m); });
+            buildEditorScene(); recordEdit();
+        };
+        const nudgeSelected = (axis, amount) => {
+            selectedObjects.forEach(m => { m.position[axis] += amount; syncObjectDataToMesh(m); });
+            buildEditorScene(); recordEdit();
+        };
+        const toggleSelectedWireframe = () => {
+            selectedObjects.forEach(m => { if (m.material) m.material.wireframe = !m.material.wireframe; });
+        };
+        const copySelectedObjectId = async () => {
+            if (!selectedObjects.length) return showModal('Select Object', 'Select an object first.');
+            const id = selectedObjects[selectedObjects.length - 1].userData.id || 'spawn';
+            try { await navigator.clipboard.writeText(String(id)); showModal('Copied', `Object ID copied: ${id}`); } catch(e) {}
+        };
+        window.saveStudioSnapshot = saveStudioSnapshot;
+        window.loadStudioSnapshot = loadStudioSnapshot;
+        window.resetStudioCamera = resetStudioCamera;
+        window.alignSelectedToGround = alignSelectedToGround;
+        window.nudgeSelected = nudgeSelected;
+        window.toggleSelectedWireframe = toggleSelectedWireframe;
+        window.copySelectedObjectId = copySelectedObjectId;
 
         const selectObjectById = (id, shiftKey = false) => {
             const mesh = id === 'spawn' ? editorMeshes.find(m => m.userData.isSpawn) : editorMeshes.find(m => m.userData.id === id);
@@ -5016,6 +6131,7 @@ document.addEventListener('keydown', (e) => {
                     document.getElementById('prop-name').disabled = true;
                     document.getElementById('prop-color').disabled = true;
                     document.getElementById('prop-material').disabled = true;
+                    document.getElementById('floating-text-props').style.display = 'none';
                     document.getElementById('smart-props-section').style.display = 'none';
                 } else {
                     const objData = edData.objects.find(o => o.id === primary.userData.id);
@@ -5028,6 +6144,19 @@ document.addEventListener('keydown', (e) => {
                         
                         document.getElementById('prop-material').value = objData.material || 'Plastic';
                         document.getElementById('prop-material').disabled = false;
+                        const fTextSection = document.getElementById('floating-text-props');
+                        if (objData.type === 'floatingText') {
+                            fTextSection.style.display = 'block';
+                            document.getElementById('prop-ftext').value = objData.text || 'Sample Text';
+                            document.getElementById('prop-ffont').value = objData.fontFamily || 'Arial';
+                            document.getElementById('prop-fsize').value = objData.textSize || 40;
+                        } else {
+                            fTextSection.style.display = 'none';
+                        }
+                        document.getElementById('prop-anchored').checked = objData.isAnchored !== false;
+                        document.getElementById('prop-cancollide').checked = objData.canCollide !== false;
+                        const tr = Math.max(0, Math.min(1, typeof objData.transparency === 'number' ? objData.transparency : (1 - (typeof primary.material?.opacity === 'number' ? primary.material.opacity : 1))));
+                        document.getElementById('prop-transparency').value = tr.toFixed(1);
                         const smartSection = document.getElementById('smart-props-section');
                         if (objData.smart && objData.smart.kind) {
                             ensureSmartLogicDefaults(objData);
@@ -5050,6 +6179,7 @@ document.addEventListener('keydown', (e) => {
                 
                 document.getElementById('props-empty').style.display = 'block';
                 document.getElementById('props-content').style.display = 'none';
+                document.getElementById('floating-text-props').style.display = 'none';
                 document.getElementById('smart-props-section').style.display = 'none';
             }
             renderExplorer();
@@ -5064,6 +6194,10 @@ document.addEventListener('keydown', (e) => {
             const name = document.getElementById('prop-name').value;
             const color = document.getElementById('prop-color').value;
             const material = document.getElementById('prop-material').value;
+            const transparency = Math.max(0, Math.min(1, parseFloat((document.getElementById('prop-transparency') || {}).value) || 0));
+            const floatingTextValue = (document.getElementById('prop-ftext') || {}).value || 'Text';
+            const floatingFont = (document.getElementById('prop-ffont') || {}).value || 'Arial';
+            const floatingSize = Math.max(8, Math.min(160, parseInt((document.getElementById('prop-fsize') || {}).value, 10) || 40));
 
             // Apply to all selected blocks for fast multi-editing!
             selectedObjects.forEach(mesh => {
@@ -5073,6 +6207,12 @@ document.addEventListener('keydown', (e) => {
                     if (mesh === primary) objData.name = name; // Only rename the main clicked object
                     objData.color = color;
                     objData.material = material;
+                    objData.transparency = transparency;
+                    if (objData.type === 'floatingText') {
+                        objData.text = floatingTextValue;
+                        objData.fontFamily = floatingFont;
+                        objData.textSize = floatingSize;
+                    }
                     
                     // Live-update the 3D graphics!
                     if (!mesh.userData.isLadder) { 
@@ -5081,6 +6221,9 @@ document.addEventListener('keydown', (e) => {
                         // Ladders retain their texture, but we tint the color underneath
                         mesh.material.color.setHex(color.replace('#', '0x'));
                     }
+                    mesh.material.transparent = transparency > 0 || mesh.material.transparent;
+                    mesh.material.opacity = Math.max(0.02, 1 - transparency);
+                    applyFloatingTextVisual(mesh, objData);
                 }
             });
             renderExplorer();
@@ -5241,10 +6384,18 @@ document.addEventListener('keydown', (e) => {
             
             isEditingSettings = true; renderExplorer();
             
-if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65 };
+if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
+            if (typeof edData.settings.sunIntensity === 'undefined') edData.settings.sunIntensity = 1.1;
+            if (typeof edData.settings.fogDistance === 'undefined') edData.settings.fogDistance = 1600;
+            if (typeof edData.settings.graphicsQuality === 'undefined') edData.settings.graphicsQuality = 'medium';
+            if (typeof edData.settings.exposure === 'undefined') edData.settings.exposure = 1.0;
             document.getElementById('ws-gravity').value = edData.settings.gravity;
             document.getElementById('ws-skycolor').value = edData.settings.skyColor;
             document.getElementById('ws-brightness').value = edData.settings.brightness;
+            document.getElementById('ws-sun-intensity').value = edData.settings.sunIntensity;
+            document.getElementById('ws-fog-distance').value = edData.settings.fogDistance;
+            document.getElementById('ws-graphics-quality').value = edData.settings.graphicsQuality;
+            document.getElementById('ws-exposure').value = edData.settings.exposure;
             document.getElementById('world-settings-panel').style.display = 'block';
         };
 
@@ -5253,6 +6404,10 @@ if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', bri
             edData.settings.gravity = parseFloat(document.getElementById('ws-gravity').value) || 0.35;
             edData.settings.skyColor = document.getElementById('ws-skycolor').value;
             edData.settings.brightness = parseFloat(document.getElementById('ws-brightness').value) || 1.0;
+            edData.settings.sunIntensity = parseFloat(document.getElementById('ws-sun-intensity').value) || 1.1;
+            edData.settings.fogDistance = parseFloat(document.getElementById('ws-fog-distance').value) || 1600;
+            edData.settings.graphicsQuality = document.getElementById('ws-graphics-quality').value || 'medium';
+            edData.settings.exposure = parseFloat(document.getElementById('ws-exposure').value) || 1.0;
             applyWorldSettings(); recordEdit();
         };
 
@@ -5260,6 +6415,23 @@ if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', bri
             if (edScene && edData.settings) {
                 edScene.background = new THREE.Color(edData.settings.skyColor);
                 edScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = edData.settings.brightness; });
+                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.2, edData.settings.sunIntensity || 1.1);
+                const fogDistance = Math.max(200, edData.settings.fogDistance || 1600);
+                edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.2, fogDistance);
+                if (edRenderer) {
+                    const q = edData.settings.graphicsQuality || 'medium';
+                    const shadow = q === 'high' || q === 'ultra';
+                    edRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+                    edRenderer.toneMappingExposure = Math.max(0.4, Math.min(2.5, edData.settings.exposure || 1));
+                    edRenderer.outputEncoding = THREE.sRGBEncoding;
+                    edRenderer.physicallyCorrectLights = true;
+                    edRenderer.shadowMap.enabled = shadow;
+                    edRenderer.shadowMap.type = q === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+                    if (edDirectionalLight) {
+                        edDirectionalLight.castShadow = shadow;
+                        edDirectionalLight.shadow.mapSize.set(q === 'ultra' ? 2048 : 1024, q === 'ultra' ? 2048 : 1024);
+                    }
+                }
             }
         };
 
@@ -5521,6 +6693,7 @@ if (item.type === 'button' && item.onClickEvent) {
             // --- ADD THESE TWO LINES ---
             objData.isAnchored = mesh.userData.isAnchored;
             objData.canCollide = mesh.userData.canCollide;
+            objData.noCollide = mesh.userData.canCollide === false;
             // ---------------------------
         }
     }
@@ -5539,7 +6712,7 @@ const promptClearEditor = () => {
         // --- Editor Core Engine ---
      const clearEditor = () => {
             currentEditGameId = null; 
-            edData = { settings: { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
+            edData = { settings: { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
@@ -5594,22 +6767,28 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         geo = new THREE.ExtrudeGeometry(shape, { depth: 1, bevelEnabled: false }); geo.center();
                     }
                     else if (objData.type === 'seat') geo = new THREE.BoxGeometry(1, 0.5, 1);
+                    else if (objData.type === 'floatingText') geo = new THREE.BoxGeometry(1, 1, 0.2);
                     else geo = new THREE.BoxGeometry(1, 1, 1);
                     
                     if (isLadder) mat = new THREE.MeshLambertMaterial({ color: objData.color, map: TextureManager.getLadder(), transparent: true });
+                    else if (objData.type === 'floatingText') mat = new THREE.MeshLambertMaterial({ color: objData.color || '#ffffff', transparent: true, opacity: 0.05 });
                     else mat = getMaterialForType(objData.material || 'Plastic', objData.color || '#3498db');
+                    const objTransparency = Math.max(0, Math.min(1, objData.transparency || 0));
+                    mat.transparent = objTransparency > 0 || mat.transparent;
+                    mat.opacity = Math.max(0.02, 1 - objTransparency);
 
                     const mesh = new THREE.Mesh(geo, mat);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-mesh.userData = { 
+                    mesh.userData = {
                 id: objData.id, 
                 isSpawn: false, 
                 type: objData.type,
                 isAnchored: objData.isAnchored !== false, // Defaults to true
                 canCollide: objData.canCollide !== false  // Defaults to true
             };
+                    if (objData.type === 'floatingText') applyFloatingTextVisual(mesh, objData);
 
                     edScene.add(mesh); editorMeshes.push(mesh);
                 }
@@ -5700,6 +6879,15 @@ mesh.userData = {
                         if (keys.e) edCamera.position.y += moveSpeed;
                         if (keys.q) edCamera.position.y -= moveSpeed;
                     }
+
+                    if (studioMobileState.active && window.StudioCamera) {
+                        window.StudioCamera.yaw -= studioMobileState.x * 0.045;
+                        window.StudioCamera.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, window.StudioCamera.pitch - studioMobileState.y * 0.02));
+                        window.StudioCamera.updateCamera();
+                        const forward = new THREE.Vector3();
+                        edCamera.getWorldDirection(forward); forward.y = 0; forward.normalize();
+                        edCamera.position.addScaledVector(forward, -studioMobileState.y * 0.55);
+                    }
                 }
 
                 edRenderer.render( edScene, edCamera );
@@ -5729,24 +6917,34 @@ mesh.userData = {
             } catch (e) {}
         };
         
+        let teamSyncInFlight = false;
+        let teamSyncCooldownUntil = 0;
         const startTeamSync = () => {
             if (teamSyncInterval) clearInterval(teamSyncInterval);
             teamSyncInterval = setInterval(async () => {
                 if(!currentEditGameId || !currentUser) return;
+                if (teamSyncInFlight || Date.now() < teamSyncCooldownUntil) return;
+                teamSyncInFlight = true;
                 try {
-                    const collabCursor = selectedObjects[0] ? { x: selectedObjects[0].position.x, y: selectedObjects[0].position.y, z: selectedObjects[0].position.z } : { x: edCamera.position.x, y: edCamera.position.y, z: edCamera.position.z };
+                    const collabCursor = { x: edCamera.position.x, y: edCamera.position.y, z: edCamera.position.z };
                     const res = await apiCall(`/games/${currentEditGameId}/sync`, 'POST', { gameData: edData, genre: document.getElementById('editor-genre').value, lastLocalEditTime: lastLocalEditTime, cursor: collabCursor });
                     if (!res.acceptedLocalUpdate && res.lastEditTime > lastLocalEditTime) {
                         edData = res.gameData; lastLocalEditTime = res.lastEditTime; buildEditorScene();
                     }
-                    renderCollaboratorCursors((res.cursors || res.teamCursors || res.collaborators || []).filter(c => c && c.username && c.username !== currentUser.username));
+                    renderCollaboratorCursors((res.activeEditorsData || res.cursors || res.teamCursors || res.collaborators || []).filter(c => c && c.username && c.username !== currentUser.username));
+                    teamCollaboratorsOnline = (res.activeEditorsData || []).filter(c => c && c.username && c.username !== currentUser.username).length;
                     const status = document.getElementById('autosave-status');
                     if (status && lastLocalEditTime > 0) { status.innerText = 'Autosaved'; setTimeout(() => status.innerText = '', 1000); }
-                } catch(e) {}
-            }, 1500); 
+                } catch(e) {
+                    teamSyncCooldownUntil = Date.now() + 2000; // prevent 502 spam storms
+                } finally {
+                    teamSyncInFlight = false;
+                }
+            }, 120);
         };
         const stopTeamSync = () => {
             if (teamSyncInterval) clearInterval(teamSyncInterval);
+            teamCollaboratorsOnline = 0;
             Object.keys(collabMeshes).forEach(k => { if (collabMeshes[k] && collabMeshes[k].parent) collabMeshes[k].parent.remove(collabMeshes[k]); delete collabMeshes[k]; });
         };
 
@@ -5757,17 +6955,32 @@ mesh.userData = {
                 const key = c.userId || c.username;
                 alive.add(key);
                 if (!collabMeshes[key]) {
+                    const ghostGroup = new THREE.Group();
                     const ghost = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 12), new THREE.MeshBasicMaterial({ color: 0x00e5ff }));
                     ghost.userData.isCollabGhost = true;
                     ghost.renderOrder = 999;
-                    edScene.add(ghost);
-                    collabMeshes[key] = ghost;
+                    ghostGroup.add(ghost);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 256; canvas.height = 64;
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, 256, 64);
+                    ctx.font = 'bold 28px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(c.username || 'Teammate', 128, 32);
+                    const labelTex = new THREE.CanvasTexture(canvas);
+                    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex, transparent: true }));
+                    label.position.set(0, 1.3, 0);
+                    label.scale.set(4.2, 1.1, 1);
+                    ghostGroup.add(label);
+                    edScene.add(ghostGroup);
+                    collabMeshes[key] = ghostGroup;
                 }
                 const cx = c.cursor && typeof c.cursor.x === 'number' ? c.cursor.x : 0;
                 const cy = c.cursor && typeof c.cursor.y === 'number' ? c.cursor.y : 0;
                 const cz = c.cursor && typeof c.cursor.z === 'number' ? c.cursor.z : 0;
                 collabMeshes[key].position.set(cx, cy + 1.2, cz);
-                collabMeshes[key].position.set(c.cursor?.x || 0, (c.cursor?.y || 0) + 1.2, c.cursor?.z || 0);
             });
             Object.keys(collabMeshes).forEach(key => {
                 if (!alive.has(key)) {
@@ -5798,6 +7011,8 @@ playerObj = {
         
         let playMeshes = []; 
         let playColliders = []; 
+        let lastPlayFrameAt = performance.now();
+        let playSyncInFlight = false;
         let otherPlayerMeshes = {}; 
         let playSyncInterval = null;
         let isPlayActive = false;
@@ -6137,6 +7352,26 @@ const loadPsworld = (event) => {
         };
 
 
+const applyPlayGraphicsSettings = (settings = {}) => {
+            if (!playScene || !playRenderer) return;
+            const quality = settings.graphicsQuality || 'medium';
+            const exposure = Math.max(0.4, Math.min(2.5, settings.exposure || 1));
+            const fogDistance = Math.max(200, settings.fogDistance || 1600);
+
+            playScene.fog = new THREE.Fog(settings.skyColor || '#87CEEB', fogDistance * 0.25, fogDistance);
+            playRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+            playRenderer.toneMappingExposure = exposure;
+            playRenderer.outputEncoding = THREE.sRGBEncoding;
+            playRenderer.physicallyCorrectLights = true;
+            playRenderer.shadowMap.enabled = quality === 'high' || quality === 'ultra';
+            playRenderer.shadowMap.type = quality === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+            if (playDirectionalLight) {
+                playDirectionalLight.intensity = Math.max(0.2, settings.sunIntensity || 1.1);
+                playDirectionalLight.castShadow = playRenderer.shadowMap.enabled;
+                playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 2048 : 1024, quality === 'ultra' ? 2048 : 1024);
+            }
+        };
+
 const startGame = () => {
             currentSessionStartTime = Date.now(); 
             currentSessionJumps = 0; 
@@ -6159,13 +7394,15 @@ const startGame = () => {
                 
                 const ambLight = new THREE.AmbientLight( 0xffffff, 1.0 );
                 ambLight.isAmbientLight = true;
+                playAmbientLight = ambLight;
                 playScene.add( ambLight );
                 
                 const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
                 playScene.add(hemiLight);
                 
-                const dirLight = new THREE.DirectionalLight( 0xffffff, 0.5 );
+                const dirLight = new THREE.DirectionalLight( 0xffffff, 0.9 );
                 dirLight.position.set( 1, 1, 0.5 ).normalize();
+                playDirectionalLight = dirLight;
                 playScene.add( dirLight );
 
                 playRenderer = new THREE.WebGLRenderer( { antialias: true } );
@@ -6183,9 +7420,11 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
 
             stopGameLoop(); setupMobileControls();
             
-            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0 };
+            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
             playScene.background = new THREE.Color(activeLevel.settings.skyColor);
             playScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = activeLevel.settings.brightness; });
+            applyPlayGraphicsSettings(activeLevel.settings);
+            window.EnvironmentEngine.generateClouds(playScene, '#ffffff');
             
             playerObj.x = activeLevel.spawn ? activeLevel.spawn.x : 0; 
             playerObj.y = activeLevel.spawn ? activeLevel.spawn.y + 3 : 10;
@@ -6249,6 +7488,17 @@ animatePlay();
         const buildScriptContext = (mesh) => ({
             mesh,
             player: playerObj,
+            time: () => performance.now() / 1000,
+            deltaTime: () => Math.max(0.001, Math.min(0.06, (window.playDeltaMs || 16) / 1000)),
+            part: {
+                setPosition: (x, y, z) => mesh.position.set(Number(x) || 0, Number(y) || 0, Number(z) || 0),
+                move: (dx = 0, dy = 0, dz = 0) => mesh.position.add(new THREE.Vector3(Number(dx) || 0, Number(dy) || 0, Number(dz) || 0)),
+                setRotation: (x = 0, y = 0, z = 0) => mesh.rotation.set(Number(x) || 0, Number(y) || 0, Number(z) || 0),
+                rotate: (dx = 0, dy = 0, dz = 0) => { mesh.rotation.x += Number(dx) || 0; mesh.rotation.y += Number(dy) || 0; mesh.rotation.z += Number(dz) || 0; },
+                setScale: (x = 1, y = 1, z = 1) => mesh.scale.set(Math.max(0.05, Number(x) || 1), Math.max(0.05, Number(y) || 1), Math.max(0.05, Number(z) || 1)),
+                setColor: (hex = '#3498db') => { if (mesh.material && mesh.material.color) mesh.material.color.set(String(hex)); },
+                lookAtPlayer: () => mesh.lookAt(new THREE.Vector3(playerObj.x, playerObj.y + 2, playerObj.z))
+            },
             ui: uiRuntimeManager,
             scene: playScene,
             showModal,
@@ -6303,7 +7553,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     group.position.set(objData.position.x, objData.position.y, objData.position.z);
                     group.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     group.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-                    group.userData = { id: objData.id, type: 'vehicle', compiledScript: null, vSpeed: 0.5, vTurn: 0.03 };
+                    group.userData = { id: objData.id, type: 'vehicle', compiledScript: null, vSpeed: 0.5, vTurn: 0.03, isAnchored: objData.isAnchored !== false };
 
                     (objData.children || []).forEach(cData => {
                         let geo, mat;
@@ -6322,13 +7572,11 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         playMeshes.push(childMesh); // Push children to playMeshes so seats can be detected!
                     });
 
-               if (objData.script && objData.script.trim() !== '') {
-                        const scriptSource = objData.scriptJs || objData.script || '';
-                    if (scriptSource.trim() !== '') {
-                        const engine = new JavaScriptBehaviorEngine(scriptSource, () => buildScriptContext(mesh));
-                        mesh.userData.sculptEngine = engine;
+                    const vehicleScriptSource = objData.scriptJs || objData.script || '';
+                    if (vehicleScriptSource.trim() !== '') {
+                        const engine = new JavaScriptBehaviorEngine(vehicleScriptSource, () => buildScriptContext(group));
+                        group.userData.sculptEngine = engine;
                         engine.triggerEvent('start');
-                    }
                     }
                     playScene.add(group); playMeshes.push(group);
 
@@ -6340,25 +7588,29 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     else if (objData.type === 'cone') geo = new THREE.ConeGeometry(0.5, 1, 32);
                     else if (objData.type === 'triangle') geo = new THREE.CylinderGeometry(0.5, 0.5, 1, 3);
                     else if (objData.type === 'seat') geo = new THREE.BoxGeometry(1, 0.5, 1);
+                    else if (objData.type === 'floatingText') geo = new THREE.BoxGeometry(1, 1, 0.2);
                     else if (objData.type === 'wedge') { const shape = new THREE.Shape(); shape.moveTo(-0.5, -0.5); shape.lineTo(0.5, -0.5); shape.lineTo(0.5, 0.5); shape.lineTo(-0.5, -0.5); geo = new THREE.ExtrudeGeometry(shape, { depth: 1, bevelEnabled: false }); geo.center(); }
                     else geo = new THREE.BoxGeometry(1, 1, 1);
 
                     if (isLadder) mat = new THREE.MeshLambertMaterial({ color: objData.color, map: TextureManager.getLadder(), transparent: true });
+                    else if (objData.type === 'floatingText') mat = new THREE.MeshLambertMaterial({ color: objData.color || '#ffffff', transparent: true, opacity: 0.01 });
                     else mat = getMaterialForType(objData.material || 'Plastic', objData.color || '#3498db');
+                    const objTransparency = Math.max(0, Math.min(1, objData.transparency || 0));
+                    mat.transparent = objTransparency > 0 || mat.transparent;
+                    mat.opacity = Math.max(0.02, 1 - objTransparency);
 
                     const mesh = new THREE.Mesh(geo, mat);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: objData.noCollide || false, smart: objData.smart || null, smartState: {} };
+mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: (objData.noCollide || objData.canCollide === false), isAnchored: objData.isAnchored !== false, smart: objData.smart || null, smartState: {} };
+                    if (objData.type === 'floatingText') applyFloatingTextVisual(mesh, objData);
                     
-            if (objData.script && objData.script.trim() !== '') {
-                        const scriptSource = objData.scriptJs || objData.script || '';
+                    const scriptSource = objData.scriptJs || objData.script || '';
                     if (scriptSource.trim() !== '') {
                         const engine = new JavaScriptBehaviorEngine(scriptSource, () => buildScriptContext(mesh));
                         mesh.userData.sculptEngine = engine;
                         engine.triggerEvent('start');
-                    }
                     }
 
                     if (objData.type === 'tool') { playerInventory.push({ data: objData, mesh: mesh }); playMeshes.push(mesh); } 
@@ -6406,7 +7658,7 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
             window.playSlopes = playMeshes.filter(m => ['wedge', 'triangle'].includes(m.userData.type));
             window.playSlopes.forEach(m => { if (m.material) m.material.side = THREE.DoubleSide; });
 
-            playerMesh = createPlayerMesh(currentUser ? currentUser.color : '#e74c3c', currentUser ? currentUser.equipped : null);
+            playerMesh = createPlayerMesh(currentUser ? currentUser.color : '#e74c3c', currentUser ? currentUser.equipped : null, currentUser ? currentUser.bodyColors : null, currentUser ? { shirtImage: currentUser.equippedShirtImage || null, pantsImage: currentUser.equippedPantsImage || null } : null);
             playerMesh.scale.set(0.5, 0.5, 0.5); playScene.add(playerMesh); renderPlayToolbar();
             window.smartRuntime = { lastInteractAt: 0 };
         };
@@ -6416,16 +7668,19 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
 
     playSyncInterval = setInterval(async () => {
         if (!isPlayActive || !currentPlayGameId || !currentUser) return;
+        if (playSyncInFlight) return;
+        playSyncInFlight = true;
 
         try {
-            const others = await apiCall(`/games/${currentPlayGameId}/play-sync`, 'POST', {
-                x: playerObj.x,
-                y: playerObj.y,
-                z: playerObj.z,
-                rotY: playerObj.rotY,
-                sceneId: 'main',
-                color: currentUser.color || '#e74c3c'
-            });
+                const others = await apiCall(`/games/${currentPlayGameId}/play-sync`, 'POST', {
+                    x: playerObj.x,
+                    y: playerObj.y,
+                    z: playerObj.z,
+                    rotY: playerObj.rotY,
+                    sceneId: 'main',
+                    color: currentUser.color || '#e74c3c',
+                    bodyColors: currentUser.bodyColors || null
+                });
 
             if (serverLeaderboardOpen) {
                 fetchServerLeaderboardPlayers();
@@ -6440,19 +7695,30 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
                 }
             }
 
-            others.forEach(o => {
-                if (!otherPlayerMeshes[o.userId]) {
-                    const mesh = createPlayerMesh(o.color, o.equipped);
-                    playScene.add(mesh);
-                    mesh.scale.set(0.5, 0.5, 0.5);
+                others.forEach(o => {
+                    if (!otherPlayerMeshes[o.userId]) {
+                        const mesh = createPlayerMesh(o.color, o.equipped, o.bodyColors || null, { shirtImage: o.equippedShirtImage || null, pantsImage: o.equippedPantsImage || null });
+                        playScene.add(mesh);
+                        mesh.scale.set(0.5, 0.5, 0.5);
 
-                    otherPlayerMeshes[o.userId] = {
-                        mesh,
-                        username: o.username
-                    };
-                }
+                        otherPlayerMeshes[o.userId] = {
+                            mesh,
+                            username: o.username,
+                            equipped: o.equipped || null
+                        };
+                    } else if (otherPlayerMeshes[o.userId].equipped !== (o.equipped || null)) {
+                        const oldMesh = otherPlayerMeshes[o.userId].mesh;
+                        const replacement = createPlayerMesh(o.color, o.equipped, o.bodyColors || null, { shirtImage: o.equippedShirtImage || null, pantsImage: o.equippedPantsImage || null });
+                        replacement.scale.set(0.5, 0.5, 0.5);
+                        replacement.position.copy(oldMesh.position);
+                        replacement.rotation.copy(oldMesh.rotation);
+                        playScene.remove(oldMesh);
+                        playScene.add(replacement);
+                        otherPlayerMeshes[o.userId].mesh = replacement;
+                        otherPlayerMeshes[o.userId].equipped = o.equipped || null;
+                    }
 
-                const pm = otherPlayerMeshes[o.userId].mesh;
+                    const pm = otherPlayerMeshes[o.userId].mesh;
                 pm.position.set(o.x, o.y + 3, o.z);
                 pm.rotation.y = o.rotY || 0;
 
@@ -6466,7 +7732,8 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
             });
 
         } catch (e) {}
-    }, 2);
+        finally { playSyncInFlight = false; }
+    }, 120);
 };
 
 
@@ -6790,6 +8057,9 @@ const updateChatBubbles = () => {
                 window.smartRuntime.lastInteractAt = now;
                 playerObj.shieldUntil = now + Math.max(2000, (smart.power || 8) * 1000);
                 showModal('Shield Activated', `Shield active for ${Math.round((playerObj.shieldUntil - now)/1000)}s.`);
+            } else if (smart.kind === 'factoryDoor' && interactPressed && now - (window.smartRuntime.lastInteractAt || 0) > 800) {
+                window.smartRuntime.lastInteractAt = now;
+                startManufacturerJob(smart.power || 1);
             }
 
             if (mesh.userData.sculptEngine && interactPressed) {
@@ -6804,8 +8074,51 @@ const updateChatBubbles = () => {
             });
         };
 
+        const updateDynamicObjectPhysics = () => {
+            if (!activeLevel || !playScene) return;
+            const gravityStrength = Math.max(0.02, (activeLevel.settings?.gravity || 0.35) * 0.06);
+            const playerPos = new THREE.Vector3(playerObj.x, playerObj.y + 2, playerObj.z);
+            const staticMeshes = playMeshes.filter(m => m?.isMesh && !m.userData?.isTool && !m.userData?.noCollide && m.userData?.isAnchored !== false);
+            const dynamicMeshes = playMeshes.filter(m => m?.isMesh && !m.userData?.isTool && !m.userData?.noCollide && m.userData?.isAnchored === false && !['seat', 'aircraftSeat'].includes(m.userData?.type));
+
+            dynamicMeshes.forEach(mesh => {
+                if (!mesh.userData.physicsVel) mesh.userData.physicsVel = new THREE.Vector3(0, 0, 0);
+                const vel = mesh.userData.physicsVel;
+                vel.y -= gravityStrength;
+                vel.multiplyScalar(0.992);
+
+                const pushDir = mesh.position.clone().sub(playerPos);
+                pushDir.y = 0;
+                const dist = pushDir.length();
+                if (dist > 0 && dist < 3.2) {
+                    pushDir.normalize();
+                    vel.x += pushDir.x * 0.03;
+                    vel.z += pushDir.z * 0.03;
+                }
+
+                mesh.position.add(vel);
+
+                const halfY = new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3()).y / 2;
+                if (mesh.position.y < -120) {
+                    mesh.position.y = 30;
+                    vel.set(0, 0, 0);
+                }
+
+                const ray = new THREE.Raycaster(new THREE.Vector3(mesh.position.x, mesh.position.y + 2, mesh.position.z), new THREE.Vector3(0, -1, 0), 0, 6);
+                const hits = ray.intersectObjects(staticMeshes, true);
+                if (hits.length > 0 && vel.y <= 0) {
+                    const floorY = hits[0].point.y + halfY + 0.03;
+                    if (mesh.position.y < floorY + 0.3) {
+                        mesh.position.y = floorY;
+                        vel.y = 0;
+                    }
+                }
+            });
+        };
+
     const updatePhysics3D = () => {
             if (playerObj.seatCooldown > 0) playerObj.seatCooldown--;
+            updateDynamicObjectPhysics();
 
             // --- ADVANCED VEHICLE & AIRCRAFT PHYSICS ---
             if (playerObj.sitting && playerObj.vehicleSeat) {
@@ -7191,6 +8504,9 @@ const updateChatBubbles = () => {
 const animatePlay = () => {
             if (document.getElementById('view-play').classList.contains('active')) {
                 playAnimationId = requestAnimationFrame(animatePlay);
+                const nowPerf = performance.now();
+                window.playDeltaMs = nowPerf - lastPlayFrameAt;
+                lastPlayFrameAt = nowPerf;
 
                 const time = Date.now() * 0.001; let hitboxesNeedUpdate = false;
                 
@@ -7736,20 +9052,29 @@ const groupAsAircraft = () => {
         let cityGlobalData = null;
         let selectedCityPlot = null;
         let chosenNeighborhood = null;
+        let activeCityDistrict = null;
+        const cityDistricts = [
+            { name: 'Greenridge', desc: 'Peaceful, trees, suburban', color: '#2ecc71' },
+            { name: 'Sandfall', desc: 'Dry, desert neighborhood', color: '#e67e22' },
+            { name: 'Industrial District', desc: 'Factories, jobs, busy roads', color: '#7f8c8d' }
+        ];
+        const manufacturerJobState = {
+            active: false,
+            startTime: 0,
+            products: 0,
+            packaged: 0,
+            step: 'collect',
+            stepStartedAt: 0,
+            activeMs: 0
+        };
 
    const finishCityWelcome = async () => {
             document.getElementById('city-intro-overlay').style.display = 'none';
             try {
-                // Grant the +50 SculptCoins and +500 Bucks Reward!
-                const res = await apiCall('/city/sync', 'POST', { coinsToAdd: 50, bucksToAdd: 500 });
+                const res = await apiCall('/city/sync', 'POST', { coinsToAdd: 550, tutorialComplete: true });
                 document.getElementById('nav-coins').innerText = res.coins;
-                
-                if (res.cityData) {
-                    cityGlobalData.cityData.bucks = res.cityData.bucks;
-                    document.getElementById('nav-bucks').innerText = res.cityData.bucks;
-                }
-                
-                showModal('Tutorial Complete!', 'You earned +50 SculptCoins and +500 Bucks for completing the tour!');
+                if (res.cityData) cityGlobalData.cityData = res.cityData;
+                showModal('Tutorial Complete!', 'You earned +550 Sculpt Coins for completing the tour!');
             } catch(e) {}
         };
 
@@ -7759,11 +9084,22 @@ const groupAsAircraft = () => {
             document.getElementById('city-loading-screen').style.display = 'flex';
             try {
                 cityGlobalData = await apiCall('/city/info');
-                
-                // Sync Bucks to UI!
                 if (cityGlobalData.cityData) {
-                    document.getElementById('nav-bucks').innerText = cityGlobalData.cityData.bucks || 0;
-                    startCityGame(cityGlobalData.cityData.neighborhood);
+                    if (cityGlobalData.cityData.tutorialComplete) {
+                        document.getElementById('city-loading-screen').style.display = 'none';
+                        document.getElementById('city-intro-overlay').style.display = 'flex';
+                        document.getElementById('city-dialogue-text').innerText = "Welcome back to Sculpt City! Choose a sculpt city district to teleport to below!";
+                        document.getElementById('city-step-1').style.display = 'none';
+                        document.getElementById('city-step-2').style.display = 'none';
+                        document.getElementById('city-step-3').style.display = 'none';
+                        document.getElementById('city-step-4').style.display = 'none';
+                        document.getElementById('city-step-5').style.display = 'none';
+                        document.getElementById('city-returning-step').style.display = 'block';
+                        document.getElementById('city-district-search').value = '';
+                        renderDistrictButtons('');
+                    } else {
+                        startCityGame(cityGlobalData.cityData.neighborhood);
+                    }
                 } else {
                     document.getElementById('city-loading-screen').style.display = 'none';
                     document.getElementById('city-intro-overlay').style.display = 'flex';
@@ -7771,6 +9107,7 @@ const groupAsAircraft = () => {
                     document.getElementById('city-step-1').style.display = 'block';
                     document.getElementById('city-step-2').style.display = 'none';
                     document.getElementById('city-step-3').style.display = 'none';
+                    document.getElementById('city-returning-step').style.display = 'none';
                 }
             } catch(e) { 
                 console.error("Sculpt City Load Error:", e);
@@ -7779,11 +9116,36 @@ const groupAsAircraft = () => {
             }
         };
 
+        const renderDistrictButtons = (term = '') => {
+            const list = document.getElementById('city-district-buttons');
+            if (!list) return;
+            const lowered = String(term || '').toLowerCase().trim();
+            const filtered = cityDistricts.filter(d => d.name.toLowerCase().includes(lowered));
+            list.innerHTML = filtered.length ? '' : `<div style="font-weight:600; color:#7f8c8d;">No matching districts found.</div>`;
+            filtered.forEach(d => {
+                const btn = document.createElement('button');
+                btn.className = 'btn';
+                btn.style.background = d.color;
+                btn.style.borderBottomColor = '#2c3e50';
+                btn.innerHTML = `<strong>${d.name}</strong><br><span style="font-size:12px; font-weight:normal;">${d.desc}</span>`;
+                btn.onclick = () => cityTeleportToDistrict(d.name);
+                list.appendChild(btn);
+            });
+        };
+
+        const cityTeleportToDistrict = (districtName) => {
+            document.getElementById('city-intro-overlay').style.display = 'none';
+            document.getElementById('city-loading-screen').style.display = 'flex';
+            setTimeout(() => startCityGame(districtName), 150);
+        };
+        window.renderDistrictButtons = renderDistrictButtons;
+
 
         const cityShowNeighborhoods = () => {
             document.getElementById('city-dialogue-text').innerText = "Pick a neighborhood to start in: (You can have multiple houses and live in multiple neighborhoods as you progress!)";
             document.getElementById('city-step-1').style.display = 'none';
             document.getElementById('city-step-2').style.display = 'flex';
+            document.getElementById('city-returning-step').style.display = 'none';
         };
         
         
@@ -7796,14 +9158,14 @@ const groupAsAircraft = () => {
         // ==========================================
         let cityInventory = [
             { id: 'sedan_1', name: 'Classic Sedan', type: 'vehicle', category: 'Vehicles', cost: 0 },
-            { id: 'pickup_1', name: 'Pickup Truck', type: 'vehicle', category: 'Vehicles', cost: 1100 }
+            { id: 'pickup_1', name: 'Pickup Truck', type: 'vehicle', category: 'Vehicles', cost: 150 }
         ];
         let equippedVehicleId = null;
         window.activeSpawnedVehicle = null;
 
         const openInventory = () => {
             document.getElementById('inventory-modal').style.display = 'flex';
-            document.getElementById('modal-bucks').innerText = cityGlobalData.cityData.bucks || 0;
+            document.getElementById('modal-city-coins').innerText = currentUser?.coins || 0;
             renderInventoryUI();
         };
 
@@ -7831,7 +9193,7 @@ const groupAsAircraft = () => {
                     btn.onclick = () => toggleEquipItem(item.id);
                 } else {
                     btn.className = 'btn btn-warning';
-                    btn.innerText = `Buy: ${item.cost} Bucks`;
+                    btn.innerText = `Buy: ${item.cost} Sculpt Coins`;
                     btn.onclick = () => buyCityVehicle(item.id, item.cost);
                 }
 
@@ -7840,12 +9202,13 @@ const groupAsAircraft = () => {
         };
 
         const buyCityVehicle = async (vehicleId, cost) => {
-            if ((cityGlobalData.cityData.bucks || 0) < cost) return showModal('Transaction Failed', 'You do not have enough Bucks!');
+            if ((currentUser?.coins || 0) < cost) return showModal('Transaction Failed', 'You do not have enough Sculpt Coins!');
             try {
                 const res = await apiCall('/city/sync', 'POST', { vehicleToBuy: vehicleId, cost: cost });
                 cityGlobalData.cityData = res.cityData;
-                document.getElementById('nav-bucks').innerText = cityGlobalData.cityData.bucks;
-                document.getElementById('modal-bucks').innerText = cityGlobalData.cityData.bucks;
+                currentUser.coins = res.coins;
+                updateNav();
+                document.getElementById('modal-city-coins').innerText = res.coins;
                 renderInventoryUI();
             } catch(e) {}
         };
@@ -8024,45 +9387,91 @@ const groupAsAircraft = () => {
 
             return objs;
         };
+        const generateIndustrialDistrict = () => {
+            const objs = [];
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:0, y:-2.1, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:3200, y:4, z:3200}, color: '#2f3740', material: 'Slate' });
+
+            const blockSize = 220;
+            for (let gx = -3; gx <= 3; gx++) {
+                for (let gz = -3; gz <= 3; gz++) {
+                    const cx = gx * blockSize;
+                    const cz = gz * blockSize;
+                    const roadEW = gz % 2 === 0;
+                    const roadNS = gx % 2 === 0;
+
+                    if (roadEW || roadNS) {
+                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-1.95, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:200, y:3.8, z:200}, color: '#3a434d', material: 'Slate' });
+                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-0.05, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:18, y:0.1, z:2}, color: '#f1c40f', material: 'Neon', noCollide: true });
+                    } else {
+                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-1.95, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:200, y:3.8, z:200}, color: '#67717a', material: 'Concrete' });
+                    }
+                }
+            }
+
+            const factoryPlotCenters = [
+                [-220, -220], [220, -220],
+                [-220, 220], [220, 220],
+                [0, -440], [0, 440]
+            ];
+
+            const addFactoryVariant = (cx, cz, variant, idx) => {
+                const variantConfigs = [
+                    { wall: '#8f99a3', roof: '#4f5862', accent: '#616c77' },
+                    { wall: '#9ba6b1', roof: '#404954', accent: '#5d6873' },
+                    { wall: '#808b96', roof: '#505965', accent: '#66727f' }
+                ];
+                const cfg = variantConfigs[variant];
+
+                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:7.5, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:64, y:15, z:52}, color: cfg.wall, material: 'Concrete' });
+                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:16.4, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:68, y:1.4, z:56}, color: cfg.roof, material: 'Slate' });
+
+                const chimneyX = variant === 1 ? 22 : -22;
+                objs.push({ id: crypto.randomUUID(), type: 'cylinder', position: {x:cx + chimneyX, y:19, z:cz - 14}, rotation:{x:0,y:0,z:0}, scale:{x:2.8, y:18, z:2.8}, color: '#5d6772', material: 'Metal' });
+                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx + (chimneyX * 0.5), y:12, z:cz - 24}, rotation:{x:0,y:0,z:0}, scale:{x:12, y:10, z:3}, color: cfg.accent, material: 'Metal' });
+
+                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:3.3, z:cz + 26}, rotation:{x:0,y:0,z:0}, scale:{x:9, y:6.6, z:0.7}, color: '#273746', material: 'Metal', smart: { kind: 'factoryDoor', title: `Factory ${idx + 1} Entrance`, power: idx + 1, range: 8, team: 'all', advanced: false } });
+                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:1, z:cz + 38}, rotation:{x:0,y:0,z:0}, scale:{x:20, y:0.2, z:12}, color: '#9aa4ae', material: 'Concrete' });
+            };
+
+            factoryPlotCenters.forEach((p, idx) => addFactoryVariant(p[0], p[1], idx % 3, idx));
+            return objs;
+        };
+
         const startCityGame = (neighborhood, isFirstTime = false) => {
             isCityMode = true;
+            activeCityDistrict = neighborhood;
+            const isIndustrial = neighborhood === 'Industrial District';
             const isGrass = neighborhood === 'Greenridge';
-            const groundColor = isGrass ? '#55aa55' : '#f1c40f'; 
-            
-            let cityObjects = [];
-            
-            // Lower Asphalt slightly to avoid Material Z-Fighting overlapping!
-            // FIX: Use realistic SLATE texture for the massive asphalt road foundation!
-            cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:0, y:-2.1, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2000, y:4, z:2000}, color: '#34495e', material: 'Slate' });
+            let cityObjects = isIndustrial ? generateIndustrialDistrict() : [];
 
-            for (let x = -5; x <= 5; x++) {
-                for (let z = -5; z <= 5; z++) {
-                    // FIX: Plots use GRASS or the brand new SAND material so they have highly realistic ground textures!
-                    cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:x*50, y:-2, z:z*50}, rotation:{x:0,y:0,z:0}, scale:{x:40, y:4, z:40}, color: groundColor, material: isGrass ? 'Grass' : 'Sand' });
+            if (!isIndustrial) {
+                const groundColor = isGrass ? '#55aa55' : '#f1c40f';
+                cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:0, y:-2.1, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2000, y:4, z:2000}, color: '#34495e', material: 'Slate' });
+                for (let x = -5; x <= 5; x++) {
+                    for (let z = -5; z <= 5; z++) {
+                        cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:x*50, y:-2, z:z*50}, rotation:{x:0,y:0,z:0}, scale:{x:40, y:4, z:40}, color: groundColor, material: isGrass ? 'Grass' : 'Sand' });
+                    }
                 }
-            }
-            for (let i = -5; i <= 5; i++) {
-                for (let j = -10; j <= 10; j++) {
-                    // Stripes rest perfectly on the lowered asphalt
-                    cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:i*50 + 25, y:-0.05, z:j*25}, rotation:{x:0,y:0,z:0}, scale:{x:0.5, y:0.1, z:8}, color: '#f1c40f', material: 'Neon', noCollide: true });
-                    cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:j*25, y:-0.05, z:i*50 + 25}, rotation:{x:0,y:0,z:0}, scale:{x:8, y:0.1, z:0.5}, color: '#f1c40f', material: 'Neon', noCollide: true });
+                for (let i = -5; i <= 5; i++) {
+                    for (let j = -10; j <= 10; j++) {
+                        cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:i*50 + 25, y:-0.05, z:j*25}, rotation:{x:0,y:0,z:0}, scale:{x:0.5, y:0.1, z:8}, color: '#f1c40f', material: 'Neon', noCollide: true });
+                        cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:j*25, y:-0.05, z:i*50 + 25}, rotation:{x:0,y:0,z:0}, scale:{x:8, y:0.1, z:0.5}, color: '#f1c40f', material: 'Neon', noCollide: true });
+                    }
                 }
+                const relevantPlots = cityGlobalData.plots.filter(p => p.neighborhood === neighborhood);
+                relevantPlots.forEach(p => {
+                    const houseBlocks = generateStarterHouse(p.plotX, p.plotZ, neighborhood, p.username || currentUser.username);
+                    cityObjects = cityObjects.concat(houseBlocks);
+                });
             }
 
-            const relevantPlots = cityGlobalData.plots.filter(p => p.neighborhood === neighborhood);
-            relevantPlots.forEach(p => {
-                const houseBlocks = generateStarterHouse(p.plotX, p.plotZ, neighborhood, p.username || currentUser.username);
-                cityObjects = cityObjects.concat(houseBlocks);
-            });
-
-           // FIX: Use a muted 2016 Sky Blue and lower the brightness significantly!
             activeLevel = {
-                settings: { 
-                    gravity: 0.35, 
-                    skyColor: isGrass ? '#5b88a5' : '#a37b45', // Deep retro blue vs dull desert
-                    brightness: 0.65 // Dimmed to create harsher, older-looking shadows
+                settings: {
+                    gravity: 0.35,
+                    skyColor: isIndustrial ? '#71808f' : (isGrass ? '#5b88a5' : '#a37b45'),
+                    brightness: isIndustrial ? 0.6 : 0.65
                 },
-                spawn: { x: cityGlobalData.cityData.plotX * 50, y: 2, z: (cityGlobalData.cityData.plotZ * 50) + 15 }, 
+                spawn: isIndustrial ? { x: 0, y: 2, z: 380 } : { x: cityGlobalData.cityData.plotX * 50, y: 2, z: (cityGlobalData.cityData.plotZ * 50) + 15 },
                 objects: cityObjects
             };
             document.getElementById('play-title').innerText = `${neighborhood} (Sculpt City)`;
@@ -8098,6 +9507,9 @@ const groupAsAircraft = () => {
     
         const exitSculptCity = () => {
             isCityMode = false;
+            manufacturerJobState.active = false;
+            const panel = document.getElementById('manufacturer-job-ui');
+            if (panel) panel.remove();
             stopGameLoop();
             
             document.getElementById('play-likes').parentElement.style.display = 'flex';
@@ -8127,6 +9539,84 @@ const groupAsAircraft = () => {
         const openCityHelp = () => {
             document.getElementById('city-help-modal').style.display = 'flex';
         };
+
+        const startManufacturerJob = (factoryId = 1) => {
+            manufacturerJobState.active = true;
+            manufacturerJobState.startTime = Date.now();
+            manufacturerJobState.products = 0;
+            manufacturerJobState.packaged = 0;
+            manufacturerJobState.step = 'collect';
+            manufacturerJobState.stepStartedAt = Date.now();
+            manufacturerJobState.activeMs = 0;
+
+            const panel = document.createElement('div');
+            panel.id = 'manufacturer-job-ui';
+            panel.style.cssText = 'position:absolute;top:20px;left:20px;z-index:65;background:rgba(255,255,255,0.95);border:2px solid #2c3e50;border-radius:8px;padding:12px;min-width:260px;';
+            panel.innerHTML = `
+                <h4 style="margin:0 0 8px 0;color:#2c3e50;">Manufacturer Shift</h4>
+                <p id="manufacturer-step" style="margin:0 0 8px 0;font-weight:700;color:#34495e;">Step 1: Build Product</p>
+                <button class="btn btn-success btn-sm" id="manufacturer-action-btn" style="width:100%;margin-bottom:8px;">Build Product</button>
+                <div style="font-size:12px;color:#555;margin-bottom:8px;">Products Completed: <span id="manufacturer-products">0</span></div>
+                <button class="btn btn-danger btn-sm" style="width:100%;" onclick="endManufacturerShift()">End Shift / Leave</button>
+            `;
+            document.querySelector('#play-container-3d').appendChild(panel);
+
+            document.getElementById('manufacturer-action-btn').onclick = () => {
+                if (!manufacturerJobState.active) return;
+                const now = Date.now();
+                if (now - manufacturerJobState.stepStartedAt > 25000) return showModal('Shift Paused', 'You were inactive too long. Stay active to earn Sculpt Coins.');
+                manufacturerJobState.activeMs += Math.min(6000, now - manufacturerJobState.stepStartedAt);
+                if (manufacturerJobState.step === 'collect') {
+                    manufacturerJobState.step = 'package';
+                    manufacturerJobState.stepStartedAt = now;
+                    document.getElementById('manufacturer-step').innerText = 'Step 2: Package Product';
+                    document.getElementById('manufacturer-action-btn').innerText = 'Package Product';
+                } else {
+                    manufacturerJobState.step = 'collect';
+                    manufacturerJobState.stepStartedAt = now;
+                    manufacturerJobState.products += 1;
+                    manufacturerJobState.packaged += 1;
+                    document.getElementById('manufacturer-step').innerText = 'Step 1: Build Product';
+                    document.getElementById('manufacturer-action-btn').innerText = 'Build Product';
+                    document.getElementById('manufacturer-products').innerText = manufacturerJobState.products;
+                }
+            };
+
+            activeLevel.spawn = { x: 0, y: 2, z: 0, scale: { x: 4, y: 1, z: 4 } };
+            activeLevel.objects = [
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:-0.5, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:1, z:48}, color:'#a9b4bf', material:'Concrete' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:3, z:-23}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:7, z:2}, color:'#6c7784', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:3, z:23}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:7, z:2}, color:'#6c7784', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:-23, y:3, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:7, z:48}, color:'#6c7784', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:23, y:3, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:7, z:48}, color:'#6c7784', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:6.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:1, z:48}, color:'#4e5966', material:'Slate' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:1.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:26, y:1.1, z:4}, color:'#2d3436', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:-10, y:2.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:1.2, z:4}, color:'#95a5a6', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:10, y:2.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:1.2, z:4}, color:'#95a5a6', material:'Metal' }
+            ];
+            buildPlayScene();
+            playerObj.x = 0; playerObj.y = 2; playerObj.z = 8;
+            showModal('Manufacturer Shift Started', `Factory ${factoryId}: complete the 2-step process to earn +5 Sculpt Coins per product.`);
+        };
+
+        const endManufacturerShift = async () => {
+            if (!manufacturerJobState.active) return;
+            manufacturerJobState.active = false;
+            const panel = document.getElementById('manufacturer-job-ui');
+            if (panel) panel.remove();
+            const activeEnough = manufacturerJobState.activeMs >= manufacturerJobState.products * 1200;
+            const earned = activeEnough ? (manufacturerJobState.products * 5) : 0;
+            if (earned > 0) {
+                try {
+                    const res = await apiCall('/city/sync', 'POST', { coinsToAdd: earned });
+                    if (currentUser) currentUser.coins = res.coins;
+                    updateNav();
+                } catch (e) {}
+            }
+            startCityGame('Industrial District');
+            showModal('Shift Ended', `You manufactured ${manufacturerJobState.products} products and earned ${earned} Sculpt Coins this shift.`);
+        };
+        window.endManufacturerShift = endManufacturerShift;
 
 
 // ==========================================
@@ -8560,8 +10050,10 @@ document.getElementById('prop-transparency').addEventListener('input', (e) => {
     
     selectedObjects.forEach(mesh => {
         if (mesh.userData.isSpawn) return; // Cannot make spawn invisible
+        const objData = edData.objects.find(o => o.id === mesh.userData.id);
+        if (objData) objData.transparency = Math.max(0, Math.min(1, val));
         mesh.material.transparent = val > 0;
-        mesh.material.opacity = 1 - val; // 1 transparency = 0 opacity
+        mesh.material.opacity = Math.max(0.02, 1 - val); // 1 transparency = almost invisible
     });
     recordEdit(); // Save the state
 });
@@ -8572,6 +10064,8 @@ document.getElementById('prop-anchored').addEventListener('change', (e) => {
     selectedObjects.forEach(mesh => {
         if (mesh.userData.isSpawn) return;
         mesh.userData.isAnchored = e.target.checked;
+        const objData = edData.objects.find(o => o.id === mesh.userData.id);
+        if (objData) objData.isAnchored = e.target.checked;
     });
     recordEdit();
 });
@@ -8582,6 +10076,12 @@ document.getElementById('prop-cancollide').addEventListener('change', (e) => {
     selectedObjects.forEach(mesh => {
         if (mesh.userData.isSpawn) return;
         mesh.userData.canCollide = e.target.checked;
+        mesh.userData.noCollide = !e.target.checked;
+        const objData = edData.objects.find(o => o.id === mesh.userData.id);
+        if (objData) {
+            objData.canCollide = e.target.checked;
+            objData.noCollide = !e.target.checked;
+        }
     });
     recordEdit();
 });
@@ -8995,6 +10495,8 @@ async function openModPanel() {
         if (state.unlocked) {
             document.getElementById('mod-panel-lock-screen').style.display = 'none';
             document.getElementById('mod-panel-content').style.display = 'block';
+            loadAccessoryModerationQueue();
+            loadClothingModerationQueue();
         }
     } catch {}
     startModWatchdog();
@@ -9007,6 +10509,8 @@ async function unlockModPanel() {
         await apiCall('/mod-panel/unlock','POST',{code});
         document.getElementById('mod-panel-lock-screen').style.display = 'none';
         document.getElementById('mod-panel-content').style.display = 'block';
+        loadAccessoryModerationQueue();
+        loadClothingModerationQueue();
     } catch {
         navigate('dashboard');
     }
@@ -9050,6 +10554,124 @@ async function runModerationAction(action) {
 
     alert(res.message);
     lookupModerationUser();
+}
+
+let accessoryPreviewRenderer = null;
+let accessoryPreviewScene = null;
+let accessoryPreviewCamera = null;
+let accessoryPreviewAnim = null;
+
+async function loadAccessoryModerationQueue() {
+    const host = document.getElementById('mod-accessory-queue');
+    if (!host) return;
+    host.innerHTML = 'Loading...';
+    try {
+        const items = await apiCall('/moderate/accessories', 'GET');
+        if (!items.length) {
+            host.innerHTML = '<div style="color:#777;">No pending accessories.</div>';
+            return;
+        }
+        host.innerHTML = items.map(i => `
+            <div style="border:1px solid #ddd; border-radius:6px; padding:8px; margin-bottom:8px; background:#fafafa;">
+                <div><strong>${i.name}</strong> • ${i.price} SC</div>
+                <div style="font-size:12px; color:#666;">By ${i.authorName}</div>
+                <div style="font-size:12px; margin:4px 0;">${i.description || ''}</div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button class="btn btn-sm btn-info" onclick="openAccessoryPreview('${i.id}')">3D View</button>
+                    <button class="btn btn-sm btn-success" onclick="moderateAccessory('${i.id}','approve')">Approve</button>
+                    <button class="btn btn-sm btn-danger" onclick="moderateAccessory('${i.id}','reject')">Reject</button>
+                </div>
+            </div>
+        `).join('');
+        window.__modAccessoryQueue = items;
+    } catch (e) {
+        host.innerHTML = '<div style="color:#c0392b;">Failed to load queue.</div>';
+    }
+}
+
+async function moderateAccessory(id, action) {
+    const reason = action === 'reject' ? (prompt('Reject reason (optional):') || '') : '';
+    await apiCall(`/moderate/accessories/${id}`, 'POST', { action, reason });
+    loadAccessoryModerationQueue();
+}
+
+async function loadClothingModerationQueue() {
+    const host = document.getElementById('mod-clothing-queue');
+    if (!host) return;
+    host.innerHTML = 'Loading...';
+    try {
+        const items = await apiCall('/moderate/clothing', 'GET');
+        if (!items.length) {
+            host.innerHTML = '<div style="color:#777;">No pending clothing.</div>';
+            return;
+        }
+        host.innerHTML = items.map(i => `
+            <div style="border:1px solid #ddd; border-radius:6px; padding:8px; margin-bottom:8px; background:#fafafa;">
+                <div><strong>${i.name}</strong> • ${i.price} SC • ${i.type}</div>
+                <div style="font-size:12px; color:#666;">By ${i.authorName}</div>
+                <div style="font-size:12px; margin:4px 0;">${i.description || ''}</div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                    <img src="${i.designImage}" style="width:60px; height:60px; object-fit:cover; border:1px solid #ccc; border-radius:4px;">
+                    <button class="btn btn-sm btn-success" onclick="moderateClothing('${i.id}','approve')">Approve</button>
+                    <button class="btn btn-sm btn-danger" onclick="moderateClothing('${i.id}','reject')">Reject</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        host.innerHTML = '<div style="color:#c0392b;">Failed to load clothing queue.</div>';
+    }
+}
+
+async function moderateClothing(id, action) {
+    const reason = action === 'reject' ? (prompt('Reject reason (optional):') || '') : '';
+    await apiCall(`/moderate/clothing/${id}`, 'POST', { action, reason });
+    loadClothingModerationQueue();
+}
+
+function openAccessoryPreview(itemId) {
+    const item = (window.__modAccessoryQueue || []).find(i => i.id === itemId);
+    if (!item) return;
+    let payload = {};
+    try { payload = JSON.parse(item.image || '{}'); } catch(e) {}
+    const voxels = payload.voxels || [];
+
+    const container = document.getElementById('accessory-review-3d');
+    document.getElementById('accessory-review-modal').style.display = 'flex';
+    if (!accessoryPreviewRenderer) {
+        accessoryPreviewScene = new THREE.Scene();
+        accessoryPreviewScene.background = new THREE.Color('#87CEEB');
+        accessoryPreviewCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+        accessoryPreviewCamera.position.set(8, 8, 10);
+        accessoryPreviewRenderer = new THREE.WebGLRenderer({ antialias: true });
+        container.appendChild(accessoryPreviewRenderer.domElement);
+        const light = new THREE.DirectionalLight(0xffffff, 1.0); light.position.set(4, 8, 6); accessoryPreviewScene.add(light);
+        accessoryPreviewScene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    }
+    accessoryPreviewScene.children.slice().forEach(child => {
+        if (!child.isLight) accessoryPreviewScene.remove(child);
+    });
+    const geo = new THREE.BoxGeometry(0.26, 0.26, 0.26);
+    voxels.forEach(v => {
+        const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: v.color || '#3498db' }));
+        m.position.set((v.x || 0) * 0.26, ((v.y || 0) * 0.26) + 1.5, (v.z || 0) * 0.26);
+        accessoryPreviewScene.add(m);
+    });
+    accessoryPreviewRenderer.setSize(container.clientWidth, container.clientHeight);
+    accessoryPreviewCamera.aspect = container.clientWidth / container.clientHeight;
+    accessoryPreviewCamera.updateProjectionMatrix();
+    const animate = () => {
+        if (document.getElementById('accessory-review-modal').style.display !== 'flex') return;
+        accessoryPreviewAnim = requestAnimationFrame(animate);
+        accessoryPreviewScene.rotation.y += 0.01;
+        accessoryPreviewRenderer.render(accessoryPreviewScene, accessoryPreviewCamera);
+    };
+    if (accessoryPreviewAnim) cancelAnimationFrame(accessoryPreviewAnim);
+    animate();
+}
+
+function closeAccessoryPreview() {
+    document.getElementById('accessory-review-modal').style.display = 'none';
+    if (accessoryPreviewAnim) cancelAnimationFrame(accessoryPreviewAnim);
 }
 
 
