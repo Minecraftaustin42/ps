@@ -477,6 +477,10 @@
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
                 <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -602,6 +606,8 @@
             <a onclick="navigate('academy')">Academy</a>
             <a onclick="navigate('jams')">Jams</a>
             <a onclick="navigate('blueprints')">Blueprints</a>
+            <a onclick="navigate('questlines')">Questlines</a>
+            <a onclick="navigate('megabuild')">Mega Build</a>
             <a id="nav-mod-panel" onclick="openModPanel()" style="display:none;">Mod Panel</a>
             <a onclick="navigateProfile()">Profile</a>
             <a onclick="navigate('settings')">Settings</a>
@@ -1193,7 +1199,7 @@
                 <h2 class="card-title">Weekly Creator Jams</h2>
                 <div id="jam-header"></div>
                 <div style="display:grid; gap:10px; margin:12px 0;">
-                    <input id="jam-game-id" class="form-control" placeholder="Your Game ID to submit">
+                    <select id="jam-game-id" class="form-control"><option value="">Select one of your games</option></select>
                     <input id="jam-title" class="form-control" placeholder="Submission title">
                     <textarea id="jam-pitch" class="form-control" placeholder="Short pitch (what makes your build special?)"></textarea>
                     <button class="btn btn-success" onclick="submitJamEntry()">Submit / Update Entry</button>
@@ -1213,6 +1219,29 @@
                     <button class="btn btn-info" onclick="publishBlueprint()">Publish Blueprint</button>
                 </div>
                 <div id="blueprint-feed" class="game-grid"></div>
+            </div>
+        </div>
+
+        <div id="view-questlines" class="view">
+            <div class="card">
+                <h2 class="card-title">Epic Creator Questlines</h2>
+                <p style="color:#666;">Long-form progression campaigns with staged rewards and production guidance.</p>
+                <div id="questline-list" class="game-grid"></div>
+            </div>
+        </div>
+
+        <div id="view-megabuild" class="view">
+            <div class="card">
+                <h2 class="card-title">Global Mega Build Event</h2>
+                <div id="megabuild-header"></div>
+                <div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0;">
+                    <button class="btn btn-success" onclick="contributeMegaBuild(25)">Contribute +25</button>
+                    <button class="btn btn-info" onclick="contributeMegaBuild(75)">Contribute +75</button>
+                    <button class="btn btn-warning" onclick="contributeMegaBuild(150)">Contribute +150</button>
+                </div>
+                <div id="megabuild-milestones" class="game-grid"></div>
+                <h3 style="margin-top:20px;">Top Contributors</h3>
+                <div id="megabuild-leaderboard" class="game-grid"></div>
             </div>
         </div>
 
@@ -2753,6 +2782,10 @@ else if (viewId === 'groups') {
                 loadCreatorJams();
             } else if (viewId === 'blueprints') {
                 loadBlueprintExchange();
+            } else if (viewId === 'questlines') {
+                loadQuestlines();
+            } else if (viewId === 'megabuild') {
+                loadMegaBuild();
             } else if (viewId === 'settings') {
                 if (currentUser) document.getElementById('setting-username').value = currentUser.username;
            } else if (viewId === 'create') {
@@ -5360,6 +5393,10 @@ Keep playing together for more daily rewards.`, 'Aww!');
             } catch (e) { showModal('Challenge', e.message || 'Could not claim.'); }
         };
         window.claimCreatorChallenge = claimCreatorChallenge;
+        const trackChallengeProgress = async (event, amount = 1) => {
+            try { await apiCall('/challenges/progress', 'POST', { event, amount }); } catch (e) {}
+        };
+        window.trackChallengeProgress = trackChallengeProgress;
 
         const loadCreatorAcademy = async () => {
             const grid = document.getElementById('academy-tracks-grid');
@@ -5372,6 +5409,7 @@ Keep playing together for more daily rewards.`, 'Aww!');
                         <h3>${t.title}</h3>
                         <p style="font-size:13px; color:#555;">${t.description}</p>
                         <p style="font-size:12px; color:#888;">Reward: ${t.reward} SC</p>
+                        <p style="font-size:12px; text-align:left; color:#2c3e50; background:#f8f9fb; border:1px solid #e9ecef; border-radius:8px; padding:8px;">${t.howTo || ''}</p>
                         <button class="btn btn-sm btn-success" ${t.claimed ? 'disabled' : ''} onclick="completeAcademyTrack('${t.id}')">${t.claimed ? 'Claimed' : 'Complete Track'}</button>
                     </div>
                 `).join('');
@@ -5392,9 +5430,14 @@ Keep playing together for more daily rewards.`, 'Aww!');
         const loadCreatorJams = async () => {
             const host = document.getElementById('jam-submissions');
             const head = document.getElementById('jam-header');
+            const gameSel = document.getElementById('jam-game-id');
             if (!host || !head) return;
             host.innerHTML = '<p>Loading jam...</p>';
             try {
+                const myGames = await apiCall('/my-games');
+                if (gameSel) {
+                    gameSel.innerHTML = '<option value=\"\">Select one of your games</option>' + myGames.map(g => `<option value=\"${g.id}\">${g.title}</option>`).join('');
+                }
                 const data = await apiCall('/jams/current');
                 const jam = data.jam;
                 const timeLeft = Math.max(0, jam.endsAt - Date.now());
@@ -5481,6 +5524,75 @@ Keep playing together for more daily rewards.`, 'Aww!');
             } catch (e) {}
         };
         window.toggleBlueprintFavorite = toggleBlueprintFavorite;
+
+        const loadQuestlines = async () => {
+            const host = document.getElementById('questline-list');
+            if (!host) return;
+            host.innerHTML = '<p>Loading questlines...</p>';
+            try {
+                const data = await apiCall('/questlines');
+                host.innerHTML = data.questlines.map(q => `
+                    <div class="game-card">
+                        <h3>${q.title}</h3>
+                        <p style="font-size:12px; color:#666;">${q.description}</p>
+                        ${(q.stages || []).map(s => `
+                            <div style="border:1px solid #e8edf4; border-radius:8px; padding:8px; margin-top:8px; text-align:left;">
+                                <strong>${s.title}</strong> <span style="font-size:11px; color:#888;">(+${s.reward} SC)</span>
+                                <div style="font-size:12px; color:#2c3e50; margin-top:4px;">${s.instructions}</div>
+                                <button class="btn btn-sm btn-success" style="margin-top:8px;" ${s.claimed ? 'disabled' : ''} onclick="completeQuestStage('${q.id}','${s.id}')">${s.claimed ? 'Claimed' : 'Mark Complete'}</button>
+                            </div>
+                        `).join('')}
+                    </div>
+                `).join('');
+            } catch (e) {
+                host.innerHTML = '<p style="color:#e74c3c;">Failed to load questlines.</p>';
+            }
+        };
+        const completeQuestStage = async (questId, stageId) => {
+            try {
+                const res = await apiCall('/questlines/complete', 'POST', { questId, stageId });
+                showModal('Quest Progressed', `+${res.reward} SC`);
+                loadQuestlines();
+            } catch (e) {}
+        };
+        window.completeQuestStage = completeQuestStage;
+
+        const loadMegaBuild = async () => {
+            const head = document.getElementById('megabuild-header');
+            const ms = document.getElementById('megabuild-milestones');
+            const lb = document.getElementById('megabuild-leaderboard');
+            if (!head || !ms || !lb) return;
+            try {
+                const data = await apiCall('/megabuild/current');
+                const e = data.event;
+                const hours = Math.max(0, Math.floor((e.endsAt - Date.now()) / 3600000));
+                head.innerHTML = `<p><strong>${e.title}</strong> • Theme: <strong>${e.theme}</strong> • ${hours}h left<br>Total Community Contribution: <strong>${e.totalContrib}</strong> • Your Contribution: <strong>${data.myContrib}</strong></p>`;
+                ms.innerHTML = data.milestones.map(m => `
+                    <div class="game-card">
+                        <h3>${m.target} points</h3>
+                        <p>Reward: ${m.reward} SC</p>
+                        <button class="btn btn-sm btn-warning" ${!m.reached || m.claimed ? 'disabled' : ''} onclick="claimMegaBuild(${m.target})">${m.claimed ? 'Claimed' : (m.reached ? 'Claim Reward' : 'Locked')}</button>
+                    </div>
+                `).join('');
+                lb.innerHTML = data.leaderboard.map(p => `<div class="game-card"><h3>${p.username}</h3><p>${p.points} points</p></div>`).join('') || '<p>No contributions yet.</p>';
+            } catch (e) {
+                head.innerHTML = '<p style="color:#e74c3c;">Failed to load mega build.</p>';
+            }
+        };
+        const contributeMegaBuild = async (points) => {
+            try {
+                await apiCall('/megabuild/contribute', 'POST', { points });
+                loadMegaBuild();
+            } catch (e) {}
+        };
+        window.contributeMegaBuild = contributeMegaBuild;
+        const claimMegaBuild = async (target) => {
+            try {
+                await apiCall('/megabuild/claim', 'POST', { target });
+                loadMegaBuild();
+            } catch (e) {}
+        };
+        window.claimMegaBuild = claimMegaBuild;
 
         const loadDashboardGames = async () => {
             try {
@@ -5985,6 +6097,7 @@ const dir = new THREE.Vector3();
             
             buildEditorScene(); 
             recordEdit();
+            if (type !== 'spawn') trackChallengeProgress('partsPlaced', 1);
             
             // Auto-Select the block we just spawned so you can drag it instantly!
             setTimeout(() => selectObjectById(newId), 50); 
@@ -10103,6 +10216,7 @@ const res = await apiCall(`/toolbox/sponsor/${id}`, 'POST', { bid: bid, days: da
             });
 
             if (!insertedModelsThisSession.includes(id)) insertedModelsThisSession.push(id);
+            trackChallengeProgress('partsPlaced', newIds.length);
 
             buildEditorScene(); recordEdit();
             
