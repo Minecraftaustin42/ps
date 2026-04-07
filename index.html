@@ -190,6 +190,12 @@
         .studio-toolbar-group { border:1px solid #d6dde5; border-radius:6px; background:#fff; padding:8px; min-width:190px; }
         .studio-toolbar-group h5 { margin:0 0 6px 0; font-size:12px; color:#2c3e50; text-transform:uppercase; letter-spacing:0.3px; }
         .studio-toolbar-actions { display:flex; gap:6px; flex-wrap:wrap; }
+        #studio-mobile-controls { display:none; position:absolute; left:0; right:0; bottom:10px; z-index:260; pointer-events:none; }
+        .studio-mobile-pill { background:rgba(0,0,0,0.62); color:#fff; padding:6px 10px; border-radius:16px; font-size:12px; font-weight:700; }
+        .studio-mobile-btn { pointer-events:auto; background:rgba(52,152,219,0.86); color:#fff; border:2px solid rgba(255,255,255,0.7); border-radius:14px; padding:6px 10px; font-size:12px; font-weight:700; min-width:66px; text-align:center; }
+        #studio-mobile-quick-insert { display:none; position:absolute; top:10px; right:10px; z-index:270; width:170px; pointer-events:auto; }
+        #studio-joystick-base { pointer-events:auto; width:120px; height:120px; border-radius:50%; background:rgba(0,0,0,0.38); border:2px solid rgba(255,255,255,0.28); position:relative; touch-action:none; }
+        #studio-joystick-stick { width:58px; height:58px; border-radius:50%; background:rgba(255,255,255,0.85); position:absolute; left:31px; top:31px; transition:transform .12s; }
         .dash-friends-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
 
         .landing-welcome { text-align:center; margin-bottom:18px; }
@@ -221,7 +227,47 @@
 
 
         @media(max-width: 768px) {
-            .play-sidebar { height: auto; max-height: 300px; }
+            body { font-size: 15px; }
+            .container { margin: 12px auto; padding: 8px; }
+            .card { padding: 16px; margin-bottom: 12px; }
+            .card-title { flex-direction: column; align-items: flex-start; }
+
+            .navbar { height: auto; min-height: 56px; padding: 6px 10px; flex-wrap: wrap; gap: 8px; }
+            .navbar-brand { font-size: 20px; margin-right: 10px; }
+            .nav-links { gap: 10px; flex-wrap: wrap; align-items: center; }
+            .nav-links a { line-height: 1.4; padding: 6px 0; }
+            .search-bar { width: min(220px, 58vw); font-size: 16px; }
+            .sculpt-coins { font-size: 14px; }
+
+            .tabs { gap: 6px; }
+            .tab { padding: 10px 12px; font-size: 13px; }
+            .btn, .tool-btn { min-height: 42px; font-size: 14px; }
+            .btn-sm { min-height: 36px; }
+            .form-control { font-size: 16px; }
+
+            .play-layout { gap: 12px; }
+            .play-game-card { padding: 10px; }
+            .play-sidebar { height: auto; max-height: 260px; width: 100%; max-width: none; }
+            #play-container-3d { aspect-ratio: 4/3; min-height: 320px; }
+            #play-toolbar { gap: 6px; bottom: 10px; }
+            .toolbar-slot { width: 52px; height: 52px; }
+            .mobile-btn { width: 58px; height: 58px; font-size: 20px; }
+
+            .studio-layout { height: auto; min-height: 620px; flex-direction: column; }
+            #editor-container-3d { margin-right: 0; min-height: 360px; width: 100%; aspect-ratio: 4/3; }
+            .explorer-panel { position: relative; width: 100%; height: 250px; right: auto; top: auto; border-left: none; border-top: 1px solid #ccc; }
+            .explorer-item { padding: 10px 12px; font-size: 14px; }
+            .toolbar { gap: 8px; }
+            .studio-toolbar-grid { gap: 8px; }
+            .studio-toolbar-group { min-width: 100%; }
+            .studio-toolbar-actions .btn, .studio-toolbar-actions .tool-btn { flex: 1 1 46%; }
+
+            .game-grid { grid-template-columns: 1fr; gap: 12px; }
+            .user-grid { grid-template-columns: repeat(2, minmax(120px, 1fr)); gap: 8px; }
+            .modal-overlay { padding: 12px; }
+            .modal-box { width: 100%; max-width: 96vw; padding: 16px; }
+            #studio-mobile-controls { display:block; }
+            #studio-mobile-quick-insert { display:block; }
         }
     </style>
 </head>
@@ -357,6 +403,10 @@
                 <button class="btn" style="background:#2ecc71; border-bottom-color:#27ae60;" onclick="citySelectNeighborhood('Greenridge')"> <strong>Greenridge</strong><br><span style="font-size:12px; font-weight:normal;">Peaceful, trees, suburban</span></button>
                 <button class="btn" style="background:#e67e22; border-bottom-color:#d35400;" onclick="citySelectNeighborhood('Sandfall')"> <strong>Sandfall</strong><br><span style="font-size:12px; font-weight:normal;">Dry, desert neighborhood</span></button>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -379,7 +429,7 @@
 
     <div id="inventory-modal" class="modal-overlay">
         <div class="modal-box" style="border: 4px solid #f39c12; background: #fdfdfd; max-width: 500px; width: 90%;">
-<h2 style="color: #2c3e50; margin-top:0;">My Inventory <span style="float:right; color:#27ae60; font-size:18px;"><span id="modal-bucks">0</span> Bucks</span></h2>
+<h2 style="color: #2c3e50; margin-top:0;">My Inventory <span style="float:right; color:#f39c12; font-size:18px;"><span id="modal-city-coins">0</span> Sculpt Coins</span></h2>
             <div id="inventory-list" style="margin-top: 20px; display:flex; flex-direction:column; gap:10px; max-height: 350px; overflow-y: auto;">
                 </div>
             <button class="btn btn-danger mt-20" style="width: 100%; font-size: 16px;" onclick="document.getElementById('inventory-modal').style.display='none'">Close</button>
@@ -432,6 +482,14 @@
         </div>
     </div>
 
+    <div id="accessory-review-modal" class="modal-overlay">
+        <div class="modal-box" style="max-width:560px; width:95%;">
+            <h3 style="margin-top:0;">Accessory 3D Preview</h3>
+            <div id="accessory-review-3d" style="width:100%; aspect-ratio:1/1; background:#0f172a; border-radius:6px; border:1px solid #2c3e50;"></div>
+            <button class="btn btn-danger mt-10" style="width:100%;" onclick="closeAccessoryPreview()">Close</button>
+        </div>
+    </div>
+
     <!-- Navbar -->
     <div class="navbar">
         <div class="navbar-brand" onclick="navigate('dashboard')">Playsculpt</div>
@@ -441,7 +499,6 @@
         <div class="nav-links" id="nav-logged-in" style="display:none;">
             <input type="text" class="search-bar" id="nav-search" placeholder="Search Users..." onkeydown="if(event.key==='Enter') executeUserSearch()">
             <div class="sculpt-coins"><span id="nav-coins">0</span> SC</div>
-<div class="sculpt-coins" style="color: #2ecc71;"><span id="nav-bucks">0</span> Bucks</div>
 <div class="sculpt-coins" style="color: #3498db; cursor: pointer; transition: transform 0.2s;" onmouseover="this.style.transform='scale(1.05)'" onmouseout="this.style.transform='scale(1)'" onclick="openOnlineModal()">
                 <span id="nav-online">1</span> Online
             </div>
@@ -591,6 +648,11 @@
 
             <div id="mod-warnings-list"></div>
             <div id="mod-ban-status"></div>
+            <div style="margin-top:15px; border-top:1px solid #ddd; padding-top:12px;">
+                <h3 style="margin:0 0 8px 0;">Accessory Review Queue</h3>
+                <button class="btn btn-sm btn-info" onclick="loadAccessoryModerationQueue()">Refresh Queue</button>
+                <div id="mod-accessory-queue" style="margin-top:10px; max-height:260px; overflow:auto;"></div>
+            </div>
         </div>
     </div>
 </div>
@@ -874,7 +936,8 @@
                             <div class="form-group"><input type="text" id="acc-name" class="form-control" placeholder="Item Name"></div>
                             <div class="form-group"><input type="text" id="acc-desc" class="form-control" placeholder="Short Description"></div>
                             <div class="form-group"><input type="number" id="acc-price" class="form-control" placeholder="Price (0 for free)"></div>
-                            <button class="btn btn-success" style="width:100%;" onclick="uploadAccessory()">Upload (Costs 15 SC)</button>
+                            <p style="font-size:12px; color:#666; margin:0 0 8px 0;">Requirements: Account age 3+ days • Upload fee 20 SC • Manual moderation review required.</p>
+                            <button class="btn btn-success" style="width:100%;" onclick="uploadAccessory()">Upload (Costs 20 SC)</button>
                         </div>
                     </div>
                 </div>
@@ -1151,7 +1214,7 @@
                             <button class="tool-btn" style="color:#9b59b6;font-weight:bold;" onclick="addPart('aircraftSeat')">Air Seat</button>
                             <button class="tool-btn" style="color:#9b59b6;font-weight:bold;" onclick="addPart('tool')">Tool</button>
                             <button class="tool-btn" style="color:#1abc9c;font-weight:bold;" onclick="toggleSmartObjectSidebar()">Smart Objects</button>
-                            <button class="tool-btn" style="color:#27ae60;font-weight:bold;" onclick="toggleTerrainEditor()">Terrain</button>
+                            <button class="tool-btn" style="color:#95a5a6;font-weight:bold;" disabled title="Terrain editing coming soon">Terrain (Soon)</button>
                             <button class="btn btn-sm btn-warning" onclick="groupAsVehicle()">Group Vehicle</button>
                             <button class="btn btn-sm btn-info" onclick="groupAsAircraft()">Group Aircraft</button>
                         </div>
@@ -1184,6 +1247,20 @@
 
             <div class="studio-layout">
                 <div id="editor-container-3d" tabindex="0">
+<select id="studio-mobile-quick-insert" class="form-control" onchange="if(this.value){ addPart(this.value); this.value=''; }">
+    <option value="">+ Quick Insert Part...</option>
+    <option value="block">Cube</option>
+    <option value="sphere">Sphere</option>
+    <option value="cylinder">Cylinder</option>
+    <option value="cone">Cone</option>
+    <option value="triangle">Triangle</option>
+    <option value="wedge">Wedge</option>
+    <option value="ladder">Ladder</option>
+    <option value="spawn">Spawn</option>
+    <option value="seat">Seat</option>
+    <option value="aircraftSeat">Air Seat</option>
+    <option value="tool">Tool</option>
+</select>
 
 
 
@@ -1325,6 +1402,44 @@
                         <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Ambient Brightness:</label>
                             <input type="number" id="ws-brightness" class="form-control" value="0.65" step="0.1" onchange="updateWorldSettings()">
+                        </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold;">Sun Intensity:</label>
+                            <input type="number" id="ws-sun-intensity" class="form-control" value="1.1" step="0.1" onchange="updateWorldSettings()">
+                        </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold;">Fog Distance:</label>
+                            <input type="number" id="ws-fog-distance" class="form-control" value="1600" step="50" onchange="updateWorldSettings()">
+                        </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold;">Graphics Quality:</label>
+                            <select id="ws-graphics-quality" class="form-control" onchange="updateWorldSettings()">
+                                <option value="low">Low</option>
+                                <option value="medium" selected>Medium</option>
+                                <option value="high">High</option>
+                                <option value="ultra">Ultra</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold;">Exposure:</label>
+                            <input type="number" id="ws-exposure" class="form-control" value="1.0" step="0.1" onchange="updateWorldSettings()">
+                        </div>
+                    </div>
+
+                    <div id="studio-mobile-controls">
+                        <div style="display:flex; justify-content:space-between; align-items:flex-end; padding:0 10px; gap:8px;">
+                            <div id="studio-joystick-base">
+                                <div id="studio-joystick-stick"></div>
+                            </div>
+                            <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+                                <div class="studio-mobile-pill" id="studio-landscape-pill">Best in landscape mode 📱↔️ <button onclick="closeStudioLandscapeHint()" style="margin-left:6px; background:transparent; color:#fff; border:none; font-weight:700; pointer-events:auto;">✕</button></div>
+                                <div style="display:flex; gap:6px; pointer-events:auto;">
+                                    <button class="studio-mobile-btn" onclick="setTransformMode('select')">Select</button>
+                                    <button class="studio-mobile-btn" onclick="setTransformMode('translate')">Move</button>
+                                    <button class="studio-mobile-btn" onclick="setTransformMode('rotate')">Rotate</button>
+                                    <button class="studio-mobile-btn" onclick="setTransformMode('scale')">Scale</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -2110,6 +2225,7 @@ const toggleMultiSelect = () => {
                     <div id="joystick-base" style="position: absolute; bottom: 30px; left: 30px; width: 140px; height: 140px; background: rgba(0,0,0,0.4); border-radius: 50%; pointer-events: auto; touch-action: none; border: 3px solid rgba(255,255,255,0.2);">
                         <div id="joystick-stick" style="position: absolute; top: 35px; left: 35px; width: 70px; height: 70px; background: rgba(255,255,255,0.8); border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: transform 0.1s ease-out;"></div>
                     </div>
+                    <div id="mobile-look-zone" style="position:absolute; top:0; right:0; width:52%; height:78%; pointer-events:auto; touch-action:none;"></div>
                     <div id="mobile-jump-btn" style="position: absolute; bottom: 40px; right: 30px; width: 90px; height: 90px; background: rgba(46, 204, 113, 0.6); border-radius: 50%; pointer-events: auto; touch-action: none; border: 3px solid rgba(46, 204, 113, 0.9); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 32px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: background 0.1s;">?</div>
                 `;
                 ui.style.position = 'absolute';
@@ -2122,10 +2238,13 @@ const toggleMultiSelect = () => {
                 const base = document.getElementById('joystick-base');
                 const stick = document.getElementById('joystick-stick');
                 const jumpBtn = document.getElementById('mobile-jump-btn');
+                const lookZone = document.getElementById('mobile-look-zone');
 
                 let baseRadius = 70;
                 let baseCenter = { x: 0, y: 0 };
                 let activeTouchId = null;
+                let lookTouchId = null;
+                let lookPrev = null;
 
                 const resetJoystick = () => {
                     stick.style.transition = 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
@@ -2173,15 +2292,54 @@ const toggleMultiSelect = () => {
                     
                     stick.style.transform = `translate(${dx}px, ${dy}px)`;
                     
-                    const threshold = 15;
-                    keys.w = dy < -threshold;
-                    keys.s = dy > threshold;
-                    keys.a = dx < -threshold;
-                    keys.d = dx > threshold;
+                    const magnitude = Math.sqrt(dx * dx + dy * dy);
+                    keys.w = magnitude > 16;
+                    keys.s = false;
+                    keys.a = false;
+                    keys.d = false;
                 };
 
                 jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playInput.justJumped = true; jumpBtn.style.background = 'rgba(46, 204, 113, 0.9)'; }, { passive: false });
                 jumpBtn.addEventListener('touchend', (e) => { e.preventDefault(); jumpBtn.style.background = 'rgba(46, 204, 113, 0.6)'; }, { passive: false });
+
+                const onLookMove = (touch) => {
+                    if (!lookPrev || !window.playControls) {
+                        lookPrev = { x: touch.clientX, y: touch.clientY };
+                        return;
+                    }
+                    const dx = touch.clientX - lookPrev.x;
+                    const dy = touch.clientY - lookPrev.y;
+                    window.playControls.rotateLeft(dx * 0.006);
+                    window.playControls.rotateUp(dy * 0.004);
+                    window.playControls.update();
+                    lookPrev = { x: touch.clientX, y: touch.clientY };
+                };
+
+                lookZone.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    if (lookTouchId !== null) return;
+                    const touch = e.changedTouches[0];
+                    lookTouchId = touch.identifier;
+                    lookPrev = { x: touch.clientX, y: touch.clientY };
+                }, { passive: false });
+                lookZone.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        const t = e.changedTouches[i];
+                        if (t.identifier === lookTouchId) onLookMove(t);
+                    }
+                }, { passive: false });
+                const endLook = (e) => {
+                    e.preventDefault();
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        if (e.changedTouches[i].identifier === lookTouchId) {
+                            lookTouchId = null;
+                            lookPrev = null;
+                        }
+                    }
+                };
+                lookZone.addEventListener('touchend', endLook, { passive: false });
+                lookZone.addEventListener('touchcancel', endLook, { passive: false });
             }
             document.getElementById('mobile-controls').style.display = 'block';
         };
@@ -2274,6 +2432,33 @@ checkDailyReward(); // <-- ADDED HERE
 
         // Interval cleanup references
         let grpWallSyncInterval = null;
+        const promptStudioAutosaveRecovery = () => {
+            if (autosaveRecoveryPrompted || currentEditGameId) return;
+            autosaveRecoveryPrompted = true;
+            let saved = null;
+            try {
+                saved = JSON.parse(localStorage.getItem('ps_autosave') || 'null');
+            } catch (e) { saved = null; }
+            if (!saved || !saved.edData) return;
+
+            const stamp = saved.savedAt ? new Date(saved.savedAt).toLocaleString() : 'recently';
+            showModal(
+                'Autosave Recovery',
+                `We found an autosave from ${stamp}. Recover it now?`,
+                'Recover',
+                () => {
+                    edData = saved.edData;
+                    if (saved.genre) document.getElementById('editor-genre').value = saved.genre;
+                    if (saved.title) document.getElementById('editor-title').value = saved.title;
+                    historyStack = []; historyIndex = -1;
+                    buildEditorScene();
+                    recordEdit(true);
+                    showModal('Recovered', 'Studio autosave restored.');
+                },
+                false,
+                true
+            );
+        };
 
         const navigate = (viewId) => {
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -2321,7 +2506,7 @@ else if (viewId === 'groups') {
                 if (currentUser) document.getElementById('setting-username').value = currentUser.username;
            } else if (viewId === 'create') {
                 if (!currentEditGameId) {
-                    setTimeout(() => { initEditor(); window.dispatchEvent(new Event('resize')); populateGroupPublishDropdown(); }, 50);
+                    setTimeout(() => { initEditor(); window.dispatchEvent(new Event('resize')); populateGroupPublishDropdown(); promptStudioAutosaveRecovery(); }, 50);
                     document.getElementById('editor-save-btn').innerText = "Publish Game";
                     document.getElementById('btn-add-collab').style.display = "none";
                     document.getElementById('btn-versions').style.display = "none";
@@ -3632,6 +3817,65 @@ let customGizmo = null;
         };
 
 
+        const initStudioMobileControls = () => {
+            if (studioMobileState.initialized) return;
+            const isTouch = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) || navigator.maxTouchPoints > 0;
+            if (!isTouch) return;
+            const base = document.getElementById('studio-joystick-base');
+            const stick = document.getElementById('studio-joystick-stick');
+            if (!base || !stick) return;
+
+            studioMobileState.initialized = true;
+            const resetStick = () => {
+                studioMobileState.active = false;
+                studioMobileState.x = 0;
+                studioMobileState.y = 0;
+                stick.style.transform = 'translate(0px, 0px)';
+            };
+
+            const updateFromTouch = (touch) => {
+                const rect = base.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                let dx = touch.clientX - cx;
+                let dy = touch.clientY - cy;
+                const radius = rect.width / 2 - 10;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+                if (dist > radius) {
+                    dx = (dx / dist) * radius;
+                    dy = (dy / dist) * radius;
+                }
+                studioMobileState.active = true;
+                studioMobileState.x = dx / radius;
+                studioMobileState.y = dy / radius;
+                stick.style.transform = `translate(${dx}px, ${dy}px)`;
+            };
+
+            base.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (!e.touches[0]) return;
+                updateFromTouch(e.touches[0]);
+            }, { passive: false });
+            base.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (!e.touches[0]) return;
+                updateFromTouch(e.touches[0]);
+            }, { passive: false });
+            base.addEventListener('touchend', (e) => { e.preventDefault(); resetStick(); }, { passive: false });
+            base.addEventListener('touchcancel', (e) => { e.preventDefault(); resetStick(); }, { passive: false });
+
+            if (localStorage.getItem('ps_hide_landscape_hint') === '1') {
+                const pill = document.getElementById('studio-landscape-pill');
+                if (pill) pill.style.display = 'none';
+            }
+        };
+        const closeStudioLandscapeHint = () => {
+            localStorage.setItem('ps_hide_landscape_hint', '1');
+            const pill = document.getElementById('studio-landscape-pill');
+            if (pill) pill.style.display = 'none';
+        };
+        window.closeStudioLandscapeHint = closeStudioLandscapeHint;
+
         const initEditor = () => {
             const container = document.getElementById('editor-container-3d');
             if (edRenderer) {
@@ -3662,11 +3906,13 @@ let customGizmo = null;
 
             const ambLight = new THREE.AmbientLight( 0xffffff, 1.0 );
             ambLight.isAmbientLight = true;
+            edAmbientLight = ambLight;
             edScene.add( ambLight );
             const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
             edScene.add(hemiLight); 
-            const dirLight = new THREE.DirectionalLight( 0xffffff, 0.5 );
+            const dirLight = new THREE.DirectionalLight( 0xffffff, 0.9 );
             dirLight.position.set( 1, 0.75, 0.5 ).normalize();
+            edDirectionalLight = dirLight;
             edScene.add( dirLight );
 
 edRenderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
@@ -3678,6 +3924,7 @@ window.EnvironmentEngine.generateClouds(edScene, '#ffffff');
             edRenderer.setPixelRatio( window.devicePixelRatio );
             resizeCanvas(edRenderer, edCamera, 'editor-container-3d');
             container.appendChild( edRenderer.domElement );
+            initStudioMobileControls();
 
             // Roblox Style Studio Camera Engine
             window.StudioCamera = {
@@ -4234,9 +4481,10 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             };
 
             const dom = accRenderer.domElement;
+            dom.style.touchAction = 'none';
 
             dom.addEventListener('pointerdown', (e) => {
-                if (e.button !== 0) return; // Only process left click for drawing
+                if (e.pointerType !== 'touch' && e.button !== 0) return; // Left click or touch
                 isDrawingAcc = true;
                 
                 const rect = dom.getBoundingClientRect();
@@ -4313,11 +4561,12 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
         const uploadAccessory = async () => {
             const name = document.getElementById('acc-name').value.trim();
             const desc = document.getElementById('acc-desc').value.trim();
-            const price = parseInt(document.getElementById('acc-price').value) || 0;
+            const price = Math.max(0, parseInt(document.getElementById('acc-price').value) || 0);
 
             if(!name) return showModal('Error', 'Please enter a name for your accessory.');
+            if(!desc) return showModal('Error', 'Please enter a description for your accessory.');
             if(accVoxels.length === 0) return showModal('Error', 'Build something first!');
-            if(getCoins() < 15) return showModal('Insufficient Funds', 'It costs 15 SculptCoins to upload an item.');
+            if(getCoins() < 20) return showModal('Insufficient Funds', 'It costs 20 Sculpt Coins to upload an item.');
 
             accRollOverMesh.visible = false;
             accGridHelper.visible = false;
@@ -4333,7 +4582,7 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
 
             try {
                 await apiCall('/shop/items', 'POST', { name, description: desc, price, image: payloadStr });
-                showModal('Uploaded!', 'Your accessory is now in the Marketplace!', 'View Shop', () => {
+                showModal('Submitted!', 'Accessory submitted for manual moderation review.', 'View Shop', () => {
                     document.getElementById('acc-name').value = ''; document.getElementById('acc-desc').value = ''; document.getElementById('acc-price').value = '';
                     clearAcc(); switchShopTab('market'); loadShop();
                 });
@@ -4531,6 +4780,10 @@ let edData = {
         let edAnimationId = null;
 
 let edScene, edCamera, edRenderer, edControls; // Removed transformControl
+let edAmbientLight = null, edDirectionalLight = null;
+let playAmbientLight = null, playDirectionalLight = null;
+let autosaveRecoveryPrompted = false;
+const studioMobileState = { active: false, x: 0, y: 0, initialized: false };
 
         let raycaster, mouse;
         let editorMeshes = []; 
@@ -4666,7 +4919,7 @@ let currentEditMode = 'translate';
         // Auto-convert old grid games into the new freeform format
        // Auto-convert old grid games into the new freeform format
         const migrateLevelDataTo3D = (levelData) => {
-            let newData = { settings: { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
+            let newData = { settings: { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
             if (levelData.settings) newData.settings = levelData.settings;
             if (levelData.objects) { 
                 (levelData.objects || []).forEach(ensureSmartLogicDefaults);
@@ -4697,7 +4950,7 @@ let currentEditMode = 'translate';
                 if (historyStack.length > 30) historyStack.shift(); else historyIndex++;
             }
             if (!currentEditGameId) {
-                localStorage.setItem('ps_autosave', JSON.stringify({ edData, genre: document.getElementById('editor-genre').value, title: document.getElementById('editor-title').value }));
+                localStorage.setItem('ps_autosave', JSON.stringify({ edData, genre: document.getElementById('editor-genre').value, title: document.getElementById('editor-title').value, savedAt: Date.now() }));
             }
         };
 
@@ -4839,7 +5092,8 @@ const dir = new THREE.Vector3();
             } else {
                 edData.objects.push({
                     id: newId, name: type.charAt(0).toUpperCase() + type.slice(1), type: type,
-                    position: { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 4, z: 4 }, color: '#3498db'
+                    position: { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 4, z: 4 }, color: '#3498db',
+                    isAnchored: true, canCollide: true
                 });
             }
             
@@ -5028,6 +5282,10 @@ document.addEventListener('keydown', (e) => {
                         
                         document.getElementById('prop-material').value = objData.material || 'Plastic';
                         document.getElementById('prop-material').disabled = false;
+                        document.getElementById('prop-anchored').checked = objData.isAnchored !== false;
+                        document.getElementById('prop-cancollide').checked = objData.canCollide !== false;
+                        const currentOpacity = typeof primary.material?.opacity === 'number' ? primary.material.opacity : 1;
+                        document.getElementById('prop-transparency').value = (1 - currentOpacity).toFixed(1);
                         const smartSection = document.getElementById('smart-props-section');
                         if (objData.smart && objData.smart.kind) {
                             ensureSmartLogicDefaults(objData);
@@ -5241,10 +5499,18 @@ document.addEventListener('keydown', (e) => {
             
             isEditingSettings = true; renderExplorer();
             
-if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65 };
+if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
+            if (typeof edData.settings.sunIntensity === 'undefined') edData.settings.sunIntensity = 1.1;
+            if (typeof edData.settings.fogDistance === 'undefined') edData.settings.fogDistance = 1600;
+            if (typeof edData.settings.graphicsQuality === 'undefined') edData.settings.graphicsQuality = 'medium';
+            if (typeof edData.settings.exposure === 'undefined') edData.settings.exposure = 1.0;
             document.getElementById('ws-gravity').value = edData.settings.gravity;
             document.getElementById('ws-skycolor').value = edData.settings.skyColor;
             document.getElementById('ws-brightness').value = edData.settings.brightness;
+            document.getElementById('ws-sun-intensity').value = edData.settings.sunIntensity;
+            document.getElementById('ws-fog-distance').value = edData.settings.fogDistance;
+            document.getElementById('ws-graphics-quality').value = edData.settings.graphicsQuality;
+            document.getElementById('ws-exposure').value = edData.settings.exposure;
             document.getElementById('world-settings-panel').style.display = 'block';
         };
 
@@ -5253,6 +5519,10 @@ if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', bri
             edData.settings.gravity = parseFloat(document.getElementById('ws-gravity').value) || 0.35;
             edData.settings.skyColor = document.getElementById('ws-skycolor').value;
             edData.settings.brightness = parseFloat(document.getElementById('ws-brightness').value) || 1.0;
+            edData.settings.sunIntensity = parseFloat(document.getElementById('ws-sun-intensity').value) || 1.1;
+            edData.settings.fogDistance = parseFloat(document.getElementById('ws-fog-distance').value) || 1600;
+            edData.settings.graphicsQuality = document.getElementById('ws-graphics-quality').value || 'medium';
+            edData.settings.exposure = parseFloat(document.getElementById('ws-exposure').value) || 1.0;
             applyWorldSettings(); recordEdit();
         };
 
@@ -5260,6 +5530,23 @@ if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', bri
             if (edScene && edData.settings) {
                 edScene.background = new THREE.Color(edData.settings.skyColor);
                 edScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = edData.settings.brightness; });
+                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.2, edData.settings.sunIntensity || 1.1);
+                const fogDistance = Math.max(200, edData.settings.fogDistance || 1600);
+                edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.2, fogDistance);
+                if (edRenderer) {
+                    const q = edData.settings.graphicsQuality || 'medium';
+                    const shadow = q === 'high' || q === 'ultra';
+                    edRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+                    edRenderer.toneMappingExposure = Math.max(0.4, Math.min(2.5, edData.settings.exposure || 1));
+                    edRenderer.outputEncoding = THREE.sRGBEncoding;
+                    edRenderer.physicallyCorrectLights = true;
+                    edRenderer.shadowMap.enabled = shadow;
+                    edRenderer.shadowMap.type = q === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+                    if (edDirectionalLight) {
+                        edDirectionalLight.castShadow = shadow;
+                        edDirectionalLight.shadow.mapSize.set(q === 'ultra' ? 2048 : 1024, q === 'ultra' ? 2048 : 1024);
+                    }
+                }
             }
         };
 
@@ -5521,6 +5808,7 @@ if (item.type === 'button' && item.onClickEvent) {
             // --- ADD THESE TWO LINES ---
             objData.isAnchored = mesh.userData.isAnchored;
             objData.canCollide = mesh.userData.canCollide;
+            objData.noCollide = mesh.userData.canCollide === false;
             // ---------------------------
         }
     }
@@ -5539,7 +5827,7 @@ const promptClearEditor = () => {
         // --- Editor Core Engine ---
      const clearEditor = () => {
             currentEditGameId = null; 
-            edData = { settings: { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
+            edData = { settings: { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
@@ -5700,6 +5988,15 @@ mesh.userData = {
                         if (keys.e) edCamera.position.y += moveSpeed;
                         if (keys.q) edCamera.position.y -= moveSpeed;
                     }
+
+                    if (studioMobileState.active && window.StudioCamera) {
+                        window.StudioCamera.yaw -= studioMobileState.x * 0.045;
+                        window.StudioCamera.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, window.StudioCamera.pitch - studioMobileState.y * 0.02));
+                        window.StudioCamera.updateCamera();
+                        const forward = new THREE.Vector3();
+                        edCamera.getWorldDirection(forward); forward.y = 0; forward.normalize();
+                        edCamera.position.addScaledVector(forward, -studioMobileState.y * 0.55);
+                    }
                 }
 
                 edRenderer.render( edScene, edCamera );
@@ -5798,6 +6095,8 @@ playerObj = {
         
         let playMeshes = []; 
         let playColliders = []; 
+        let lastPlayFrameAt = performance.now();
+        let playSyncInFlight = false;
         let otherPlayerMeshes = {}; 
         let playSyncInterval = null;
         let isPlayActive = false;
@@ -6137,6 +6436,26 @@ const loadPsworld = (event) => {
         };
 
 
+const applyPlayGraphicsSettings = (settings = {}) => {
+            if (!playScene || !playRenderer) return;
+            const quality = settings.graphicsQuality || 'medium';
+            const exposure = Math.max(0.4, Math.min(2.5, settings.exposure || 1));
+            const fogDistance = Math.max(200, settings.fogDistance || 1600);
+
+            playScene.fog = new THREE.Fog(settings.skyColor || '#87CEEB', fogDistance * 0.25, fogDistance);
+            playRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+            playRenderer.toneMappingExposure = exposure;
+            playRenderer.outputEncoding = THREE.sRGBEncoding;
+            playRenderer.physicallyCorrectLights = true;
+            playRenderer.shadowMap.enabled = quality === 'high' || quality === 'ultra';
+            playRenderer.shadowMap.type = quality === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+            if (playDirectionalLight) {
+                playDirectionalLight.intensity = Math.max(0.2, settings.sunIntensity || 1.1);
+                playDirectionalLight.castShadow = playRenderer.shadowMap.enabled;
+                playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 2048 : 1024, quality === 'ultra' ? 2048 : 1024);
+            }
+        };
+
 const startGame = () => {
             currentSessionStartTime = Date.now(); 
             currentSessionJumps = 0; 
@@ -6159,13 +6478,15 @@ const startGame = () => {
                 
                 const ambLight = new THREE.AmbientLight( 0xffffff, 1.0 );
                 ambLight.isAmbientLight = true;
+                playAmbientLight = ambLight;
                 playScene.add( ambLight );
                 
                 const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
                 playScene.add(hemiLight);
                 
-                const dirLight = new THREE.DirectionalLight( 0xffffff, 0.5 );
+                const dirLight = new THREE.DirectionalLight( 0xffffff, 0.9 );
                 dirLight.position.set( 1, 1, 0.5 ).normalize();
+                playDirectionalLight = dirLight;
                 playScene.add( dirLight );
 
                 playRenderer = new THREE.WebGLRenderer( { antialias: true } );
@@ -6183,9 +6504,10 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
 
             stopGameLoop(); setupMobileControls();
             
-            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0 };
+            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
             playScene.background = new THREE.Color(activeLevel.settings.skyColor);
             playScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = activeLevel.settings.brightness; });
+            applyPlayGraphicsSettings(activeLevel.settings);
             
             playerObj.x = activeLevel.spawn ? activeLevel.spawn.x : 0; 
             playerObj.y = activeLevel.spawn ? activeLevel.spawn.y + 3 : 10;
@@ -6249,6 +6571,17 @@ animatePlay();
         const buildScriptContext = (mesh) => ({
             mesh,
             player: playerObj,
+            time: () => performance.now() / 1000,
+            deltaTime: () => Math.max(0.001, Math.min(0.06, (window.playDeltaMs || 16) / 1000)),
+            part: {
+                setPosition: (x, y, z) => mesh.position.set(Number(x) || 0, Number(y) || 0, Number(z) || 0),
+                move: (dx = 0, dy = 0, dz = 0) => mesh.position.add(new THREE.Vector3(Number(dx) || 0, Number(dy) || 0, Number(dz) || 0)),
+                setRotation: (x = 0, y = 0, z = 0) => mesh.rotation.set(Number(x) || 0, Number(y) || 0, Number(z) || 0),
+                rotate: (dx = 0, dy = 0, dz = 0) => { mesh.rotation.x += Number(dx) || 0; mesh.rotation.y += Number(dy) || 0; mesh.rotation.z += Number(dz) || 0; },
+                setScale: (x = 1, y = 1, z = 1) => mesh.scale.set(Math.max(0.05, Number(x) || 1), Math.max(0.05, Number(y) || 1), Math.max(0.05, Number(z) || 1)),
+                setColor: (hex = '#3498db') => { if (mesh.material && mesh.material.color) mesh.material.color.set(String(hex)); },
+                lookAtPlayer: () => mesh.lookAt(new THREE.Vector3(playerObj.x, playerObj.y + 2, playerObj.z))
+            },
             ui: uiRuntimeManager,
             scene: playScene,
             showModal,
@@ -6303,7 +6636,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     group.position.set(objData.position.x, objData.position.y, objData.position.z);
                     group.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     group.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-                    group.userData = { id: objData.id, type: 'vehicle', compiledScript: null, vSpeed: 0.5, vTurn: 0.03 };
+                    group.userData = { id: objData.id, type: 'vehicle', compiledScript: null, vSpeed: 0.5, vTurn: 0.03, isAnchored: objData.isAnchored !== false };
 
                     (objData.children || []).forEach(cData => {
                         let geo, mat;
@@ -6322,13 +6655,11 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         playMeshes.push(childMesh); // Push children to playMeshes so seats can be detected!
                     });
 
-               if (objData.script && objData.script.trim() !== '') {
-                        const scriptSource = objData.scriptJs || objData.script || '';
-                    if (scriptSource.trim() !== '') {
-                        const engine = new JavaScriptBehaviorEngine(scriptSource, () => buildScriptContext(mesh));
-                        mesh.userData.sculptEngine = engine;
+                    const vehicleScriptSource = objData.scriptJs || objData.script || '';
+                    if (vehicleScriptSource.trim() !== '') {
+                        const engine = new JavaScriptBehaviorEngine(vehicleScriptSource, () => buildScriptContext(group));
+                        group.userData.sculptEngine = engine;
                         engine.triggerEvent('start');
-                    }
                     }
                     playScene.add(group); playMeshes.push(group);
 
@@ -6350,15 +6681,13 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: objData.noCollide || false, smart: objData.smart || null, smartState: {} };
+mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: (objData.noCollide || objData.canCollide === false), isAnchored: objData.isAnchored !== false, smart: objData.smart || null, smartState: {} };
                     
-            if (objData.script && objData.script.trim() !== '') {
-                        const scriptSource = objData.scriptJs || objData.script || '';
+                    const scriptSource = objData.scriptJs || objData.script || '';
                     if (scriptSource.trim() !== '') {
                         const engine = new JavaScriptBehaviorEngine(scriptSource, () => buildScriptContext(mesh));
                         mesh.userData.sculptEngine = engine;
                         engine.triggerEvent('start');
-                    }
                     }
 
                     if (objData.type === 'tool') { playerInventory.push({ data: objData, mesh: mesh }); playMeshes.push(mesh); } 
@@ -6416,6 +6745,8 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
 
     playSyncInterval = setInterval(async () => {
         if (!isPlayActive || !currentPlayGameId || !currentUser) return;
+        if (playSyncInFlight) return;
+        playSyncInFlight = true;
 
         try {
             const others = await apiCall(`/games/${currentPlayGameId}/play-sync`, 'POST', {
@@ -6466,7 +6797,8 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
             });
 
         } catch (e) {}
-    }, 2);
+        finally { playSyncInFlight = false; }
+    }, 120);
 };
 
 
@@ -6790,6 +7122,9 @@ const updateChatBubbles = () => {
                 window.smartRuntime.lastInteractAt = now;
                 playerObj.shieldUntil = now + Math.max(2000, (smart.power || 8) * 1000);
                 showModal('Shield Activated', `Shield active for ${Math.round((playerObj.shieldUntil - now)/1000)}s.`);
+            } else if (smart.kind === 'factoryDoor' && interactPressed && now - (window.smartRuntime.lastInteractAt || 0) > 800) {
+                window.smartRuntime.lastInteractAt = now;
+                startManufacturerJob(smart.power || 1);
             }
 
             if (mesh.userData.sculptEngine && interactPressed) {
@@ -6804,8 +7139,51 @@ const updateChatBubbles = () => {
             });
         };
 
+        const updateDynamicObjectPhysics = () => {
+            if (!activeLevel || !playScene) return;
+            const gravityStrength = Math.max(0.02, (activeLevel.settings?.gravity || 0.35) * 0.06);
+            const playerPos = new THREE.Vector3(playerObj.x, playerObj.y + 2, playerObj.z);
+            const staticMeshes = playMeshes.filter(m => m?.isMesh && !m.userData?.isTool && !m.userData?.noCollide && m.userData?.isAnchored !== false);
+            const dynamicMeshes = playMeshes.filter(m => m?.isMesh && !m.userData?.isTool && !m.userData?.noCollide && m.userData?.isAnchored === false && !['seat', 'aircraftSeat'].includes(m.userData?.type));
+
+            dynamicMeshes.forEach(mesh => {
+                if (!mesh.userData.physicsVel) mesh.userData.physicsVel = new THREE.Vector3(0, 0, 0);
+                const vel = mesh.userData.physicsVel;
+                vel.y -= gravityStrength;
+                vel.multiplyScalar(0.992);
+
+                const pushDir = mesh.position.clone().sub(playerPos);
+                pushDir.y = 0;
+                const dist = pushDir.length();
+                if (dist > 0 && dist < 3.2) {
+                    pushDir.normalize();
+                    vel.x += pushDir.x * 0.03;
+                    vel.z += pushDir.z * 0.03;
+                }
+
+                mesh.position.add(vel);
+
+                const halfY = new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3()).y / 2;
+                if (mesh.position.y < -120) {
+                    mesh.position.y = 30;
+                    vel.set(0, 0, 0);
+                }
+
+                const ray = new THREE.Raycaster(new THREE.Vector3(mesh.position.x, mesh.position.y + 2, mesh.position.z), new THREE.Vector3(0, -1, 0), 0, 6);
+                const hits = ray.intersectObjects(staticMeshes, true);
+                if (hits.length > 0 && vel.y <= 0) {
+                    const floorY = hits[0].point.y + halfY + 0.03;
+                    if (mesh.position.y < floorY + 0.3) {
+                        mesh.position.y = floorY;
+                        vel.y = 0;
+                    }
+                }
+            });
+        };
+
     const updatePhysics3D = () => {
             if (playerObj.seatCooldown > 0) playerObj.seatCooldown--;
+            updateDynamicObjectPhysics();
 
             // --- ADVANCED VEHICLE & AIRCRAFT PHYSICS ---
             if (playerObj.sitting && playerObj.vehicleSeat) {
@@ -7191,6 +7569,9 @@ const updateChatBubbles = () => {
 const animatePlay = () => {
             if (document.getElementById('view-play').classList.contains('active')) {
                 playAnimationId = requestAnimationFrame(animatePlay);
+                const nowPerf = performance.now();
+                window.playDeltaMs = nowPerf - lastPlayFrameAt;
+                lastPlayFrameAt = nowPerf;
 
                 const time = Date.now() * 0.001; let hitboxesNeedUpdate = false;
                 
@@ -7736,20 +8117,29 @@ const groupAsAircraft = () => {
         let cityGlobalData = null;
         let selectedCityPlot = null;
         let chosenNeighborhood = null;
+        let activeCityDistrict = null;
+        const cityDistricts = [
+            { name: 'Greenridge', desc: 'Peaceful, trees, suburban', color: '#2ecc71' },
+            { name: 'Sandfall', desc: 'Dry, desert neighborhood', color: '#e67e22' },
+            { name: 'Industrial District', desc: 'Factories, jobs, busy roads', color: '#7f8c8d' }
+        ];
+        const manufacturerJobState = {
+            active: false,
+            startTime: 0,
+            products: 0,
+            packaged: 0,
+            step: 'collect',
+            stepStartedAt: 0,
+            activeMs: 0
+        };
 
    const finishCityWelcome = async () => {
             document.getElementById('city-intro-overlay').style.display = 'none';
             try {
-                // Grant the +50 SculptCoins and +500 Bucks Reward!
-                const res = await apiCall('/city/sync', 'POST', { coinsToAdd: 50, bucksToAdd: 500 });
+                const res = await apiCall('/city/sync', 'POST', { coinsToAdd: 550, tutorialComplete: true });
                 document.getElementById('nav-coins').innerText = res.coins;
-                
-                if (res.cityData) {
-                    cityGlobalData.cityData.bucks = res.cityData.bucks;
-                    document.getElementById('nav-bucks').innerText = res.cityData.bucks;
-                }
-                
-                showModal('Tutorial Complete!', 'You earned +50 SculptCoins and +500 Bucks for completing the tour!');
+                if (res.cityData) cityGlobalData.cityData = res.cityData;
+                showModal('Tutorial Complete!', 'You earned +550 Sculpt Coins for completing the tour!');
             } catch(e) {}
         };
 
@@ -7759,11 +8149,22 @@ const groupAsAircraft = () => {
             document.getElementById('city-loading-screen').style.display = 'flex';
             try {
                 cityGlobalData = await apiCall('/city/info');
-                
-                // Sync Bucks to UI!
                 if (cityGlobalData.cityData) {
-                    document.getElementById('nav-bucks').innerText = cityGlobalData.cityData.bucks || 0;
-                    startCityGame(cityGlobalData.cityData.neighborhood);
+                    if (cityGlobalData.cityData.tutorialComplete) {
+                        document.getElementById('city-loading-screen').style.display = 'none';
+                        document.getElementById('city-intro-overlay').style.display = 'flex';
+                        document.getElementById('city-dialogue-text').innerText = "Welcome back to Sculpt City! Choose a sculpt city district to teleport to below!";
+                        document.getElementById('city-step-1').style.display = 'none';
+                        document.getElementById('city-step-2').style.display = 'none';
+                        document.getElementById('city-step-3').style.display = 'none';
+                        document.getElementById('city-step-4').style.display = 'none';
+                        document.getElementById('city-step-5').style.display = 'none';
+                        document.getElementById('city-returning-step').style.display = 'block';
+                        document.getElementById('city-district-search').value = '';
+                        renderDistrictButtons('');
+                    } else {
+                        startCityGame(cityGlobalData.cityData.neighborhood);
+                    }
                 } else {
                     document.getElementById('city-loading-screen').style.display = 'none';
                     document.getElementById('city-intro-overlay').style.display = 'flex';
@@ -7771,6 +8172,7 @@ const groupAsAircraft = () => {
                     document.getElementById('city-step-1').style.display = 'block';
                     document.getElementById('city-step-2').style.display = 'none';
                     document.getElementById('city-step-3').style.display = 'none';
+                    document.getElementById('city-returning-step').style.display = 'none';
                 }
             } catch(e) { 
                 console.error("Sculpt City Load Error:", e);
@@ -7779,11 +8181,36 @@ const groupAsAircraft = () => {
             }
         };
 
+        const renderDistrictButtons = (term = '') => {
+            const list = document.getElementById('city-district-buttons');
+            if (!list) return;
+            const lowered = String(term || '').toLowerCase().trim();
+            const filtered = cityDistricts.filter(d => d.name.toLowerCase().includes(lowered));
+            list.innerHTML = filtered.length ? '' : `<div style="font-weight:600; color:#7f8c8d;">No matching districts found.</div>`;
+            filtered.forEach(d => {
+                const btn = document.createElement('button');
+                btn.className = 'btn';
+                btn.style.background = d.color;
+                btn.style.borderBottomColor = '#2c3e50';
+                btn.innerHTML = `<strong>${d.name}</strong><br><span style="font-size:12px; font-weight:normal;">${d.desc}</span>`;
+                btn.onclick = () => cityTeleportToDistrict(d.name);
+                list.appendChild(btn);
+            });
+        };
+
+        const cityTeleportToDistrict = (districtName) => {
+            document.getElementById('city-intro-overlay').style.display = 'none';
+            document.getElementById('city-loading-screen').style.display = 'flex';
+            setTimeout(() => startCityGame(districtName), 150);
+        };
+        window.renderDistrictButtons = renderDistrictButtons;
+
 
         const cityShowNeighborhoods = () => {
             document.getElementById('city-dialogue-text').innerText = "Pick a neighborhood to start in: (You can have multiple houses and live in multiple neighborhoods as you progress!)";
             document.getElementById('city-step-1').style.display = 'none';
             document.getElementById('city-step-2').style.display = 'flex';
+            document.getElementById('city-returning-step').style.display = 'none';
         };
         
         
@@ -7796,14 +8223,14 @@ const groupAsAircraft = () => {
         // ==========================================
         let cityInventory = [
             { id: 'sedan_1', name: 'Classic Sedan', type: 'vehicle', category: 'Vehicles', cost: 0 },
-            { id: 'pickup_1', name: 'Pickup Truck', type: 'vehicle', category: 'Vehicles', cost: 1100 }
+            { id: 'pickup_1', name: 'Pickup Truck', type: 'vehicle', category: 'Vehicles', cost: 150 }
         ];
         let equippedVehicleId = null;
         window.activeSpawnedVehicle = null;
 
         const openInventory = () => {
             document.getElementById('inventory-modal').style.display = 'flex';
-            document.getElementById('modal-bucks').innerText = cityGlobalData.cityData.bucks || 0;
+            document.getElementById('modal-city-coins').innerText = currentUser?.coins || 0;
             renderInventoryUI();
         };
 
@@ -7831,7 +8258,7 @@ const groupAsAircraft = () => {
                     btn.onclick = () => toggleEquipItem(item.id);
                 } else {
                     btn.className = 'btn btn-warning';
-                    btn.innerText = `Buy: ${item.cost} Bucks`;
+                    btn.innerText = `Buy: ${item.cost} Sculpt Coins`;
                     btn.onclick = () => buyCityVehicle(item.id, item.cost);
                 }
 
@@ -7840,12 +8267,13 @@ const groupAsAircraft = () => {
         };
 
         const buyCityVehicle = async (vehicleId, cost) => {
-            if ((cityGlobalData.cityData.bucks || 0) < cost) return showModal('Transaction Failed', 'You do not have enough Bucks!');
+            if ((currentUser?.coins || 0) < cost) return showModal('Transaction Failed', 'You do not have enough Sculpt Coins!');
             try {
                 const res = await apiCall('/city/sync', 'POST', { vehicleToBuy: vehicleId, cost: cost });
                 cityGlobalData.cityData = res.cityData;
-                document.getElementById('nav-bucks').innerText = cityGlobalData.cityData.bucks;
-                document.getElementById('modal-bucks').innerText = cityGlobalData.cityData.bucks;
+                currentUser.coins = res.coins;
+                updateNav();
+                document.getElementById('modal-city-coins').innerText = res.coins;
                 renderInventoryUI();
             } catch(e) {}
         };
@@ -8024,45 +8452,91 @@ const groupAsAircraft = () => {
 
             return objs;
         };
+        const generateIndustrialDistrict = () => {
+            const objs = [];
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:0, y:-2.1, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:3200, y:4, z:3200}, color: '#2f3740', material: 'Slate' });
+
+            const blockSize = 220;
+            for (let gx = -3; gx <= 3; gx++) {
+                for (let gz = -3; gz <= 3; gz++) {
+                    const cx = gx * blockSize;
+                    const cz = gz * blockSize;
+                    const roadEW = gz % 2 === 0;
+                    const roadNS = gx % 2 === 0;
+
+                    if (roadEW || roadNS) {
+                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-1.95, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:200, y:3.8, z:200}, color: '#3a434d', material: 'Slate' });
+                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-0.05, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:18, y:0.1, z:2}, color: '#f1c40f', material: 'Neon', noCollide: true });
+                    } else {
+                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-1.95, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:200, y:3.8, z:200}, color: '#67717a', material: 'Concrete' });
+                    }
+                }
+            }
+
+            const factoryPlotCenters = [
+                [-220, -220], [220, -220],
+                [-220, 220], [220, 220],
+                [0, -440], [0, 440]
+            ];
+
+            const addFactoryVariant = (cx, cz, variant, idx) => {
+                const variantConfigs = [
+                    { wall: '#8f99a3', roof: '#4f5862', accent: '#616c77' },
+                    { wall: '#9ba6b1', roof: '#404954', accent: '#5d6873' },
+                    { wall: '#808b96', roof: '#505965', accent: '#66727f' }
+                ];
+                const cfg = variantConfigs[variant];
+
+                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:7.5, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:64, y:15, z:52}, color: cfg.wall, material: 'Concrete' });
+                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:16.4, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:68, y:1.4, z:56}, color: cfg.roof, material: 'Slate' });
+
+                const chimneyX = variant === 1 ? 22 : -22;
+                objs.push({ id: crypto.randomUUID(), type: 'cylinder', position: {x:cx + chimneyX, y:19, z:cz - 14}, rotation:{x:0,y:0,z:0}, scale:{x:2.8, y:18, z:2.8}, color: '#5d6772', material: 'Metal' });
+                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx + (chimneyX * 0.5), y:12, z:cz - 24}, rotation:{x:0,y:0,z:0}, scale:{x:12, y:10, z:3}, color: cfg.accent, material: 'Metal' });
+
+                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:3.3, z:cz + 26}, rotation:{x:0,y:0,z:0}, scale:{x:9, y:6.6, z:0.7}, color: '#273746', material: 'Metal', smart: { kind: 'factoryDoor', title: `Factory ${idx + 1} Entrance`, power: idx + 1, range: 8, team: 'all', advanced: false } });
+                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:1, z:cz + 38}, rotation:{x:0,y:0,z:0}, scale:{x:20, y:0.2, z:12}, color: '#9aa4ae', material: 'Concrete' });
+            };
+
+            factoryPlotCenters.forEach((p, idx) => addFactoryVariant(p[0], p[1], idx % 3, idx));
+            return objs;
+        };
+
         const startCityGame = (neighborhood, isFirstTime = false) => {
             isCityMode = true;
+            activeCityDistrict = neighborhood;
+            const isIndustrial = neighborhood === 'Industrial District';
             const isGrass = neighborhood === 'Greenridge';
-            const groundColor = isGrass ? '#55aa55' : '#f1c40f'; 
-            
-            let cityObjects = [];
-            
-            // Lower Asphalt slightly to avoid Material Z-Fighting overlapping!
-            // FIX: Use realistic SLATE texture for the massive asphalt road foundation!
-            cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:0, y:-2.1, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2000, y:4, z:2000}, color: '#34495e', material: 'Slate' });
+            let cityObjects = isIndustrial ? generateIndustrialDistrict() : [];
 
-            for (let x = -5; x <= 5; x++) {
-                for (let z = -5; z <= 5; z++) {
-                    // FIX: Plots use GRASS or the brand new SAND material so they have highly realistic ground textures!
-                    cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:x*50, y:-2, z:z*50}, rotation:{x:0,y:0,z:0}, scale:{x:40, y:4, z:40}, color: groundColor, material: isGrass ? 'Grass' : 'Sand' });
+            if (!isIndustrial) {
+                const groundColor = isGrass ? '#55aa55' : '#f1c40f';
+                cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:0, y:-2.1, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2000, y:4, z:2000}, color: '#34495e', material: 'Slate' });
+                for (let x = -5; x <= 5; x++) {
+                    for (let z = -5; z <= 5; z++) {
+                        cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:x*50, y:-2, z:z*50}, rotation:{x:0,y:0,z:0}, scale:{x:40, y:4, z:40}, color: groundColor, material: isGrass ? 'Grass' : 'Sand' });
+                    }
                 }
-            }
-            for (let i = -5; i <= 5; i++) {
-                for (let j = -10; j <= 10; j++) {
-                    // Stripes rest perfectly on the lowered asphalt
-                    cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:i*50 + 25, y:-0.05, z:j*25}, rotation:{x:0,y:0,z:0}, scale:{x:0.5, y:0.1, z:8}, color: '#f1c40f', material: 'Neon', noCollide: true });
-                    cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:j*25, y:-0.05, z:i*50 + 25}, rotation:{x:0,y:0,z:0}, scale:{x:8, y:0.1, z:0.5}, color: '#f1c40f', material: 'Neon', noCollide: true });
+                for (let i = -5; i <= 5; i++) {
+                    for (let j = -10; j <= 10; j++) {
+                        cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:i*50 + 25, y:-0.05, z:j*25}, rotation:{x:0,y:0,z:0}, scale:{x:0.5, y:0.1, z:8}, color: '#f1c40f', material: 'Neon', noCollide: true });
+                        cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:j*25, y:-0.05, z:i*50 + 25}, rotation:{x:0,y:0,z:0}, scale:{x:8, y:0.1, z:0.5}, color: '#f1c40f', material: 'Neon', noCollide: true });
+                    }
                 }
+                const relevantPlots = cityGlobalData.plots.filter(p => p.neighborhood === neighborhood);
+                relevantPlots.forEach(p => {
+                    const houseBlocks = generateStarterHouse(p.plotX, p.plotZ, neighborhood, p.username || currentUser.username);
+                    cityObjects = cityObjects.concat(houseBlocks);
+                });
             }
 
-            const relevantPlots = cityGlobalData.plots.filter(p => p.neighborhood === neighborhood);
-            relevantPlots.forEach(p => {
-                const houseBlocks = generateStarterHouse(p.plotX, p.plotZ, neighborhood, p.username || currentUser.username);
-                cityObjects = cityObjects.concat(houseBlocks);
-            });
-
-           // FIX: Use a muted 2016 Sky Blue and lower the brightness significantly!
             activeLevel = {
-                settings: { 
-                    gravity: 0.35, 
-                    skyColor: isGrass ? '#5b88a5' : '#a37b45', // Deep retro blue vs dull desert
-                    brightness: 0.65 // Dimmed to create harsher, older-looking shadows
+                settings: {
+                    gravity: 0.35,
+                    skyColor: isIndustrial ? '#71808f' : (isGrass ? '#5b88a5' : '#a37b45'),
+                    brightness: isIndustrial ? 0.6 : 0.65
                 },
-                spawn: { x: cityGlobalData.cityData.plotX * 50, y: 2, z: (cityGlobalData.cityData.plotZ * 50) + 15 }, 
+                spawn: isIndustrial ? { x: 0, y: 2, z: 380 } : { x: cityGlobalData.cityData.plotX * 50, y: 2, z: (cityGlobalData.cityData.plotZ * 50) + 15 },
                 objects: cityObjects
             };
             document.getElementById('play-title').innerText = `${neighborhood} (Sculpt City)`;
@@ -8098,6 +8572,9 @@ const groupAsAircraft = () => {
     
         const exitSculptCity = () => {
             isCityMode = false;
+            manufacturerJobState.active = false;
+            const panel = document.getElementById('manufacturer-job-ui');
+            if (panel) panel.remove();
             stopGameLoop();
             
             document.getElementById('play-likes').parentElement.style.display = 'flex';
@@ -8127,6 +8604,84 @@ const groupAsAircraft = () => {
         const openCityHelp = () => {
             document.getElementById('city-help-modal').style.display = 'flex';
         };
+
+        const startManufacturerJob = (factoryId = 1) => {
+            manufacturerJobState.active = true;
+            manufacturerJobState.startTime = Date.now();
+            manufacturerJobState.products = 0;
+            manufacturerJobState.packaged = 0;
+            manufacturerJobState.step = 'collect';
+            manufacturerJobState.stepStartedAt = Date.now();
+            manufacturerJobState.activeMs = 0;
+
+            const panel = document.createElement('div');
+            panel.id = 'manufacturer-job-ui';
+            panel.style.cssText = 'position:absolute;top:20px;left:20px;z-index:65;background:rgba(255,255,255,0.95);border:2px solid #2c3e50;border-radius:8px;padding:12px;min-width:260px;';
+            panel.innerHTML = `
+                <h4 style="margin:0 0 8px 0;color:#2c3e50;">Manufacturer Shift</h4>
+                <p id="manufacturer-step" style="margin:0 0 8px 0;font-weight:700;color:#34495e;">Step 1: Build Product</p>
+                <button class="btn btn-success btn-sm" id="manufacturer-action-btn" style="width:100%;margin-bottom:8px;">Build Product</button>
+                <div style="font-size:12px;color:#555;margin-bottom:8px;">Products Completed: <span id="manufacturer-products">0</span></div>
+                <button class="btn btn-danger btn-sm" style="width:100%;" onclick="endManufacturerShift()">End Shift / Leave</button>
+            `;
+            document.querySelector('#play-container-3d').appendChild(panel);
+
+            document.getElementById('manufacturer-action-btn').onclick = () => {
+                if (!manufacturerJobState.active) return;
+                const now = Date.now();
+                if (now - manufacturerJobState.stepStartedAt > 25000) return showModal('Shift Paused', 'You were inactive too long. Stay active to earn Sculpt Coins.');
+                manufacturerJobState.activeMs += Math.min(6000, now - manufacturerJobState.stepStartedAt);
+                if (manufacturerJobState.step === 'collect') {
+                    manufacturerJobState.step = 'package';
+                    manufacturerJobState.stepStartedAt = now;
+                    document.getElementById('manufacturer-step').innerText = 'Step 2: Package Product';
+                    document.getElementById('manufacturer-action-btn').innerText = 'Package Product';
+                } else {
+                    manufacturerJobState.step = 'collect';
+                    manufacturerJobState.stepStartedAt = now;
+                    manufacturerJobState.products += 1;
+                    manufacturerJobState.packaged += 1;
+                    document.getElementById('manufacturer-step').innerText = 'Step 1: Build Product';
+                    document.getElementById('manufacturer-action-btn').innerText = 'Build Product';
+                    document.getElementById('manufacturer-products').innerText = manufacturerJobState.products;
+                }
+            };
+
+            activeLevel.spawn = { x: 0, y: 2, z: 0, scale: { x: 4, y: 1, z: 4 } };
+            activeLevel.objects = [
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:-0.5, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:1, z:48}, color:'#a9b4bf', material:'Concrete' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:3, z:-23}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:7, z:2}, color:'#6c7784', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:3, z:23}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:7, z:2}, color:'#6c7784', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:-23, y:3, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:7, z:48}, color:'#6c7784', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:23, y:3, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:7, z:48}, color:'#6c7784', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:6.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:1, z:48}, color:'#4e5966', material:'Slate' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:1.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:26, y:1.1, z:4}, color:'#2d3436', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:-10, y:2.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:1.2, z:4}, color:'#95a5a6', material:'Metal' },
+                { id: crypto.randomUUID(), type: 'block', position: {x:10, y:2.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:1.2, z:4}, color:'#95a5a6', material:'Metal' }
+            ];
+            buildPlayScene();
+            playerObj.x = 0; playerObj.y = 2; playerObj.z = 8;
+            showModal('Manufacturer Shift Started', `Factory ${factoryId}: complete the 2-step process to earn +5 Sculpt Coins per product.`);
+        };
+
+        const endManufacturerShift = async () => {
+            if (!manufacturerJobState.active) return;
+            manufacturerJobState.active = false;
+            const panel = document.getElementById('manufacturer-job-ui');
+            if (panel) panel.remove();
+            const activeEnough = manufacturerJobState.activeMs >= manufacturerJobState.products * 1200;
+            const earned = activeEnough ? (manufacturerJobState.products * 5) : 0;
+            if (earned > 0) {
+                try {
+                    const res = await apiCall('/city/sync', 'POST', { coinsToAdd: earned });
+                    if (currentUser) currentUser.coins = res.coins;
+                    updateNav();
+                } catch (e) {}
+            }
+            startCityGame('Industrial District');
+            showModal('Shift Ended', `You manufactured ${manufacturerJobState.products} products and earned ${earned} Sculpt Coins this shift.`);
+        };
+        window.endManufacturerShift = endManufacturerShift;
 
 
 // ==========================================
@@ -8582,6 +9137,7 @@ document.getElementById('prop-cancollide').addEventListener('change', (e) => {
     selectedObjects.forEach(mesh => {
         if (mesh.userData.isSpawn) return;
         mesh.userData.canCollide = e.target.checked;
+        mesh.userData.noCollide = !e.target.checked;
     });
     recordEdit();
 });
@@ -8995,6 +9551,7 @@ async function openModPanel() {
         if (state.unlocked) {
             document.getElementById('mod-panel-lock-screen').style.display = 'none';
             document.getElementById('mod-panel-content').style.display = 'block';
+            loadAccessoryModerationQueue();
         }
     } catch {}
     startModWatchdog();
@@ -9007,6 +9564,7 @@ async function unlockModPanel() {
         await apiCall('/mod-panel/unlock','POST',{code});
         document.getElementById('mod-panel-lock-screen').style.display = 'none';
         document.getElementById('mod-panel-content').style.display = 'block';
+        loadAccessoryModerationQueue();
     } catch {
         navigate('dashboard');
     }
@@ -9050,6 +9608,91 @@ async function runModerationAction(action) {
 
     alert(res.message);
     lookupModerationUser();
+}
+
+let accessoryPreviewRenderer = null;
+let accessoryPreviewScene = null;
+let accessoryPreviewCamera = null;
+let accessoryPreviewAnim = null;
+
+async function loadAccessoryModerationQueue() {
+    const host = document.getElementById('mod-accessory-queue');
+    if (!host) return;
+    host.innerHTML = 'Loading...';
+    try {
+        const items = await apiCall('/moderate/accessories', 'GET');
+        if (!items.length) {
+            host.innerHTML = '<div style="color:#777;">No pending accessories.</div>';
+            return;
+        }
+        host.innerHTML = items.map(i => `
+            <div style="border:1px solid #ddd; border-radius:6px; padding:8px; margin-bottom:8px; background:#fafafa;">
+                <div><strong>${i.name}</strong> • ${i.price} SC</div>
+                <div style="font-size:12px; color:#666;">By ${i.authorName}</div>
+                <div style="font-size:12px; margin:4px 0;">${i.description || ''}</div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap;">
+                    <button class="btn btn-sm btn-info" onclick="openAccessoryPreview('${i.id}')">3D View</button>
+                    <button class="btn btn-sm btn-success" onclick="moderateAccessory('${i.id}','approve')">Approve</button>
+                    <button class="btn btn-sm btn-danger" onclick="moderateAccessory('${i.id}','reject')">Reject</button>
+                </div>
+            </div>
+        `).join('');
+        window.__modAccessoryQueue = items;
+    } catch (e) {
+        host.innerHTML = '<div style="color:#c0392b;">Failed to load queue.</div>';
+    }
+}
+
+async function moderateAccessory(id, action) {
+    const reason = action === 'reject' ? (prompt('Reject reason (optional):') || '') : '';
+    await apiCall(`/moderate/accessories/${id}`, 'POST', { action, reason });
+    loadAccessoryModerationQueue();
+}
+
+function openAccessoryPreview(itemId) {
+    const item = (window.__modAccessoryQueue || []).find(i => i.id === itemId);
+    if (!item) return;
+    let payload = {};
+    try { payload = JSON.parse(item.image || '{}'); } catch(e) {}
+    const voxels = payload.voxels || [];
+
+    const container = document.getElementById('accessory-review-3d');
+    document.getElementById('accessory-review-modal').style.display = 'flex';
+    if (!accessoryPreviewRenderer) {
+        accessoryPreviewScene = new THREE.Scene();
+        accessoryPreviewScene.background = new THREE.Color('#87CEEB');
+        accessoryPreviewCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+        accessoryPreviewCamera.position.set(8, 8, 10);
+        accessoryPreviewRenderer = new THREE.WebGLRenderer({ antialias: true });
+        container.appendChild(accessoryPreviewRenderer.domElement);
+        const light = new THREE.DirectionalLight(0xffffff, 1.0); light.position.set(4, 8, 6); accessoryPreviewScene.add(light);
+        accessoryPreviewScene.add(new THREE.AmbientLight(0xffffff, 0.7));
+    }
+    accessoryPreviewScene.children.slice().forEach(child => {
+        if (!child.isLight) accessoryPreviewScene.remove(child);
+    });
+    const geo = new THREE.BoxGeometry(0.26, 0.26, 0.26);
+    voxels.forEach(v => {
+        const m = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: v.color || '#3498db' }));
+        m.position.set((v.x || 0) * 0.26, ((v.y || 0) * 0.26) + 1.5, (v.z || 0) * 0.26);
+        accessoryPreviewScene.add(m);
+    });
+    accessoryPreviewRenderer.setSize(container.clientWidth, container.clientHeight);
+    accessoryPreviewCamera.aspect = container.clientWidth / container.clientHeight;
+    accessoryPreviewCamera.updateProjectionMatrix();
+    const animate = () => {
+        if (document.getElementById('accessory-review-modal').style.display !== 'flex') return;
+        accessoryPreviewAnim = requestAnimationFrame(animate);
+        accessoryPreviewScene.rotation.y += 0.01;
+        accessoryPreviewRenderer.render(accessoryPreviewScene, accessoryPreviewCamera);
+    };
+    if (accessoryPreviewAnim) cancelAnimationFrame(accessoryPreviewAnim);
+    animate();
+}
+
+function closeAccessoryPreview() {
+    document.getElementById('accessory-review-modal').style.display = 'none';
+    if (accessoryPreviewAnim) cancelAnimationFrame(accessoryPreviewAnim);
 }
 
 
