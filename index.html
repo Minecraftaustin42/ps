@@ -8,6 +8,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
     <style>
         /* 2016 Nostalgic CSS / Flat Design Era */
         @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Audiowide&display=swap');
@@ -403,6 +404,10 @@
                 <button class="btn" style="background:#2ecc71; border-bottom-color:#27ae60;" onclick="citySelectNeighborhood('Greenridge')"> <strong>Greenridge</strong><br><span style="font-size:12px; font-weight:normal;">Peaceful, trees, suburban</span></button>
                 <button class="btn" style="background:#e67e22; border-bottom-color:#d35400;" onclick="citySelectNeighborhood('Sandfall')"> <strong>Sandfall</strong><br><span style="font-size:12px; font-weight:normal;">Dry, desert neighborhood</span></button>
                 <button class="btn" style="background:#7f8c8d; border-bottom-color:#2c3e50;" onclick="citySelectNeighborhood('Industrial District')"> <strong>Industrial District</strong><br><span style="font-size:12px; font-weight:normal;">Factories, roads, heavy industry</span></button>
+            </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
             <div id="city-returning-step" style="display:none; margin-top: 20px;">
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
@@ -935,6 +940,15 @@
                 </div>
                 
                 <div id="tab-shop-market" class="tab-content active" style="padding-top: 20px;">
+                    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;">
+                        <input id="shop-search" class="form-control" style="max-width:260px;" placeholder="Search avatar items..." oninput="loadShop()">
+                        <select id="shop-sort" class="form-control" style="max-width:180px;" onchange="loadShop()">
+                            <option value="newest">Newest</option>
+                            <option value="price_low">Price: Low to High</option>
+                            <option value="price_high">Price: High to Low</option>
+                            <option value="name">Name A-Z</option>
+                        </select>
+                    </div>
                     <div id="shop-grid" class="game-grid"></div>
                 </div>
 
@@ -944,12 +958,20 @@
                             <h4>Design 3D Accessory</h4>
                             <div class="toolbar" style="margin-bottom: 5px;">
                                 <input type="color" id="acc-color" value="#ffffff" style="cursor:pointer; width:30px; height:30px; padding:0; border:none;">
-                                <button class="tool-btn active" id="acc-tool-draw" onclick="setAccTool('draw')">Draw</button>
-                                <button class="tool-btn" id="acc-tool-erase" onclick="setAccTool('erase')">Erase</button>
+                                <select id="acc-part-type" class="form-control" style="width:130px;">
+                                    <option value="block">Cube</option>
+                                    <option value="sphere">Sphere</option>
+                                    <option value="cylinder">Cylinder</option>
+                                    <option value="cone">Cone</option>
+                                </select>
+                                <button class="tool-btn" onclick="addAccPart()">+ Add Part</button>
+                                <button class="tool-btn active" id="acc-tool-translate" onclick="setAccTool('translate')">Move</button>
+                                <button class="tool-btn" id="acc-tool-rotate" onclick="setAccTool('rotate')">Rotate</button>
+                                <button class="tool-btn" id="acc-tool-scale" onclick="setAccTool('scale')">Scale</button>
                                 <button class="tool-btn btn-danger" onclick="clearAcc()">Clear</button>
                             </div>
                             <div id="acc-editor-3d"></div>
-                            <p style="font-size:11px; color:#777; margin-top:5px;">Right-Click & Drag to rotate camera. Left-Click to place or erase blocks.</p>
+                            <p style="font-size:11px; color:#777; margin-top:5px;">Select a part, then use Move/Rotate/Scale transform controls.</p>
                         </div>
 
                         <div style="width: 100%; max-width: 250px;">
