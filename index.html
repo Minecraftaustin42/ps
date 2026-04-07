@@ -457,6 +457,10 @@
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
                 <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -1034,13 +1038,17 @@
                             <select id="cloth-type" class="form-control mb-10"><option value="shirt">Shirt</option><option value="pants">Pants</option></select>
                             <select id="cloth-visibility" class="form-control mb-10"><option value="public">Public (requires moderation)</option><option value="private">Private (creator only)</option></select>
                             <select id="cloth-tool" class="form-control mb-10">
-                                <option value="brush">Brush</option><option value="line">Line</option><option value="circle">Circle</option><option value="box">Box</option><option value="polyline">Polygonal Line</option><option value="fill">Fill</option><option value="text">Text</option><option value="erase_brush">Eraser Brush</option><option value="erase_box">Eraser Box</option><option value="erase_circle">Eraser Circle</option>
+                                <option value="brush">Brush</option><option value="line">Line</option><option value="circle">Circle</option><option value="box">Box</option><option value="polyline">Polygonal Line</option><option value="fill">Fill</option><option value="text">Text</option><option value="eyedropper">Eyedropper</option><option value="erase_brush">Eraser Brush</option><option value="erase_box">Eraser Box</option><option value="erase_circle">Eraser Circle</option>
                             </select>
                             <input id="cloth-color" class="form-control mb-10" type="color" value="#ff0000">
                             <input id="cloth-size" class="form-control mb-10" type="number" value="12" min="1" max="64" placeholder="Tool size">
+                            <label style="display:flex; gap:6px; align-items:center; font-size:12px; margin-bottom:8px;"><input type="checkbox" id="cloth-symmetry"> Mirror Left/Right Limbs</label>
+                            <label style="display:flex; gap:6px; align-items:center; font-size:12px; margin-bottom:8px;"><input type="checkbox" id="cloth-auto-rotate"> Auto-rotate mannequin</label>
+                            <label style="font-size:12px; display:block; margin-bottom:8px;">Zoom <input id="cloth-zoom" type="range" min="8" max="28" value="14" oninput="setClothingZoom(this.value)"></label>
                             <div style="display:flex; gap:6px; margin-bottom:8px;">
                                 <button class="btn btn-sm" onclick="undoClothing()">Undo</button>
                                 <button class="btn btn-sm" onclick="redoClothing()">Redo</button>
+                                <button class="btn btn-sm btn-danger" onclick="clearClothingPart()">Clear Limb</button>
                             </div>
                             <button class="btn btn-success" style="width:100%;" onclick="submitClothing()">Publish / Save Clothing</button>
                         </div>
@@ -4975,7 +4983,9 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
         });
         let clothDrawing = false, clothStart = null, clothPolyLast = null;
         let clothActivePart = 'torso';
+        let clothAutoRotate = false;
         const clothHidden = { head: false, torso: false, arms: false, legs: false };
+        const clothMirrorPart = { leftArm: 'rightArm', rightArm: 'leftArm', leftLeg: 'rightLeg', rightLeg: 'leftLeg' };
 
         const partState = (part) => clothState[part] || clothState.torso;
         const pushClothingUndo = (part = clothActivePart) => {
@@ -5043,10 +5053,22 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             } else if (tool === 'text') {
                 const text = prompt('Enter text');
                 if (text) { clothCtx.font = `${Math.max(10, size * 2)}px Arial`; clothCtx.fillText(text, p1.x, p1.y); }
+            } else if (tool === 'eyedropper') {
+                const px = clothCtx.getImageData(p1.x, p1.y, 1, 1).data;
+                const hex = '#' + [px[0], px[1], px[2]].map(v => v.toString(16).padStart(2, '0')).join('');
+                const colorInput = document.getElementById('cloth-color');
+                if (colorInput) colorInput.value = hex;
             }
             clothCtx.globalCompositeOperation = 'source-over';
             st.texture.needsUpdate = true;
             if (commit) pushClothingUndo(part);
+            if (document.getElementById('cloth-symmetry')?.checked && clothMirrorPart[part]) {
+                const mirror = clothMirrorPart[part];
+                const mst = partState(mirror);
+                mst.ctx.clearRect(0, 0, mst.canvas.width, mst.canvas.height);
+                mst.ctx.drawImage(st.canvas, 0, 0);
+                mst.texture.needsUpdate = true;
+            }
         };
         const initClothingEditor = () => {
             const host = document.getElementById('clothing-editor-3d');
@@ -5066,7 +5088,7 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                     n.material = new THREE.MeshLambertMaterial({ map: partState(part).texture });
                 });
                 clothScene.add(clothModel);
-                const renderLoop = () => { if (clothRenderer && document.getElementById('tab-shop-clothing').classList.contains('active')) { requestAnimationFrame(renderLoop); clothControls.update(); clothRenderer.render(clothScene, clothCamera);} };
+                const renderLoop = () => { if (clothRenderer && document.getElementById('tab-shop-clothing').classList.contains('active')) { requestAnimationFrame(renderLoop); clothAutoRotate = !!document.getElementById('cloth-auto-rotate')?.checked; if (clothAutoRotate && clothModel) clothModel.rotation.y += 0.01; clothControls.update(); clothRenderer.render(clothScene, clothCamera);} };
                 renderLoop();
                 const dom = clothRenderer.domElement;
                 dom.addEventListener('pointerdown', (e) => {
@@ -5121,10 +5143,24 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                 root.querySelector('#cloth-name').value = ''; root.querySelector('#cloth-desc').value = ''; root.querySelector('#cloth-price').value = '';
             } catch (e) {}
         };
+        const clearClothingPart = () => {
+            const st = partState(clothActivePart);
+            pushClothingUndo(clothActivePart);
+            st.ctx.clearRect(0, 0, st.canvas.width, st.canvas.height);
+            st.ctx.fillStyle = '#ffffff';
+            st.ctx.fillRect(0, 0, st.canvas.width, st.canvas.height);
+            st.texture.needsUpdate = true;
+        };
+        const setClothingZoom = (val) => {
+            if (!clothCamera) return;
+            clothCamera.position.set(10, 10, parseFloat(val) || 14);
+        };
         window.toggleClothingLimb = toggleClothingLimb;
         window.undoClothing = undoClothing;
         window.redoClothing = redoClothing;
         window.submitClothing = submitClothing;
+        window.clearClothingPart = clearClothingPart;
+        window.setClothingZoom = setClothingZoom;
 
         // --- Dashboard & Library ---
         const loadDashboardFriends = async () => {
@@ -6639,10 +6675,14 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
             } catch (e) {}
         };
         
+        let teamSyncInFlight = false;
+        let teamSyncCooldownUntil = 0;
         const startTeamSync = () => {
             if (teamSyncInterval) clearInterval(teamSyncInterval);
             teamSyncInterval = setInterval(async () => {
                 if(!currentEditGameId || !currentUser) return;
+                if (teamSyncInFlight || Date.now() < teamSyncCooldownUntil) return;
+                teamSyncInFlight = true;
                 try {
                     const collabCursor = { x: edCamera.position.x, y: edCamera.position.y, z: edCamera.position.z };
                     const res = await apiCall(`/games/${currentEditGameId}/sync`, 'POST', { gameData: edData, genre: document.getElementById('editor-genre').value, lastLocalEditTime: lastLocalEditTime, cursor: collabCursor });
@@ -6652,8 +6692,12 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     renderCollaboratorCursors((res.activeEditorsData || res.cursors || res.teamCursors || res.collaborators || []).filter(c => c && c.username && c.username !== currentUser.username));
                     const status = document.getElementById('autosave-status');
                     if (status && lastLocalEditTime > 0) { status.innerText = 'Autosaved'; setTimeout(() => status.innerText = '', 1000); }
-                } catch(e) {}
-            }, 10);
+                } catch(e) {
+                    teamSyncCooldownUntil = Date.now() + 2000; // prevent 502 spam storms
+                } finally {
+                    teamSyncInFlight = false;
+                }
+            }, 120);
         };
         const stopTeamSync = () => {
             if (teamSyncInterval) clearInterval(teamSyncInterval);
