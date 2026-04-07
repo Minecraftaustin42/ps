@@ -14,6 +14,7 @@ app.use("/seo", express.static(path.join(__dirname, "public", "seo")));
 const DB_FILE = path.join(__dirname, 'db.json');
 let db = {
     users: [], sessions: {}, games: [], shopItems: [], clothingItems: [], blueprints: [], jams: [], groups: [], cityPlots: [], datastores: {},
+    war: { cycle: null, parties: {}, assets: [], investments: [], matches: [], rewards: [] },
     globalChat: [], toolboxItems: [], // NEW
     notifications: [],
     moderation: { bans: {}, ipBans: [], warnings: {} },  // <-- ADD THIS LINE
@@ -39,6 +40,7 @@ if (!db.datastores) db.datastores = {};
 if (!db.notifications) db.notifications = [];
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} }; // <-- ADD THIS LINE
 if (!db.friendPetDaily) db.friendPetDaily = {};
+if (!db.war) db.war = { cycle: null, parties: {}, assets: [], investments: [], matches: [], rewards: [] };
     try {
         const loaded = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
         db = { ...db, ...loaded };
@@ -47,6 +49,7 @@ if (!db.friendPetDaily) db.friendPetDaily = {};
         if (!db.clothingItems) db.clothingItems = [];
         if (!db.blueprints) db.blueprints = [];
         if (!db.jams) db.jams = [];
+        if (!db.war) db.war = { cycle: null, parties: {}, assets: [], investments: [], matches: [], rewards: [] };
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} };
         if (!db.groups) db.groups = [];
 if (!db.sounds) db.sounds = [];
@@ -72,6 +75,7 @@ if (!u.toolboxInventory) u.toolboxInventory = [];
             if (!u.academyClaims) u.academyClaims = {};
             if (!u.jamVotes) u.jamVotes = {};
             if (!u.blueprintFavorites) u.blueprintFavorites = [];
+            if (!u.warProfile) u.warProfile = { cycleId: '', faction: null, division: null, rank: 'Recruit', rankXp: 0, preference: 'auto', totalPowerEarned: 0, lastActiveAt: 0 };
 
 // Add this right after parsing db.json
 if (typeof db.lastUserIdNum === 'undefined') {
@@ -577,7 +581,7 @@ if (typeof db.lastUserIdNum !== 'number') {
 userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
-        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], warProfile: { cycleId: '', faction: null, division: null, rank: 'Recruit', rankXp: 0, preference: 'auto', totalPowerEarned: 0, lastActiveAt: 0 }, bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
 
@@ -994,6 +998,324 @@ app.post('/api/challenges/claim', requireAuth, (req, res) => {
     user.coins = (user.coins || 0) + challenge.reward;
     saveDB();
     res.json({ success: true, reward: challenge.reward, coins: user.coins });
+});
+
+const WAR_DIVISIONS = [
+    { id: 'assault', name: 'Assault Division', slotWeight: 0.35 },
+    { id: 'vehicle', name: 'Vehicle Corps', slotWeight: 0.18 },
+    { id: 'defense', name: 'Defense Unit', slotWeight: 0.2 },
+    { id: 'air', name: 'Air Division', slotWeight: 0.12 },
+    { id: 'specops', name: 'Special Ops', slotWeight: 0.15 }
+];
+const WAR_RANKS = ['Recruit', 'Private', 'Corporal', 'Sergeant', 'Lieutenant', 'Captain', 'Major', 'Colonel', 'General'];
+const WAR_CATEGORIES = ['Weapon', 'Vehicle', 'Structure', 'Gadget', 'Support Item'];
+const WAR_DIVISION_TAGS = ['Assault', 'Vehicle Corps', 'Defense Unit', 'Air Division', 'Special Ops', 'Universal'];
+const WAR_POWER_RULES = { play: 8, active: 4, mission: 14, win: 18, publishGame: 20, publishAsset: 26, assetUsage: 6 };
+
+const getWarCycle = () => {
+    const now = new Date();
+    const monthBlock = Math.floor(now.getUTCMonth() / 2) * 2;
+    const start = Date.UTC(now.getUTCFullYear(), monthBlock, 1, 0, 0, 0, 0);
+    const end = Date.UTC(now.getUTCFullYear(), monthBlock + 2, 1, 0, 0, 0, 0) - 1;
+    const cycleId = `war_${new Date(start).toISOString().slice(0, 7)}_${String(monthBlock + 1).padStart(2, '0')}`;
+    return { cycleId, start, end };
+};
+const ensureWarState = () => {
+    const cycle = getWarCycle();
+    if (!db.war) db.war = { cycle: null, parties: {}, assets: [], investments: [], matches: [], rewards: [] };
+    if (!db.war.cycle || db.war.cycle.cycleId !== cycle.cycleId) {
+        db.war.cycle = {
+            cycleId: cycle.cycleId,
+            startsAt: cycle.start,
+            endsAt: cycle.end,
+            phase: 'power_build',
+            factions: {
+                red: { power: 0, score: 0, members: [], divisions: {}, underdogBonus: 0 },
+                blue: { power: 0, score: 0, members: [], divisions: {}, underdogBonus: 0 }
+            },
+            zones: [
+                { id: 'north_yard', name: 'North Yard', owner: null, progress: { red: 0, blue: 0 } },
+                { id: 'mid_bridge', name: 'Mid Bridge', owner: null, progress: { red: 0, blue: 0 } },
+                { id: 'dock_sector', name: 'Dock Sector', owner: null, progress: { red: 0, blue: 0 } }
+            ],
+            divisionPower: { red: {}, blue: {} }
+        };
+        db.war.parties = {};
+        db.war.investments = [];
+        db.war.matches = [];
+        db.war.rewards = [];
+    }
+    return db.war.cycle;
+};
+const ensureWarProfile = (user) => {
+    const c = ensureWarState();
+    if (!user.warProfile) user.warProfile = { cycleId: '', faction: null, division: null, rank: 'Recruit', rankXp: 0, preference: 'auto', totalPowerEarned: 0, lastActiveAt: 0 };
+    if (user.warProfile.cycleId !== c.cycleId) {
+        user.warProfile = { cycleId: c.cycleId, faction: null, division: null, rank: 'Recruit', rankXp: 0, preference: user.warProfile.preference || 'auto', totalPowerEarned: 0, lastActiveAt: 0 };
+    }
+};
+const getFactionCounts = (cycle) => ({
+    red: cycle.factions.red.members.length,
+    blue: cycle.factions.blue.members.length
+});
+const assignFactionBalanced = (user, preference = 'auto', partySize = 1) => {
+    const cycle = ensureWarState();
+    ensureWarProfile(user);
+    if (user.warProfile.faction) return user.warProfile.faction;
+    const counts = getFactionCounts(cycle);
+    const projectedRed = counts.red + partySize;
+    const projectedBlue = counts.blue + partySize;
+    let preferred = preference === 'red' ? 'red' : preference === 'blue' ? 'blue' : null;
+    const diffIfRed = Math.abs(projectedRed - counts.blue);
+    const diffIfBlue = Math.abs(projectedBlue - counts.red);
+    let target = diffIfRed <= diffIfBlue ? 'red' : 'blue';
+    if (preferred) {
+        const preferredDiff = preferred === 'red' ? diffIfRed : diffIfBlue;
+        const targetDiff = target === 'red' ? diffIfRed : diffIfBlue;
+        if (preferredDiff <= targetDiff + 2) target = preferred;
+    }
+    user.warProfile.faction = target;
+    cycle.factions[target].members.push(user.id);
+    const underdog = getFactionCounts(cycle);
+    cycle.factions.red.underdogBonus = underdog.red < underdog.blue ? 1.1 : 1;
+    cycle.factions.blue.underdogBonus = underdog.blue < underdog.red ? 1.1 : 1;
+    return target;
+};
+const rankFromXp = (xp) => WAR_RANKS[Math.min(WAR_RANKS.length - 1, Math.floor((xp || 0) / 120))];
+const applyWarPower = (user, source, amountOverride = null) => {
+    const cycle = ensureWarState();
+    ensureWarProfile(user);
+    if (!user.warProfile.faction) assignFactionBalanced(user, user.warProfile.preference || 'auto', 1);
+    const base = WAR_POWER_RULES[source] || 0;
+    const amount = Math.max(1, Math.min(200, parseInt(amountOverride || base, 10) || base || 1));
+    const faction = user.warProfile.faction;
+    const bonus = cycle.factions[faction].underdogBonus || 1;
+    const earned = Math.round(amount * bonus);
+    cycle.factions[faction].power += earned;
+    user.warProfile.totalPowerEarned = (user.warProfile.totalPowerEarned || 0) + earned;
+    user.warProfile.rankXp = (user.warProfile.rankXp || 0) + Math.ceil(earned / 2);
+    user.warProfile.rank = rankFromXp(user.warProfile.rankXp);
+    user.warProfile.lastActiveAt = Date.now();
+    if (user.warProfile.division) {
+        if (!cycle.divisionPower[faction][user.warProfile.division]) cycle.divisionPower[faction][user.warProfile.division] = 0;
+        cycle.divisionPower[faction][user.warProfile.division] += earned;
+    }
+    return { earned, faction, totalPower: cycle.factions[faction].power, rank: user.warProfile.rank };
+};
+const chooseDivision = (cycle, faction, preferred) => {
+    const total = cycle.factions[faction].members.length || 1;
+    const caps = WAR_DIVISIONS.reduce((a, d) => ({ ...a, [d.id]: Math.max(1, Math.floor(total * d.slotWeight) + 5) }), {});
+    const count = cycle.factions[faction].divisions;
+    const canJoin = (div) => (count[div] || 0) < caps[div];
+    if (preferred && canJoin(preferred)) return preferred;
+    const firstOpen = WAR_DIVISIONS.find(d => canJoin(d.id));
+    return firstOpen ? firstOpen.id : 'assault';
+};
+
+app.get('/api/war/state', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const cycle = ensureWarState();
+    ensureWarProfile(user);
+    const assets = (db.war.assets || []).filter(a => a.reviewStatus === 'approved' && a.publishStatus === 'live');
+    const faction = user.warProfile.faction;
+    const rankings = db.users
+        .filter(u => u.warProfile && u.warProfile.cycleId === cycle.cycleId)
+        .map(u => ({ username: u.username, faction: u.warProfile.faction, rank: u.warProfile.rank, power: u.warProfile.totalPowerEarned || 0 }))
+        .sort((a, b) => b.power - a.power)
+        .slice(0, 40);
+    saveDB();
+    res.json({ cycle, myWarProfile: user.warProfile, divisions: WAR_DIVISIONS, ranks: WAR_RANKS, assets, rankings });
+});
+
+app.post('/api/war/preference', requireAuth, (req, res) => {
+    const { preference } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    ensureWarProfile(user);
+    if (!['auto', 'red', 'blue'].includes(preference)) return res.status(400).json({ error: 'Invalid preference.' });
+    user.warProfile.preference = preference;
+    saveDB();
+    res.json({ success: true, preference });
+});
+
+app.post('/api/war/assign', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const cycle = ensureWarState();
+    ensureWarProfile(user);
+    const preference = req.body.preference || user.warProfile.preference || 'auto';
+    const faction = assignFactionBalanced(user, preference, 1);
+    saveDB();
+    res.json({ success: true, faction, cycleId: cycle.cycleId });
+});
+
+app.post('/api/war/party/create', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    ensureWarProfile(user);
+    const code = Math.random().toString(36).slice(2, 8).toUpperCase();
+    db.war.parties[code] = { code, leaderId: user.id, members: [user.id], createdAt: Date.now() };
+    saveDB();
+    res.json({ success: true, party: db.war.parties[code] });
+});
+
+app.post('/api/war/party/join', requireAuth, (req, res) => {
+    const { code } = req.body;
+    const party = db.war.parties[String(code || '').toUpperCase()];
+    if (!party) return res.status(404).json({ error: 'Party not found.' });
+    if (!party.members.includes(req.userId)) party.members.push(req.userId);
+    saveDB();
+    res.json({ success: true, party });
+});
+
+app.post('/api/war/party/deploy', requireAuth, (req, res) => {
+    const { code, preference } = req.body;
+    const cycle = ensureWarState();
+    const party = db.war.parties[String(code || '').toUpperCase()];
+    if (!party) return res.status(404).json({ error: 'Party not found.' });
+    if (party.leaderId !== req.userId) return res.status(403).json({ error: 'Only party leader can deploy.' });
+    const members = party.members.map(id => db.users.find(u => u.id === id)).filter(Boolean);
+    const target = assignFactionBalanced(members[0], preference || 'auto', members.length);
+    members.slice(1).forEach(m => {
+        ensureWarProfile(m);
+        if (!m.warProfile.faction) {
+            m.warProfile.faction = target;
+            cycle.factions[target].members.push(m.id);
+        }
+    });
+    saveDB();
+    res.json({ success: true, faction: target, members: members.map(m => m.username) });
+});
+
+app.post('/api/war/division/join', requireAuth, (req, res) => {
+    const { divisionId } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const cycle = ensureWarState();
+    ensureWarProfile(user);
+    if (!user.warProfile.faction) assignFactionBalanced(user, user.warProfile.preference || 'auto', 1);
+    const chosen = chooseDivision(cycle, user.warProfile.faction, divisionId);
+    const fDiv = cycle.factions[user.warProfile.faction].divisions;
+    if (user.warProfile.division && fDiv[user.warProfile.division]) fDiv[user.warProfile.division]--;
+    fDiv[chosen] = (fDiv[chosen] || 0) + 1;
+    user.warProfile.division = chosen;
+    saveDB();
+    res.json({ success: true, division: chosen });
+});
+
+app.post('/api/war/power/earn', requireAuth, (req, res) => {
+    const { source, amount } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const result = applyWarPower(user, source, amount);
+    saveDB();
+    res.json({ success: true, ...result });
+});
+
+app.post('/api/war/invest', requireAuth, (req, res) => {
+    const { targetType, targetId, amount } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const cycle = ensureWarState();
+    ensureWarProfile(user);
+    if (!user.warProfile.faction) return res.status(400).json({ error: 'Join a faction first.' });
+    const spend = Math.max(10, Math.min(2000, parseInt(amount, 10) || 50));
+    const factionState = cycle.factions[user.warProfile.faction];
+    if (factionState.power < spend) return res.status(400).json({ error: 'Not enough faction power.' });
+    factionState.power -= spend;
+    db.war.investments.push({ id: crypto.randomUUID(), cycleId: cycle.cycleId, faction: user.warProfile.faction, targetType: String(targetType || 'unlock').slice(0, 32), targetId: String(targetId || 'general').slice(0, 80), amount: spend, byUserId: user.id, createdAt: Date.now() });
+    saveDB();
+    res.json({ success: true, factionPower: factionState.power });
+});
+
+app.get('/api/war/assets', requireAuth, (req, res) => {
+    const mine = (req.query.mine === '1');
+    const assets = (db.war.assets || []).filter(a => (mine ? a.creatorId === req.userId : true));
+    res.json(assets.sort((a, b) => b.createdAt - a.createdAt));
+});
+
+app.post('/api/war/assets', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const { name, description, category, divisionTag, modelData, statConfig, factionAccess, costPower } = req.body;
+    if (!WAR_CATEGORIES.includes(category)) return res.status(400).json({ error: 'Invalid category.' });
+    if (!WAR_DIVISION_TAGS.includes(divisionTag)) return res.status(400).json({ error: 'Invalid division tag.' });
+    const asset = {
+        id: crypto.randomUUID(),
+        creatorId: user.id,
+        creatorName: user.username,
+        name: String(name || 'Untitled War Asset').slice(0, 80),
+        description: String(description || '').slice(0, 400),
+        category,
+        divisionTag,
+        modelData: modelData || null,
+        statConfig: statConfig || {},
+        factionAccess: factionAccess || 'both',
+        costPower: Math.max(50, Math.min(5000, parseInt(costPower, 10) || 200)),
+        reviewStatus: 'draft',
+        publishStatus: 'private',
+        usageStats: { uses: 0, wins: 0, retentionLift: 0 },
+        balanceStats: { reports: 0, nerfVotes: 0, buffVotes: 0 },
+        createdAt: Date.now()
+    };
+    db.war.assets.push(asset);
+    saveDB();
+    res.json({ success: true, asset });
+});
+
+app.post('/api/war/assets/:id/submit', requireAuth, (req, res) => {
+    const asset = (db.war.assets || []).find(a => a.id === req.params.id && a.creatorId === req.userId);
+    if (!asset) return res.status(404).json({ error: 'Asset not found.' });
+    asset.reviewStatus = 'submitted';
+    asset.publishStatus = 'pending';
+    saveDB();
+    res.json({ success: true, asset });
+});
+
+app.get('/api/moderate/war-assets', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const pending = (db.war.assets || []).filter(a => a.reviewStatus === 'submitted');
+    res.json(pending);
+});
+
+app.post('/api/moderate/war-assets/:id', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const { action, notes } = req.body;
+    const asset = (db.war.assets || []).find(a => a.id === req.params.id);
+    if (!asset) return res.status(404).json({ error: 'Asset not found.' });
+    if (!['approve', 'reject'].includes(action)) return res.status(400).json({ error: 'Invalid action.' });
+    asset.reviewStatus = action === 'approve' ? 'approved' : 'rejected';
+    asset.publishStatus = action === 'approve' ? 'live' : 'private';
+    asset.reviewNotes = String(notes || '').slice(0, 300);
+    asset.reviewedAt = Date.now();
+    asset.reviewedBy = req.userId;
+    saveDB();
+    res.json({ success: true, asset });
+});
+
+app.post('/api/war/event/contribute', requireAuth, (req, res) => {
+    const { zoneId, objectiveType, points } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const cycle = ensureWarState();
+    ensureWarProfile(user);
+    if (!user.warProfile.faction) return res.status(400).json({ error: 'Join a faction first.' });
+    const zone = cycle.zones.find(z => z.id === zoneId);
+    if (!zone) return res.status(404).json({ error: 'Zone not found.' });
+    const add = Math.max(1, Math.min(300, parseInt(points, 10) || 20));
+    zone.progress[user.warProfile.faction] += add;
+    const enemy = user.warProfile.faction === 'red' ? 'blue' : 'red';
+    zone.progress[enemy] = Math.max(0, zone.progress[enemy] - Math.ceil(add / 2));
+    zone.owner = zone.progress.red === zone.progress.blue ? null : (zone.progress.red > zone.progress.blue ? 'red' : 'blue');
+    cycle.factions[user.warProfile.faction].score += add;
+    db.war.matches.push({ id: crypto.randomUUID(), cycleId: cycle.cycleId, userId: user.id, faction: user.warProfile.faction, division: user.warProfile.division, zoneId, objectiveType: String(objectiveType || 'capture').slice(0, 40), points: add, createdAt: Date.now() });
+    applyWarPower(user, 'mission', Math.ceil(add / 2));
+    saveDB();
+    res.json({ success: true, zone, factionScore: cycle.factions[user.warProfile.faction].score, rank: user.warProfile.rank });
+});
+
+app.get('/api/war/leaderboard', requireAuth, (req, res) => {
+    const cycle = ensureWarState();
+    const players = db.users
+        .filter(u => u.warProfile && u.warProfile.cycleId === cycle.cycleId)
+        .map(u => ({ username: u.username, faction: u.warProfile.faction, division: u.warProfile.division, rank: u.warProfile.rank, power: u.warProfile.totalPowerEarned || 0 }))
+        .sort((a, b) => b.power - a.power)
+        .slice(0, 50);
+    const factionBoard = [
+        { faction: 'red', power: cycle.factions.red.power, score: cycle.factions.red.score, members: cycle.factions.red.members.length },
+        { faction: 'blue', power: cycle.factions.blue.power, score: cycle.factions.blue.score, members: cycle.factions.blue.members.length }
+    ];
+    res.json({ cycleId: cycle.cycleId, factions: factionBoard, players });
 });
 
 const CREATOR_ACADEMY_TRACKS = [
@@ -2227,6 +2549,7 @@ app.post('/api/games/:id/publish', requireAuth, (req, res) => {
     const author = db.users.find(u => u.id === req.userId);
     ensureChallengeProgressDay(author);
     if (author) author.challengeProgress.publishes += 1;
+    if (author) applyWarPower(author, 'publishGame');
 
     saveDB();
     res.json({ success: true, versionId: game.versions.length });
@@ -2710,6 +3033,7 @@ app.post('/api/games/:id/play', requireAuth, (req, res) => {
     }
     ensureChallengeProgressDay(user);
     user.challengeProgress.gamesPlayed += 1;
+    applyWarPower(user, 'play');
 
     // PLAY STREAK MATH
     let streakReward = 0;
