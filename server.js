@@ -13,7 +13,7 @@ app.use("/seo", express.static(path.join(__dirname, "public", "seo")));
 // In-memory databases
 const DB_FILE = path.join(__dirname, 'db.json');
 let db = {
-    users: [], sessions: {}, games: [], shopItems: [], clothingItems: [], groups: [], cityPlots: [], datastores: {},
+    users: [], sessions: {}, games: [], shopItems: [], clothingItems: [], blueprints: [], groups: [], cityPlots: [], datastores: {},
     globalChat: [], toolboxItems: [], // NEW
     notifications: [],
     moderation: { bans: {}, ipBans: [], warnings: {} },  // <-- ADD THIS LINE
@@ -45,6 +45,7 @@ if (!db.friendPetDaily) db.friendPetDaily = {};
         
         if (!db.shopItems) db.shopItems = [];
         if (!db.clothingItems) db.clothingItems = [];
+        if (!db.blueprints) db.blueprints = [];
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} };
         if (!db.groups) db.groups = [];
 if (!db.sounds) db.sounds = [];
@@ -65,6 +66,7 @@ if (!u.toolboxInventory) u.toolboxInventory = [];
             if (typeof u.equippedShirt === 'undefined') u.equippedShirt = null;
             if (typeof u.equippedPants === 'undefined') u.equippedPants = null;
             if (!u.challengeClaims) u.challengeClaims = {};
+            if (!u.challengeProgress) u.challengeProgress = { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 };
 
 // Add this right after parsing db.json
 if (typeof db.lastUserIdNum === 'undefined') {
@@ -570,7 +572,7 @@ if (typeof db.lastUserIdNum !== 'number') {
 userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
-        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 }, bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
 
@@ -921,18 +923,72 @@ app.get('/api/me', requireAuth, (req, res) => {
     });
 });
 
-app.post('/api/challenges/claim', requireAuth, (req, res) => {
-    const { id, reward } = req.body;
-    const user = db.users.find(u => u.id === req.userId);
-    if (!id) return res.status(400).json({ error: 'Missing challenge id.' });
+const CREATOR_CHALLENGE_POOL = [
+    { id: 'parts_10', text: 'Place 10 parts in Studio', reward: 30, check: (p) => p.partsPlaced >= 10 },
+    { id: 'publish_1', text: 'Publish one map update', reward: 70, check: (p) => p.publishes >= 1 },
+    { id: 'visit_city', text: 'Visit Sculpt City once', reward: 25, check: (p) => p.cityVisits >= 1 },
+    { id: 'play_2', text: 'Play 2 community games', reward: 35, check: (p) => p.gamesPlayed >= 2 },
+    { id: 'parts_25', text: 'Place 25 parts in Studio', reward: 60, check: (p) => p.partsPlaced >= 25 }
+];
+const getDayKey = () => new Date().toISOString().slice(0, 10);
+const getDailyChallenges = () => {
+    const daySeed = parseInt(getDayKey().replace(/-/g, ''), 10);
+    const out = [];
+    for (let i = 0; i < 3; i++) {
+        out.push(CREATOR_CHALLENGE_POOL[(daySeed + i * 3) % CREATOR_CHALLENGE_POOL.length]);
+    }
+    return out;
+};
+const ensureChallengeProgressDay = (user) => {
+    const dayKey = getDayKey();
+    if (!user.challengeProgress || user.challengeProgress.dayKey !== dayKey) {
+        user.challengeProgress = { dayKey, partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 };
+    }
     if (!user.challengeClaims) user.challengeClaims = {};
-    const dayKey = new Date().toISOString().slice(0, 10);
-    if (user.challengeClaims[id] === dayKey) return res.status(400).json({ error: 'Already claimed today.' });
-    const safeReward = Math.max(1, Math.min(200, parseInt(reward) || 10));
-    user.challengeClaims[id] = dayKey;
-    user.coins = (user.coins || 0) + safeReward;
+};
+
+app.get('/api/challenges/daily', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    ensureChallengeProgressDay(user);
+    const day = getDayKey();
+    const challenges = getDailyChallenges().map(c => ({
+        id: c.id,
+        text: c.text,
+        reward: c.reward,
+        completed: c.check(user.challengeProgress),
+        claimed: user.challengeClaims[`${day}:${c.id}`] === true
+    }));
     saveDB();
-    res.json({ success: true, reward: safeReward, coins: user.coins });
+    res.json({ day, challenges });
+});
+
+app.post('/api/challenges/progress', requireAuth, (req, res) => {
+    const { event, amount } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    ensureChallengeProgressDay(user);
+    const amt = Math.max(1, Math.min(1000, parseInt(amount) || 1));
+    if (event === 'partsPlaced') user.challengeProgress.partsPlaced += amt;
+    if (event === 'publishes') user.challengeProgress.publishes += amt;
+    if (event === 'cityVisits') user.challengeProgress.cityVisits += amt;
+    if (event === 'gamesPlayed') user.challengeProgress.gamesPlayed += amt;
+    saveDB();
+    res.json({ success: true, progress: user.challengeProgress });
+});
+
+app.post('/api/challenges/claim', requireAuth, (req, res) => {
+    const { id } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    ensureChallengeProgressDay(user);
+    const day = getDayKey();
+    const challenge = getDailyChallenges().find(c => c.id === id);
+    if (!challenge) return res.status(400).json({ error: 'Challenge not available today.' });
+    if (!challenge.check(user.challengeProgress)) return res.status(400).json({ error: 'Challenge requirements not met yet.' });
+    const claimKey = `${day}:${challenge.id}`;
+    if (user.challengeClaims[claimKey]) return res.status(400).json({ error: 'Already claimed today.' });
+    user.challengeClaims[claimKey] = true;
+    user.coins = (user.coins || 0) + challenge.reward;
+    saveDB();
+    res.json({ success: true, reward: challenge.reward, coins: user.coins });
 });
 
 
