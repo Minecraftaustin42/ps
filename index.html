@@ -453,6 +453,10 @@
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
                 <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -4469,9 +4473,14 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
         const loadShop = async () => {
             try {
                 const items = await apiCall('/shop/items');
+                const clothingItems = await apiCall('/clothing/items');
+                const combined = [
+                    ...items.map(i => ({ ...i, __kind: 'accessory' })),
+                    ...clothingItems.map(i => ({ ...i, __kind: 'clothing' }))
+                ];
                 const searchValue = ((document.getElementById('shop-search') || {}).value || '').trim().toLowerCase();
                 const sortValue = ((document.getElementById('shop-sort') || {}).value || 'newest');
-                let filtered = items.filter(i => {
+                let filtered = combined.filter(i => {
                     if (!searchValue) return true;
                     const haystack = `${i.name || ''} ${i.description || ''} ${i.authorName || ''}`.toLowerCase();
                     return haystack.includes(searchValue);
@@ -4483,11 +4492,9 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                 const grid = document.getElementById('shop-grid');
                 grid.innerHTML = filtered.length === 0 ? '<p>No matching items found.</p>' : '';
                 filtered.forEach(i => {
-                    cacheAccessoryImage(i.id, i.image);
-                    const cached = accImageCache[i.id];
-                    const imgSrc = cached && cached.img ? cached.img : i.image; 
+                    const imgSrc = i.__kind === 'clothing' ? i.designImage : ((cacheAccessoryImage(i.id, i.image), (accImageCache[i.id] && accImageCache[i.id].img) ? accImageCache[i.id].img : i.image));
                     const card = document.createElement('div'); card.className = 'game-card';
-                    card.innerHTML = `<img src="${imgSrc}" class="shop-img"><h3>${i.name}</h3><p style="font-size:11px;">By <a href="javascript:void(0)" onclick="loadProfile('${i.authorName}'); navigate('profile');" style="color:#3498db;">${i.authorName}</a></p><p style="font-size:12px;">${i.description}</p><p style="color:#f39c12; font-weight:bold;">${i.price > 0 ? '' + i.price + ' SC' : 'Free'}</p><button class="btn btn-success btn-sm mt-10" onclick="buyItem('${i.id}', ${i.price})">Purchase</button>`;
+                    card.innerHTML = `<img src="${imgSrc}" class="shop-img"><h3>${i.name}</h3><p style="font-size:11px;">By <a href="javascript:void(0)" onclick="loadProfile('${i.authorName}'); navigate('profile');" style="color:#3498db;">${i.authorName}</a></p><p style="font-size:12px;">${i.description}</p><p style="font-size:11px; color:#666;">${i.__kind === 'clothing' ? i.type.toUpperCase() : 'Accessory'}</p><p style="color:#f39c12; font-weight:bold;">${i.price > 0 ? '' + i.price + ' SC' : 'Free'}</p><button class="btn btn-success btn-sm mt-10" onclick="${i.__kind === 'clothing' ? `buyClothing('${i.id}', ${i.price})` : `buyItem('${i.id}', ${i.price})`}">Purchase</button>`;
                     grid.appendChild(card);
                 });
             } catch(e) {}
@@ -4499,6 +4506,13 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                 await apiCall(`/shop/buy/${itemId}`, 'POST');
                 showModal('Purchased!', 'The item is now in your profile inventory.');
             } catch(e) {}
+        };
+        const buyClothing = async (itemId, price) => {
+            if (getCoins() < price) return showModal('Insufficient Funds', `You need ${price} SculptCoins to buy this.`);
+            try {
+                await apiCall(`/clothing/buy/${itemId}`, 'POST');
+                showModal('Purchased!', 'Clothing item is now in your avatar inventory.');
+            } catch (e) {}
         };
 
         const equipItem = async (itemId, isEquipped) => {
@@ -4538,8 +4552,17 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             grid.innerHTML = '<p>Loading avatar items...</p>';
             try {
                 const me = await apiCall('/me');
+                const clothInv = await apiCall('/me/clothing-inventory');
                 if (currentUser) currentUser.equipped = me.equipped || null;
                 if (currentUser && me.color) currentUser.color = me.color;
+                if (currentUser) {
+                    currentUser.equippedShirt = clothInv.equippedShirt || null;
+                    currentUser.equippedPants = clothInv.equippedPants || null;
+                    const s = (clothInv.items || []).find(i => i.id === currentUser.equippedShirt);
+                    const p = (clothInv.items || []).find(i => i.id === currentUser.equippedPants);
+                    currentUser.equippedShirtImage = s ? s.designImage : null;
+                    currentUser.equippedPantsImage = p ? p.designImage : null;
+                }
                 ensureAvatarBodyColors();
                 const items = me.inventory || [];
                 grid.innerHTML = items.length ? '' : '<p>You do not own any avatar accessories yet.</p>';
@@ -4553,9 +4576,27 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                     card.innerHTML = `<img src="${imgSrc}" class="shop-img"><h3>${i.name}</h3><p style="font-size:12px;">${i.description || ''}</p><button class="btn btn-sm ${isEquipped ? 'btn-danger' : 'btn-success'}" onclick="equipItem('${i.id}', ${isEquipped})">${isEquipped ? 'Unequip' : 'Equip'}</button>`;
                     grid.appendChild(card);
                 });
+                (clothInv.items || []).forEach(c => {
+                    const isEq = (c.type === 'shirt' && clothInv.equippedShirt === c.id) || (c.type === 'pants' && clothInv.equippedPants === c.id);
+                    const card = document.createElement('div');
+                    card.className = 'game-card';
+                    card.innerHTML = `<img src="${c.designImage}" class="shop-img"><h3>${c.name}</h3><p style="font-size:12px;">${c.type.toUpperCase()} • ${c.visibility}</p><button class="btn btn-sm ${isEq ? 'btn-danger' : 'btn-success'}" onclick="equipClothing('${c.id}', ${isEq})">${isEq ? 'Unequip' : 'Wear'}</button>`;
+                    grid.appendChild(card);
+                });
             } catch (e) {
                 grid.innerHTML = '<p>Could not load avatar equipment.</p>';
             }
+        };
+
+        const equipClothing = async (itemId, isEquipped) => {
+            try {
+                const res = await apiCall('/clothing/equip', 'POST', { itemId: isEquipped ? null : itemId });
+                if (currentUser) {
+                    currentUser.equippedShirt = res.equippedShirt || null;
+                    currentUser.equippedPants = res.equippedPants || null;
+                }
+                loadAvatarTab();
+            } catch (e) {}
         };
 
         let selectedAvatarPart = 'head';
@@ -4595,7 +4636,7 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             }
             loadAvatarTab();
             if (playerMesh && playerMesh.parent) {
-                const updated = createPlayerMesh(currentUser.color || '#e74c3c', currentUser.equipped, currentUser.bodyColors);
+                const updated = createPlayerMesh(currentUser.color || '#e74c3c', currentUser.equipped, currentUser.bodyColors, { shirtImage: currentUser.equippedShirtImage || null, pantsImage: currentUser.equippedPantsImage || null });
                 updated.scale.copy(playerMesh.scale);
                 updated.position.copy(playerMesh.position);
                 updated.rotation.copy(playerMesh.rotation);
@@ -4640,7 +4681,17 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             if (accAnimationId) cancelAnimationFrame(accAnimationId);
         };
 
-        const createPlayerMesh = (color, equippedId, bodyColors = null) => {
+        const clothingTextureCache = {};
+        const getClothingTexture = (src) => {
+            if (!src) return null;
+            if (!clothingTextureCache[src]) {
+                const tex = new THREE.TextureLoader().load(src);
+                tex.wrapS = THREE.ClampToEdgeWrapping; tex.wrapT = THREE.ClampToEdgeWrapping;
+                clothingTextureCache[src] = tex;
+            }
+            return clothingTextureCache[src];
+        };
+        const createPlayerMesh = (color, equippedId, bodyColors = null, clothing = null) => {
             const group = new THREE.Group();
             const palette = bodyColors || {
                 head: color || '#e74c3c',
@@ -4653,28 +4704,43 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             const partMat = (key) => new THREE.MeshLambertMaterial({ color: palette[key] || color || '#e74c3c' });
 
             const head = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 4), partMat('head'));
+            head.userData.avatarPart = 'head';
             head.position.set(0, 4, 0); 
             group.add(head);
 
             const torso = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 2), partMat('torso'));
+            torso.userData.avatarPart = 'torso';
             torso.position.set(0, 0, 0);
             group.add(torso);
 
             const lArmPivot = new THREE.Group(); lArmPivot.position.set(-3, 1, 0);
             const lArm = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), partMat('leftArm')); lArm.position.set(0, -1.5, 0);
+            lArm.userData.avatarPart = 'leftArm';
             lArmPivot.add(lArm); group.add(lArmPivot);
 
             const rArmPivot = new THREE.Group(); rArmPivot.position.set(3, 1, 0);
             const rArm = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), partMat('rightArm')); rArm.position.set(0, -1.5, 0);
+            rArm.userData.avatarPart = 'rightArm';
             rArmPivot.add(rArm); group.add(rArmPivot);
 
             const lLegPivot = new THREE.Group(); lLegPivot.position.set(-1, -2, 0);
             const lLeg = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), partMat('leftLeg')); lLeg.position.set(0, -2, 0);
+            lLeg.userData.avatarPart = 'leftLeg';
             lLegPivot.add(lLeg); group.add(lLegPivot);
 
             const rLegPivot = new THREE.Group(); rLegPivot.position.set(1, -2, 0);
             const rLeg = new THREE.Mesh(new THREE.BoxGeometry(2, 4, 2), partMat('rightLeg')); rLeg.position.set(0, -2, 0);
+            rLeg.userData.avatarPart = 'rightLeg';
             rLegPivot.add(rLeg); group.add(rLegPivot);
+
+            if (clothing && clothing.shirtImage) {
+                const shirtTex = getClothingTexture(clothing.shirtImage);
+                [torso, lArm, rArm].forEach(m => { if (shirtTex) m.material.map = shirtTex, m.material.needsUpdate = true; });
+            }
+            if (clothing && clothing.pantsImage) {
+                const pantsTex = getClothingTexture(clothing.pantsImage);
+                [lLeg, rLeg].forEach(m => { if (pantsTex) m.material.map = pantsTex, m.material.needsUpdate = true; });
+            }
 
             group.userData = { lArmPivot, rArmPivot, lLegPivot, rLegPivot, swingTime: 0 };
 
@@ -4898,32 +4964,41 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
         let clothScene, clothCamera, clothRenderer, clothControls, clothModel;
         let clothRaycaster = new THREE.Raycaster();
         let clothMouse = new THREE.Vector2();
-        let clothCanvas = document.createElement('canvas');
-        clothCanvas.width = 1024; clothCanvas.height = 1024;
-        let clothCtx = clothCanvas.getContext('2d');
-        let clothTexture = new THREE.CanvasTexture(clothCanvas);
-        let clothUndo = [], clothRedo = [];
+        const clothParts = ['head', 'torso', 'leftArm', 'rightArm', 'leftLeg', 'rightLeg'];
+        const clothState = {};
+        clothParts.forEach(p => {
+            const canvas = document.createElement('canvas');
+            canvas.width = 1024; canvas.height = 1024;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            clothState[p] = { canvas, ctx, texture: new THREE.CanvasTexture(canvas), undo: [], redo: [] };
+        });
         let clothDrawing = false, clothStart = null, clothPolyLast = null;
+        let clothActivePart = 'torso';
         const clothHidden = { head: false, torso: false, arms: false, legs: false };
 
-        const pushClothingUndo = () => {
-            clothUndo.push(clothCtx.getImageData(0, 0, clothCanvas.width, clothCanvas.height));
-            if (clothUndo.length > 30) clothUndo.shift();
-            clothRedo = [];
+        const partState = (part) => clothState[part] || clothState.torso;
+        const pushClothingUndo = (part = clothActivePart) => {
+            const st = partState(part);
+            st.undo.push(st.ctx.getImageData(0, 0, st.canvas.width, st.canvas.height));
+            if (st.undo.length > 30) st.undo.shift();
+            st.redo = [];
         };
-        const undoClothing = () => {
-            if (!clothUndo.length) return;
-            clothRedo.push(clothCtx.getImageData(0, 0, clothCanvas.width, clothCanvas.height));
-            const state = clothUndo.pop();
-            clothCtx.putImageData(state, 0, 0);
-            clothTexture.needsUpdate = true;
+        const undoClothing = (part = clothActivePart) => {
+            const st = partState(part);
+            if (!st.undo.length) return;
+            st.redo.push(st.ctx.getImageData(0, 0, st.canvas.width, st.canvas.height));
+            const state = st.undo.pop();
+            st.ctx.putImageData(state, 0, 0);
+            st.texture.needsUpdate = true;
         };
-        const redoClothing = () => {
-            if (!clothRedo.length) return;
-            clothUndo.push(clothCtx.getImageData(0, 0, clothCanvas.width, clothCanvas.height));
-            const state = clothRedo.pop();
-            clothCtx.putImageData(state, 0, 0);
-            clothTexture.needsUpdate = true;
+        const redoClothing = (part = clothActivePart) => {
+            const st = partState(part);
+            if (!st.redo.length) return;
+            st.undo.push(st.ctx.getImageData(0, 0, st.canvas.width, st.canvas.height));
+            const state = st.redo.pop();
+            st.ctx.putImageData(state, 0, 0);
+            st.texture.needsUpdate = true;
         };
         const clothToolStyle = () => {
             const size = Math.max(1, parseInt(document.getElementById('cloth-size')?.value || 12, 10));
@@ -4931,9 +5006,14 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             const tool = document.getElementById('cloth-tool')?.value || 'brush';
             return { size, color, tool };
         };
-        const uvToCanvas = (uv) => ({ x: Math.floor(uv.x * clothCanvas.width), y: Math.floor((1 - uv.y) * clothCanvas.height) });
-        const drawClothingAt = (p1, p2 = null, commit = false) => {
+        const uvToCanvas = (uv, part = clothActivePart) => {
+            const st = partState(part);
+            return ({ x: Math.floor(uv.x * st.canvas.width), y: Math.floor((1 - uv.y) * st.canvas.height) });
+        };
+        const drawClothingAt = (p1, p2 = null, commit = false, part = clothActivePart) => {
             const { size, color, tool } = clothToolStyle();
+            const st = partState(part);
+            const clothCtx = st.ctx;
             clothCtx.lineWidth = size;
             clothCtx.lineCap = 'round';
             clothCtx.strokeStyle = color;
@@ -4959,14 +5039,14 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                 if (!p2) return;
                 clothCtx.beginPath(); clothCtx.moveTo(p1.x, p1.y); clothCtx.lineTo(p2.x, p2.y); clothCtx.stroke();
             } else if (tool === 'fill') {
-                clothCtx.fillRect(0, 0, clothCanvas.width, clothCanvas.height);
+                clothCtx.fillRect(0, 0, st.canvas.width, st.canvas.height);
             } else if (tool === 'text') {
                 const text = prompt('Enter text');
                 if (text) { clothCtx.font = `${Math.max(10, size * 2)}px Arial`; clothCtx.fillText(text, p1.x, p1.y); }
             }
             clothCtx.globalCompositeOperation = 'source-over';
-            clothTexture.needsUpdate = true;
-            if (commit) pushClothingUndo();
+            st.texture.needsUpdate = true;
+            if (commit) pushClothingUndo(part);
         };
         const initClothingEditor = () => {
             const host = document.getElementById('clothing-editor-3d');
@@ -4979,17 +5059,31 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                 clothControls = new THREE.OrbitControls(clothCamera, clothRenderer.domElement);
                 clothScene.add(new THREE.AmbientLight(0xffffff, 0.9));
                 const dl = new THREE.DirectionalLight(0xffffff, 1.0); dl.position.set(4, 8, 6); clothScene.add(dl);
-                clothCtx.fillStyle = '#ffffff'; clothCtx.fillRect(0, 0, clothCanvas.width, clothCanvas.height); clothTexture.needsUpdate = true;
-                const mat = new THREE.MeshLambertMaterial({ map: clothTexture });
                 clothModel = createPlayerMesh('#e74c3c', null);
-                clothModel.traverse(n => { if (n.isMesh) n.material = mat; });
+                clothModel.traverse(n => {
+                    if (!n.isMesh) return;
+                    const part = n.userData.avatarPart || 'torso';
+                    n.material = new THREE.MeshLambertMaterial({ map: partState(part).texture });
+                });
                 clothScene.add(clothModel);
                 const renderLoop = () => { if (clothRenderer && document.getElementById('tab-shop-clothing').classList.contains('active')) { requestAnimationFrame(renderLoop); clothControls.update(); clothRenderer.render(clothScene, clothCamera);} };
                 renderLoop();
                 const dom = clothRenderer.domElement;
-                dom.addEventListener('pointerdown', (e) => { clothDrawing = true; clothStart = null; const hit = clothRayHit(e); if (hit) { clothStart = uvToCanvas(hit.uv); if (document.getElementById('cloth-tool').value !== 'polyline') pushClothingUndo(); if (document.getElementById('cloth-tool').value === 'brush' || document.getElementById('cloth-tool').value === 'erase_brush' || document.getElementById('cloth-tool').value === 'fill' || document.getElementById('cloth-tool').value === 'text') drawClothingAt(clothStart, null, document.getElementById('cloth-tool').value !== 'brush' && document.getElementById('cloth-tool').value !== 'erase_brush'); } });
-                dom.addEventListener('pointermove', (e) => { if (!clothDrawing) return; const hit = clothRayHit(e); if (!hit) return; const p = uvToCanvas(hit.uv); const tool = document.getElementById('cloth-tool').value; if (tool === 'brush' || tool === 'erase_brush') drawClothingAt(p); });
-                dom.addEventListener('pointerup', (e) => { const hit = clothRayHit(e); const p = hit ? uvToCanvas(hit.uv) : null; const tool = document.getElementById('cloth-tool').value; if (clothStart && p && !(tool === 'brush' || tool === 'erase_brush' || tool === 'fill' || tool === 'text')) { if (tool === 'polyline' && clothPolyLast) drawClothingAt(clothPolyLast, p, true); else drawClothingAt(clothStart, p, true); if (tool === 'polyline') clothPolyLast = p; } clothDrawing = false; });
+                dom.addEventListener('pointerdown', (e) => {
+                    clothDrawing = true; clothStart = null;
+                    const hit = clothRayHit(e);
+                    if (hit) {
+                        clothControls.enabled = false;
+                        clothActivePart = hit.object.userData.avatarPart || 'torso';
+                        clothStart = uvToCanvas(hit.uv, clothActivePart);
+                        if (document.getElementById('cloth-tool').value !== 'polyline') pushClothingUndo(clothActivePart);
+                        if (document.getElementById('cloth-tool').value === 'brush' || document.getElementById('cloth-tool').value === 'erase_brush' || document.getElementById('cloth-tool').value === 'fill' || document.getElementById('cloth-tool').value === 'text') drawClothingAt(clothStart, null, document.getElementById('cloth-tool').value !== 'brush' && document.getElementById('cloth-tool').value !== 'erase_brush', clothActivePart);
+                    } else {
+                        clothControls.enabled = true; // orbit sky only
+                    }
+                });
+                dom.addEventListener('pointermove', (e) => { if (!clothDrawing) return; const hit = clothRayHit(e); if (!hit) return; const part = hit.object.userData.avatarPart || clothActivePart; const p = uvToCanvas(hit.uv, part); const tool = document.getElementById('cloth-tool').value; if (tool === 'brush' || tool === 'erase_brush') drawClothingAt(p, null, false, part); });
+                dom.addEventListener('pointerup', (e) => { const hit = clothRayHit(e); const part = hit ? (hit.object.userData.avatarPart || clothActivePart) : clothActivePart; const p = hit ? uvToCanvas(hit.uv, part) : null; const tool = document.getElementById('cloth-tool').value; if (clothStart && p && !(tool === 'brush' || tool === 'erase_brush' || tool === 'fill' || tool === 'text')) { if (tool === 'polyline' && clothPolyLast) drawClothingAt(clothPolyLast, p, true, part); else drawClothingAt(clothStart, p, true, part); if (tool === 'polyline') clothPolyLast = p; } clothDrawing = false; clothControls.enabled = true; });
             }
         };
         const clothRayHit = (e) => {
@@ -5013,17 +5107,18 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             });
         };
         const submitClothing = async () => {
-            const name = document.getElementById('cloth-name').value.trim();
-            const description = document.getElementById('cloth-desc').value.trim();
-            const price = Math.max(0, parseInt(document.getElementById('cloth-price').value || '0', 10));
-            const type = document.getElementById('cloth-type').value;
-            const visibility = document.getElementById('cloth-visibility').value;
+            const root = document.getElementById('tab-shop-clothing');
+            const name = root.querySelector('#cloth-name').value.trim();
+            const description = root.querySelector('#cloth-desc').value.trim();
+            const price = Math.max(0, parseInt(root.querySelector('#cloth-price').value || '0', 10));
+            const type = root.querySelector('#cloth-type').value;
+            const visibility = root.querySelector('#cloth-visibility').value;
             if (!name || !description) return showModal('Error', 'Name and description are required.');
-            const designImage = clothCanvas.toDataURL('image/png');
+            const designImage = (type === 'shirt' ? partState('torso').canvas : partState('leftLeg').canvas).toDataURL('image/png');
             try {
                 await apiCall('/clothing/items', 'POST', { name, description, price, type, visibility, designImage });
                 showModal('Created', visibility === 'public' ? 'Clothing submitted for moderation and added to your inventory.' : 'Private clothing created and added to your inventory.');
-                document.getElementById('cloth-name').value = ''; document.getElementById('cloth-desc').value = ''; document.getElementById('cloth-price').value = '';
+                root.querySelector('#cloth-name').value = ''; root.querySelector('#cloth-desc').value = ''; root.querySelector('#cloth-price').value = '';
             } catch (e) {}
         };
         window.toggleClothingLimb = toggleClothingLimb;
@@ -7275,7 +7370,7 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
             window.playSlopes = playMeshes.filter(m => ['wedge', 'triangle'].includes(m.userData.type));
             window.playSlopes.forEach(m => { if (m.material) m.material.side = THREE.DoubleSide; });
 
-            playerMesh = createPlayerMesh(currentUser ? currentUser.color : '#e74c3c', currentUser ? currentUser.equipped : null, currentUser ? currentUser.bodyColors : null);
+            playerMesh = createPlayerMesh(currentUser ? currentUser.color : '#e74c3c', currentUser ? currentUser.equipped : null, currentUser ? currentUser.bodyColors : null, currentUser ? { shirtImage: currentUser.equippedShirtImage || null, pantsImage: currentUser.equippedPantsImage || null } : null);
             playerMesh.scale.set(0.5, 0.5, 0.5); playScene.add(playerMesh); renderPlayToolbar();
             window.smartRuntime = { lastInteractAt: 0 };
         };
@@ -7314,7 +7409,7 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
 
                 others.forEach(o => {
                     if (!otherPlayerMeshes[o.userId]) {
-                        const mesh = createPlayerMesh(o.color, o.equipped, o.bodyColors || null);
+                        const mesh = createPlayerMesh(o.color, o.equipped, o.bodyColors || null, { shirtImage: o.equippedShirtImage || null, pantsImage: o.equippedPantsImage || null });
                         playScene.add(mesh);
                         mesh.scale.set(0.5, 0.5, 0.5);
 
@@ -7325,7 +7420,7 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
                         };
                     } else if (otherPlayerMeshes[o.userId].equipped !== (o.equipped || null)) {
                         const oldMesh = otherPlayerMeshes[o.userId].mesh;
-                        const replacement = createPlayerMesh(o.color, o.equipped, o.bodyColors || null);
+                        const replacement = createPlayerMesh(o.color, o.equipped, o.bodyColors || null, { shirtImage: o.equippedShirtImage || null, pantsImage: o.equippedPantsImage || null });
                         replacement.scale.set(0.5, 0.5, 0.5);
                         replacement.position.copy(oldMesh.position);
                         replacement.rotation.copy(oldMesh.rotation);

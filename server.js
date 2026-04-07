@@ -62,6 +62,8 @@ if (!u.toolboxInventory) u.toolboxInventory = [];
             if (!u.messages) u.messages = [];
             if (!u.inventory) u.inventory = [];
             if (!u.clothingInventory) u.clothingInventory = [];
+            if (typeof u.equippedShirt === 'undefined') u.equippedShirt = null;
+            if (typeof u.equippedPants === 'undefined') u.equippedPants = null;
 
 // Add this right after parsing db.json
 if (typeof db.lastUserIdNum === 'undefined') {
@@ -567,7 +569,7 @@ if (typeof db.lastUserIdNum !== 'number') {
 userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
-        inventory: [], clothingInventory: [], bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
 
@@ -731,7 +733,7 @@ if (db.moderation && db.moderation.warnings && db.moderation.warnings[user.id]) 
     pendingWarnings = db.moderation.warnings[user.id].filter(w => w.acknowledged === false);
 }
 
-    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, coins: user.coins, pendingWarnings });
+    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, coins: user.coins, pendingWarnings });
 });
 
 app.post('/api/logout', requireAuth, (req, res) => {
@@ -911,7 +913,7 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({
         id: user.id, username: user.username, color: user.color, badges: user.badges, coins: user.coins,
         requests, friends: friendsList, recentlyPlayed: recentGames, bookmarkedGames, 
-        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [],
+        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [], equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null,
         lastSpinDate: user.lastSpinDate,
         loginStreak: user.loginStreak, playStreak: user.playStreak, lastLoginDate: user.lastLoginDate,
         toolboxInventory: user.toolboxInventory // NEW
@@ -1854,6 +1856,44 @@ app.post('/api/clothing/items', requireAuth, (req, res) => {
     res.json({ message: visibility === 'public' ? 'Clothing submitted for moderation.' : 'Private clothing created.', item });
 });
 
+app.get('/api/me/clothing-inventory', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const items = (user.clothingInventory || []).map(id => (db.clothingItems || []).find(i => i.id === id)).filter(Boolean);
+    res.json({ items, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null });
+});
+
+app.post('/api/clothing/buy/:id', requireAuth, (req, res) => {
+    const item = (db.clothingItems || []).find(i => i.id === req.params.id);
+    const user = db.users.find(u => u.id === req.userId);
+    if (!item) return res.status(404).json({ error: 'Clothing not found.' });
+    if (item.visibility !== 'public' || (item.status || 'approved') !== 'approved') return res.status(400).json({ error: 'Clothing is not available for purchase.' });
+    if ((user.clothingInventory || []).includes(item.id)) return res.status(400).json({ error: 'You already own this clothing item.' });
+    if (user.coins < item.price) return res.status(400).json({ error: 'Insufficient Funds.' });
+    user.coins -= item.price;
+    if (!Array.isArray(user.clothingInventory)) user.clothingInventory = [];
+    user.clothingInventory.push(item.id);
+    const author = db.users.find(u => u.id === item.authorId);
+    if (author) author.coins = (author.coins || 0) + item.price;
+    saveDB();
+    res.json({ success: true, coins: user.coins });
+});
+
+app.post('/api/clothing/equip', requireAuth, (req, res) => {
+    const { itemId } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    if (!itemId) {
+        user.equippedShirt = null; user.equippedPants = null; saveDB();
+        return res.json({ equippedShirt: null, equippedPants: null });
+    }
+    if (!(user.clothingInventory || []).includes(itemId)) return res.status(403).json({ error: 'Not owned.' });
+    const item = (db.clothingItems || []).find(i => i.id === itemId);
+    if (!item) return res.status(404).json({ error: 'Clothing not found.' });
+    if (item.type === 'shirt') user.equippedShirt = item.id;
+    if (item.type === 'pants') user.equippedPants = item.id;
+    saveDB();
+    res.json({ equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null });
+});
+
 // --- Game Routes ---
 // Get Games Library (Search & Filter)
 app.get('/api/games', (req, res) => {
@@ -2671,11 +2711,16 @@ const lastChatMessage = (gameChats[gameId] || [])
     .reverse()
     .find(m => m.userId === req.userId && (Date.now() - m.timestamp) < 7000);
 
+const shirtItem = (db.clothingItems || []).find(i => i.id === user.equippedShirt);
+const pantsItem = (db.clothingItems || []).find(i => i.id === user.equippedPants);
+
 activePlayers[gameId][req.userId] = { 
     x, y, z, rotY, sceneId, username: user.username, 
     color: color || user.color || '#e74c3c', 
     equipped: user.equipped,
     bodyColors: bodyColors || null,
+    equippedShirtImage: shirtItem ? shirtItem.designImage : null,
+    equippedPantsImage: pantsItem ? pantsItem.designImage : null,
     timestamp: Date.now(),
     activeChatBubble: lastChatMessage ? {
         text: lastChatMessage.text,
