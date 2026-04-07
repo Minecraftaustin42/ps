@@ -449,6 +449,10 @@
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
                 <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -696,6 +700,11 @@
                 <h3 style="margin:0 0 8px 0;">Accessory Review Queue</h3>
                 <button class="btn btn-sm btn-info" onclick="loadAccessoryModerationQueue()">Refresh Queue</button>
                 <div id="mod-accessory-queue" style="margin-top:10px; max-height:260px; overflow:auto;"></div>
+            </div>
+            <div style="margin-top:15px; border-top:1px solid #ddd; padding-top:12px;">
+                <h3 style="margin:0 0 8px 0;">Clothing Review Queue</h3>
+                <button class="btn btn-sm btn-info" onclick="loadClothingModerationQueue()">Refresh Queue</button>
+                <div id="mod-clothing-queue" style="margin-top:10px; max-height:260px; overflow:auto;"></div>
             </div>
         </div>
     </div>
@@ -955,6 +964,7 @@
                 <div class="tabs" style="margin-bottom:0;">
                     <div class="tab active" onclick="switchShopTab('market')">Marketplace</div>
                     <div class="tab" onclick="switchShopTab('make')">Create Accessory</div>
+                    <div class="tab" onclick="switchShopTab('clothing')">Create Clothing</div>
                 </div>
                 
                 <div id="tab-shop-market" class="tab-content active" style="padding-top: 20px;">
@@ -1002,6 +1012,36 @@
                         </div>
                     </div>
                 </div>
+                <div id="tab-shop-clothing" class="tab-content" style="padding-top: 20px;">
+                    <div style="display:flex; gap:12px; flex-wrap:wrap;">
+                        <div style="flex:1; min-width:280px;">
+                            <div id="clothing-editor-3d" style="width:100%; aspect-ratio:1/1; background:#111827; border:1px solid #334155; border-radius:6px;"></div>
+                            <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap;">
+                                <button class="btn btn-sm" onclick="toggleClothingLimb('head')">Toggle Head</button>
+                                <button class="btn btn-sm" onclick="toggleClothingLimb('torso')">Toggle Torso</button>
+                                <button class="btn btn-sm" onclick="toggleClothingLimb('arms')">Toggle Arms</button>
+                                <button class="btn btn-sm" onclick="toggleClothingLimb('legs')">Toggle Legs</button>
+                            </div>
+                        </div>
+                        <div style="width:320px; max-width:100%;">
+                            <input id="cloth-name" class="form-control mb-10" placeholder="Clothing name">
+                            <input id="cloth-desc" class="form-control mb-10" placeholder="Description">
+                            <input id="cloth-price" class="form-control mb-10" type="number" placeholder="Price (SC)">
+                            <select id="cloth-type" class="form-control mb-10"><option value="shirt">Shirt</option><option value="pants">Pants</option></select>
+                            <select id="cloth-visibility" class="form-control mb-10"><option value="public">Public (requires moderation)</option><option value="private">Private (creator only)</option></select>
+                            <select id="cloth-tool" class="form-control mb-10">
+                                <option value="brush">Brush</option><option value="line">Line</option><option value="circle">Circle</option><option value="box">Box</option><option value="polyline">Polygonal Line</option><option value="fill">Fill</option><option value="text">Text</option><option value="erase_brush">Eraser Brush</option><option value="erase_box">Eraser Box</option><option value="erase_circle">Eraser Circle</option>
+                            </select>
+                            <input id="cloth-color" class="form-control mb-10" type="color" value="#ff0000">
+                            <input id="cloth-size" class="form-control mb-10" type="number" value="12" min="1" max="64" placeholder="Tool size">
+                            <div style="display:flex; gap:6px; margin-bottom:8px;">
+                                <button class="btn btn-sm" onclick="undoClothing()">Undo</button>
+                                <button class="btn btn-sm" onclick="redoClothing()">Redo</button>
+                            </div>
+                            <button class="btn btn-success" style="width:100%;" onclick="submitClothing()">Publish / Save Clothing</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -1040,8 +1080,11 @@
                         <button class="btn btn-sm" style="background:#2ecc71;" onclick="paintAvatarPart('#2ecc71')">Mint</button>
                         <button class="btn btn-sm" style="background:#f39c12;" onclick="paintAvatarPart('#f39c12')">Gold</button>
                         <button class="btn btn-sm" style="background:#9b59b6;" onclick="paintAvatarPart('#9b59b6')">Violet</button>
+                        <button class="btn btn-sm" style="background:#D2B48C; color:#222;" onclick="paintAvatarPart('#D2B48C')">Tan</button>
+                        <button class="btn btn-sm" style="background:#5C3A21;" onclick="paintAvatarPart('#5C3A21')">Dark Brown</button>
                     </div>
                     <div style="font-size:12px; color:#666; margin-top:6px;">Selected part: <span id="avatar-part-selected">Head</span></div>
+                    <div id="avatar-part-colors" style="font-size:12px; color:#555; margin-top:6px;"></div>
                 </div>
                 <div id="avatar-view-grid" class="game-grid"></div>
             </div>
@@ -4418,6 +4461,9 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             if(tabId === 'make' && accRenderer) {
                 setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
             }
+            if (tabId === 'clothing') {
+                setTimeout(() => { initClothingEditor(); window.dispatchEvent(new Event('resize')); }, 50);
+            }
         };
 
         const loadShop = async () => {
@@ -4525,6 +4571,11 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                     rightLeg: '#e74c3c'
                 };
             }
+            const panel = document.getElementById('avatar-part-colors');
+            if (panel) {
+                const bc = currentUser.bodyColors;
+                panel.innerHTML = `Head: <span style="color:${bc.head}">${bc.head}</span> • Torso: <span style="color:${bc.torso}">${bc.torso}</span> • LArm: <span style="color:${bc.leftArm}">${bc.leftArm}</span> • RArm: <span style="color:${bc.rightArm}">${bc.rightArm}</span> • LLeg: <span style="color:${bc.leftLeg}">${bc.leftLeg}</span> • RLeg: <span style="color:${bc.rightLeg}">${bc.rightLeg}</span>`;
+            }
         };
         const selectAvatarPart = (part) => {
             selectedAvatarPart = part;
@@ -4538,8 +4589,9 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             const vals = Object.values(currentUser.bodyColors || {});
             const allSame = vals.length > 0 && vals.every(v => v === vals[0]);
             if (allSame) {
-                currentUser.bodyColors.torso = '#3498db';
-                showModal('Body Paint Rule', 'Full-body single-color paint is not allowed. Torso color was adjusted.');
+                currentUser.bodyColors.leftLeg = '#2ecc71';
+                currentUser.bodyColors.rightLeg = '#f39c12';
+                showModal('Body Paint Rule', 'Full-body single-color paint is not allowed. Both legs were adjusted.');
             }
             loadAvatarTab();
             if (playerMesh && playerMesh.parent) {
@@ -4552,6 +4604,8 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                 playerMesh = updated;
             }
         };
+        window.selectAvatarPart = selectAvatarPart;
+        window.paintAvatarPart = paintAvatarPart;
 
         const setAccTool = (mode) => {
             accMode = mode;
@@ -4839,6 +4893,143 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                 });
             } catch(e) {}
         };
+
+        // --- Clothing Designer ---
+        let clothScene, clothCamera, clothRenderer, clothControls, clothModel;
+        let clothRaycaster = new THREE.Raycaster();
+        let clothMouse = new THREE.Vector2();
+        let clothCanvas = document.createElement('canvas');
+        clothCanvas.width = 1024; clothCanvas.height = 1024;
+        let clothCtx = clothCanvas.getContext('2d');
+        let clothTexture = new THREE.CanvasTexture(clothCanvas);
+        let clothUndo = [], clothRedo = [];
+        let clothDrawing = false, clothStart = null, clothPolyLast = null;
+        const clothHidden = { head: false, torso: false, arms: false, legs: false };
+
+        const pushClothingUndo = () => {
+            clothUndo.push(clothCtx.getImageData(0, 0, clothCanvas.width, clothCanvas.height));
+            if (clothUndo.length > 30) clothUndo.shift();
+            clothRedo = [];
+        };
+        const undoClothing = () => {
+            if (!clothUndo.length) return;
+            clothRedo.push(clothCtx.getImageData(0, 0, clothCanvas.width, clothCanvas.height));
+            const state = clothUndo.pop();
+            clothCtx.putImageData(state, 0, 0);
+            clothTexture.needsUpdate = true;
+        };
+        const redoClothing = () => {
+            if (!clothRedo.length) return;
+            clothUndo.push(clothCtx.getImageData(0, 0, clothCanvas.width, clothCanvas.height));
+            const state = clothRedo.pop();
+            clothCtx.putImageData(state, 0, 0);
+            clothTexture.needsUpdate = true;
+        };
+        const clothToolStyle = () => {
+            const size = Math.max(1, parseInt(document.getElementById('cloth-size')?.value || 12, 10));
+            const color = document.getElementById('cloth-color')?.value || '#ff0000';
+            const tool = document.getElementById('cloth-tool')?.value || 'brush';
+            return { size, color, tool };
+        };
+        const uvToCanvas = (uv) => ({ x: Math.floor(uv.x * clothCanvas.width), y: Math.floor((1 - uv.y) * clothCanvas.height) });
+        const drawClothingAt = (p1, p2 = null, commit = false) => {
+            const { size, color, tool } = clothToolStyle();
+            clothCtx.lineWidth = size;
+            clothCtx.lineCap = 'round';
+            clothCtx.strokeStyle = color;
+            clothCtx.fillStyle = color;
+            if (tool.startsWith('erase')) {
+                clothCtx.globalCompositeOperation = 'destination-out';
+            } else {
+                clothCtx.globalCompositeOperation = 'source-over';
+            }
+            if (tool === 'brush' || tool === 'erase_brush') {
+                clothCtx.beginPath(); clothCtx.arc(p1.x, p1.y, size / 2, 0, Math.PI * 2); clothCtx.fill();
+            } else if (tool === 'line') {
+                if (!p2) return;
+                clothCtx.beginPath(); clothCtx.moveTo(p1.x, p1.y); clothCtx.lineTo(p2.x, p2.y); clothCtx.stroke();
+            } else if (tool === 'circle' || tool === 'erase_circle') {
+                if (!p2) return;
+                const r = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+                clothCtx.beginPath(); clothCtx.arc(p1.x, p1.y, r, 0, Math.PI * 2); clothCtx.stroke();
+            } else if (tool === 'box' || tool === 'erase_box') {
+                if (!p2) return;
+                clothCtx.strokeRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+            } else if (tool === 'polyline') {
+                if (!p2) return;
+                clothCtx.beginPath(); clothCtx.moveTo(p1.x, p1.y); clothCtx.lineTo(p2.x, p2.y); clothCtx.stroke();
+            } else if (tool === 'fill') {
+                clothCtx.fillRect(0, 0, clothCanvas.width, clothCanvas.height);
+            } else if (tool === 'text') {
+                const text = prompt('Enter text');
+                if (text) { clothCtx.font = `${Math.max(10, size * 2)}px Arial`; clothCtx.fillText(text, p1.x, p1.y); }
+            }
+            clothCtx.globalCompositeOperation = 'source-over';
+            clothTexture.needsUpdate = true;
+            if (commit) pushClothingUndo();
+        };
+        const initClothingEditor = () => {
+            const host = document.getElementById('clothing-editor-3d');
+            if (!host) return;
+            if (!clothRenderer) {
+                clothScene = new THREE.Scene(); clothScene.background = new THREE.Color('#111827');
+                clothCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000); clothCamera.position.set(10, 10, 14);
+                clothRenderer = new THREE.WebGLRenderer({ antialias: true }); clothRenderer.setSize(host.clientWidth, host.clientWidth);
+                host.appendChild(clothRenderer.domElement);
+                clothControls = new THREE.OrbitControls(clothCamera, clothRenderer.domElement);
+                clothScene.add(new THREE.AmbientLight(0xffffff, 0.9));
+                const dl = new THREE.DirectionalLight(0xffffff, 1.0); dl.position.set(4, 8, 6); clothScene.add(dl);
+                clothCtx.fillStyle = '#ffffff'; clothCtx.fillRect(0, 0, clothCanvas.width, clothCanvas.height); clothTexture.needsUpdate = true;
+                const mat = new THREE.MeshLambertMaterial({ map: clothTexture });
+                clothModel = createPlayerMesh('#e74c3c', null);
+                clothModel.traverse(n => { if (n.isMesh) n.material = mat; });
+                clothScene.add(clothModel);
+                const renderLoop = () => { if (clothRenderer && document.getElementById('tab-shop-clothing').classList.contains('active')) { requestAnimationFrame(renderLoop); clothControls.update(); clothRenderer.render(clothScene, clothCamera);} };
+                renderLoop();
+                const dom = clothRenderer.domElement;
+                dom.addEventListener('pointerdown', (e) => { clothDrawing = true; clothStart = null; const hit = clothRayHit(e); if (hit) { clothStart = uvToCanvas(hit.uv); if (document.getElementById('cloth-tool').value !== 'polyline') pushClothingUndo(); if (document.getElementById('cloth-tool').value === 'brush' || document.getElementById('cloth-tool').value === 'erase_brush' || document.getElementById('cloth-tool').value === 'fill' || document.getElementById('cloth-tool').value === 'text') drawClothingAt(clothStart, null, document.getElementById('cloth-tool').value !== 'brush' && document.getElementById('cloth-tool').value !== 'erase_brush'); } });
+                dom.addEventListener('pointermove', (e) => { if (!clothDrawing) return; const hit = clothRayHit(e); if (!hit) return; const p = uvToCanvas(hit.uv); const tool = document.getElementById('cloth-tool').value; if (tool === 'brush' || tool === 'erase_brush') drawClothingAt(p); });
+                dom.addEventListener('pointerup', (e) => { const hit = clothRayHit(e); const p = hit ? uvToCanvas(hit.uv) : null; const tool = document.getElementById('cloth-tool').value; if (clothStart && p && !(tool === 'brush' || tool === 'erase_brush' || tool === 'fill' || tool === 'text')) { if (tool === 'polyline' && clothPolyLast) drawClothingAt(clothPolyLast, p, true); else drawClothingAt(clothStart, p, true); if (tool === 'polyline') clothPolyLast = p; } clothDrawing = false; });
+            }
+        };
+        const clothRayHit = (e) => {
+            const rect = clothRenderer.domElement.getBoundingClientRect();
+            clothMouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+            clothMouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+            clothRaycaster.setFromCamera(clothMouse, clothCamera);
+            const hits = clothRaycaster.intersectObjects(clothModel ? clothModel.children : [], true);
+            return hits.find(h => h.uv);
+        };
+        const toggleClothingLimb = (part) => {
+            if (!clothModel) return;
+            clothHidden[part] = !clothHidden[part];
+            const vis = !clothHidden[part];
+            clothModel.traverse(n => {
+                if (!n.isMesh) return;
+                if (part === 'head' && n.position.y > 3) n.visible = vis;
+                if (part === 'torso' && Math.abs(n.position.y) < 2) n.visible = vis;
+                if (part === 'arms' && Math.abs(n.position.x) > 2.2 && n.position.y > -2) n.visible = vis;
+                if (part === 'legs' && n.position.y < -1) n.visible = vis;
+            });
+        };
+        const submitClothing = async () => {
+            const name = document.getElementById('cloth-name').value.trim();
+            const description = document.getElementById('cloth-desc').value.trim();
+            const price = Math.max(0, parseInt(document.getElementById('cloth-price').value || '0', 10));
+            const type = document.getElementById('cloth-type').value;
+            const visibility = document.getElementById('cloth-visibility').value;
+            if (!name || !description) return showModal('Error', 'Name and description are required.');
+            const designImage = clothCanvas.toDataURL('image/png');
+            try {
+                await apiCall('/clothing/items', 'POST', { name, description, price, type, visibility, designImage });
+                showModal('Created', visibility === 'public' ? 'Clothing submitted for moderation and added to your inventory.' : 'Private clothing created and added to your inventory.');
+                document.getElementById('cloth-name').value = ''; document.getElementById('cloth-desc').value = ''; document.getElementById('cloth-price').value = '';
+            } catch (e) {}
+        };
+        window.toggleClothingLimb = toggleClothingLimb;
+        window.undoClothing = undoClothing;
+        window.redoClothing = redoClothing;
+        window.submitClothing = submitClothing;
 
         // --- Dashboard & Library ---
         const loadDashboardFriends = async () => {
@@ -9922,6 +10113,7 @@ async function openModPanel() {
             document.getElementById('mod-panel-lock-screen').style.display = 'none';
             document.getElementById('mod-panel-content').style.display = 'block';
             loadAccessoryModerationQueue();
+            loadClothingModerationQueue();
         }
     } catch {}
     startModWatchdog();
@@ -9935,6 +10127,7 @@ async function unlockModPanel() {
         document.getElementById('mod-panel-lock-screen').style.display = 'none';
         document.getElementById('mod-panel-content').style.display = 'block';
         loadAccessoryModerationQueue();
+        loadClothingModerationQueue();
     } catch {
         navigate('dashboard');
     }
@@ -10017,6 +10210,39 @@ async function moderateAccessory(id, action) {
     const reason = action === 'reject' ? (prompt('Reject reason (optional):') || '') : '';
     await apiCall(`/moderate/accessories/${id}`, 'POST', { action, reason });
     loadAccessoryModerationQueue();
+}
+
+async function loadClothingModerationQueue() {
+    const host = document.getElementById('mod-clothing-queue');
+    if (!host) return;
+    host.innerHTML = 'Loading...';
+    try {
+        const items = await apiCall('/moderate/clothing', 'GET');
+        if (!items.length) {
+            host.innerHTML = '<div style="color:#777;">No pending clothing.</div>';
+            return;
+        }
+        host.innerHTML = items.map(i => `
+            <div style="border:1px solid #ddd; border-radius:6px; padding:8px; margin-bottom:8px; background:#fafafa;">
+                <div><strong>${i.name}</strong> • ${i.price} SC • ${i.type}</div>
+                <div style="font-size:12px; color:#666;">By ${i.authorName}</div>
+                <div style="font-size:12px; margin:4px 0;">${i.description || ''}</div>
+                <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+                    <img src="${i.designImage}" style="width:60px; height:60px; object-fit:cover; border:1px solid #ccc; border-radius:4px;">
+                    <button class="btn btn-sm btn-success" onclick="moderateClothing('${i.id}','approve')">Approve</button>
+                    <button class="btn btn-sm btn-danger" onclick="moderateClothing('${i.id}','reject')">Reject</button>
+                </div>
+            </div>
+        `).join('');
+    } catch (e) {
+        host.innerHTML = '<div style="color:#c0392b;">Failed to load clothing queue.</div>';
+    }
+}
+
+async function moderateClothing(id, action) {
+    const reason = action === 'reject' ? (prompt('Reject reason (optional):') || '') : '';
+    await apiCall(`/moderate/clothing/${id}`, 'POST', { action, reason });
+    loadClothingModerationQueue();
 }
 
 function openAccessoryPreview(itemId) {

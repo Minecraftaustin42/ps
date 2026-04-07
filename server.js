@@ -13,7 +13,7 @@ app.use("/seo", express.static(path.join(__dirname, "public", "seo")));
 // In-memory databases
 const DB_FILE = path.join(__dirname, 'db.json');
 let db = {
-    users: [], sessions: {}, games: [], shopItems: [], groups: [], cityPlots: [], datastores: {},
+    users: [], sessions: {}, games: [], shopItems: [], clothingItems: [], groups: [], cityPlots: [], datastores: {},
     globalChat: [], toolboxItems: [], // NEW
     notifications: [],
     moderation: { bans: {}, ipBans: [], warnings: {} },  // <-- ADD THIS LINE
@@ -44,6 +44,7 @@ if (!db.friendPetDaily) db.friendPetDaily = {};
         db = { ...db, ...loaded };
         
         if (!db.shopItems) db.shopItems = [];
+        if (!db.clothingItems) db.clothingItems = [];
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} };
         if (!db.groups) db.groups = [];
 if (!db.sounds) db.sounds = [];
@@ -60,6 +61,7 @@ if (!u.toolboxInventory) u.toolboxInventory = [];
             if (!u.badges) u.badges = [];
             if (!u.messages) u.messages = [];
             if (!u.inventory) u.inventory = [];
+            if (!u.clothingInventory) u.clothingInventory = [];
 
 // Add this right after parsing db.json
 if (typeof db.lastUserIdNum === 'undefined') {
@@ -565,7 +567,7 @@ if (typeof db.lastUserIdNum !== 'number') {
 userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
-        inventory: [], bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
 
@@ -909,7 +911,7 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({
         id: user.id, username: user.username, color: user.color, badges: user.badges, coins: user.coins,
         requests, friends: friendsList, recentlyPlayed: recentGames, bookmarkedGames, 
-        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups,
+        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [],
         lastSpinDate: user.lastSpinDate,
         loginStreak: user.loginStreak, playStreak: user.playStreak, lastLoginDate: user.lastLoginDate,
         toolboxInventory: user.toolboxInventory // NEW
@@ -1820,6 +1822,38 @@ app.post('/api/shop/buy/:id', requireAuth, (req, res) => {
     res.json({ message: 'Item purchased successfully!', coins: user.coins });
 });
 
+app.get('/api/clothing/items', (req, res) => {
+    const approved = (db.clothingItems || []).filter(i => i.visibility === 'public' && (i.status || 'approved') === 'approved');
+    res.json(approved.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+});
+
+app.post('/api/clothing/items', requireAuth, (req, res) => {
+    const { name, description, price, type, visibility, designImage } = req.body;
+    if (!name || !description || !designImage) return res.status(400).json({ error: 'Missing required clothing data.' });
+    if (!['shirt', 'pants'].includes(type)) return res.status(400).json({ error: 'Invalid clothing type.' });
+    if (!['public', 'private'].includes(visibility)) return res.status(400).json({ error: 'Invalid visibility.' });
+    const user = db.users.find(u => u.id === req.userId);
+    const item = {
+        id: crypto.randomUUID(),
+        name,
+        description,
+        price: Math.max(0, parseInt(price) || 0),
+        type,
+        visibility,
+        designImage,
+        authorId: user.id,
+        authorName: user.username,
+        createdAt: new Date().toISOString(),
+        status: visibility === 'public' ? 'pending' : 'approved',
+        moderation: { reviewedBy: null, reviewedAt: null, reason: '' }
+    };
+    db.clothingItems.push(item);
+    if (!Array.isArray(user.clothingInventory)) user.clothingInventory = [];
+    if (!user.clothingInventory.includes(item.id)) user.clothingInventory.push(item.id);
+    saveDB();
+    res.json({ message: visibility === 'public' ? 'Clothing submitted for moderation.' : 'Private clothing created.', item });
+});
+
 // --- Game Routes ---
 // Get Games Library (Search & Filter)
 app.get('/api/games', (req, res) => {
@@ -2125,6 +2159,30 @@ app.post('/api/moderate/accessories/:id', requireAuth, requireModerator, require
         });
     }
 
+    saveDB();
+    res.json({ success: true, item });
+});
+
+app.get('/api/moderate/clothing', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const pending = (db.clothingItems || [])
+        .filter(i => i.visibility === 'public' && (i.status || 'approved') === 'pending')
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    res.json(pending);
+});
+
+app.post('/api/moderate/clothing/:id', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const { action, reason } = req.body;
+    const item = (db.clothingItems || []).find(i => i.id === req.params.id);
+    if (!item) return res.status(404).json({ error: 'Clothing not found.' });
+    if ((item.status || 'approved') !== 'pending') return res.status(400).json({ error: 'Clothing is not pending moderation.' });
+    if (!['approve', 'reject'].includes(action)) return res.status(400).json({ error: 'Invalid action.' });
+    item.status = action === 'approve' ? 'approved' : 'rejected';
+    item.moderation = { reviewedBy: req.userId, reviewedAt: Date.now(), reason: String(reason || '').slice(0, 300) };
+    if (action === 'reject') {
+        db.users.forEach(u => {
+            if (Array.isArray(u.clothingInventory)) u.clothingInventory = u.clothingInventory.filter(id => id !== item.id);
+        });
+    }
     saveDB();
     res.json({ success: true, item });
 });
