@@ -13,7 +13,7 @@ app.use("/seo", express.static(path.join(__dirname, "public", "seo")));
 // In-memory databases
 const DB_FILE = path.join(__dirname, 'db.json');
 let db = {
-    users: [], sessions: {}, games: [], shopItems: [], groups: [], cityPlots: [], datastores: {},
+    users: [], sessions: {}, games: [], shopItems: [], clothingItems: [], blueprints: [], jams: [], megaBuilds: [], groups: [], cityPlots: [], datastores: {},
     globalChat: [], toolboxItems: [], // NEW
     notifications: [],
     moderation: { bans: {}, ipBans: [], warnings: {} },  // <-- ADD THIS LINE
@@ -44,6 +44,10 @@ if (!db.friendPetDaily) db.friendPetDaily = {};
         db = { ...db, ...loaded };
         
         if (!db.shopItems) db.shopItems = [];
+        if (!db.clothingItems) db.clothingItems = [];
+        if (!db.blueprints) db.blueprints = [];
+        if (!db.jams) db.jams = [];
+        if (!db.megaBuilds) db.megaBuilds = [];
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} };
         if (!db.groups) db.groups = [];
 if (!db.sounds) db.sounds = [];
@@ -60,6 +64,18 @@ if (!u.toolboxInventory) u.toolboxInventory = [];
             if (!u.badges) u.badges = [];
             if (!u.messages) u.messages = [];
             if (!u.inventory) u.inventory = [];
+            if (!u.clothingInventory) u.clothingInventory = [];
+            if (typeof u.equippedShirt === 'undefined') u.equippedShirt = null;
+            if (typeof u.equippedPants === 'undefined') u.equippedPants = null;
+            if (!u.challengeClaims) u.challengeClaims = {};
+            if (!u.challengeProgress) u.challengeProgress = { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 };
+            if (!u.academyProgress) u.academyProgress = {};
+            if (!u.academyClaims) u.academyClaims = {};
+            if (!u.jamVotes) u.jamVotes = {};
+            if (!u.blueprintFavorites) u.blueprintFavorites = [];
+            if (!u.questProgress) u.questProgress = {};
+            if (!u.questClaims) u.questClaims = {};
+            if (!u.megaBuildClaims) u.megaBuildClaims = {};
 
 // Add this right after parsing db.json
 if (typeof db.lastUserIdNum === 'undefined') {
@@ -81,6 +97,13 @@ if (typeof u.lastSpinDate === 'undefined') u.lastSpinDate = 0; // NEW: Lucky Spi
 
 if (typeof u.lastPlayDate === 'undefined') u.lastPlayDate = 0;
             if (typeof u.cityData === 'undefined') u.cityData = null; // NEW: Track if user is in Sculpt City
+            if (u.cityData) {
+                if (typeof u.cityData.tutorialComplete === 'undefined') u.cityData.tutorialComplete = false;
+                if (typeof u.cityData.bucks !== 'undefined') {
+                    u.coins = (u.coins || 0) + (u.cityData.bucks || 0);
+                    delete u.cityData.bucks;
+                }
+            }
 
 if (typeof u.loginStreak === 'undefined') u.loginStreak = 0;
             if (typeof u.lastLoginDate === 'undefined') u.lastLoginDate = 0;
@@ -91,29 +114,6 @@ if (typeof u.loginStreak === 'undefined') u.loginStreak = 0;
                 u.friends = u.friends.map(id => ({ id, addedAt: Date.now() }));
             }
         });
-
-
-// ==========================================
-// ONE-TIME REWARD SCRIPT FOR "rer"
-// ==========================================
-const targetUser = db.users.find(u => u.username === "rer");
-if (targetUser) {
-    // 1. Give 10,000 Sculpt Coins
-    targetUser.coins = (targetUser.coins || 0) + 10000;
-    
-    // 2. Ensure they have City Data, then give 1,000,000 Bucks
-    if (!targetUser.cityData) {
-        targetUser.cityData = { bucks: 0, vehicles: ['sedan_1'] };
-    }
-    targetUser.cityData.bucks = (targetUser.cityData.bucks || 0) + 1000000;
-    
-    // 3. Save to database
-    saveDB();
-    console.log(`SUCCESS: Gave 1,000,000 Bucks and 10,000 Coins to ${targetUser.username}!`);
-} else {
-    console.log(`ERROR: User "rer" not found in the database.`);
-}
-// ==========================================
 
 
         db.games.forEach(g => { 
@@ -581,7 +581,7 @@ if (typeof db.lastUserIdNum !== 'number') {
 userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
-        inventory: [], bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], questProgress: {}, questClaims: {}, megaBuildClaims: {}, bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
 
@@ -745,7 +745,7 @@ if (db.moderation && db.moderation.warnings && db.moderation.warnings[user.id]) 
     pendingWarnings = db.moderation.warnings[user.id].filter(w => w.acknowledged === false);
 }
 
-    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, coins: user.coins, pendingWarnings });
+    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, coins: user.coins, pendingWarnings });
 });
 
 app.post('/api/logout', requireAuth, (req, res) => {
@@ -925,11 +925,420 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({
         id: user.id, username: user.username, color: user.color, badges: user.badges, coins: user.coins,
         requests, friends: friendsList, recentlyPlayed: recentGames, bookmarkedGames, 
-        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups,
+        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [], equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null,
         lastSpinDate: user.lastSpinDate,
         loginStreak: user.loginStreak, playStreak: user.playStreak, lastLoginDate: user.lastLoginDate,
         toolboxInventory: user.toolboxInventory // NEW
     });
+});
+
+const CREATOR_CHALLENGE_POOL = [
+    { id: 'parts_10', text: 'Place 10 parts in Studio', reward: 30, check: (p) => p.partsPlaced >= 10 },
+    { id: 'publish_1', text: 'Publish one map update', reward: 70, check: (p) => p.publishes >= 1 },
+    { id: 'visit_city', text: 'Visit Sculpt City once', reward: 25, check: (p) => p.cityVisits >= 1 },
+    { id: 'play_2', text: 'Play 2 community games', reward: 35, check: (p) => p.gamesPlayed >= 2 },
+    { id: 'parts_25', text: 'Place 25 parts in Studio', reward: 60, check: (p) => p.partsPlaced >= 25 }
+];
+const getDayKey = () => new Date().toISOString().slice(0, 10);
+const getDailyChallenges = () => {
+    const daySeed = parseInt(getDayKey().replace(/-/g, ''), 10);
+    const out = [];
+    for (let i = 0; i < 3; i++) {
+        out.push(CREATOR_CHALLENGE_POOL[(daySeed + i * 3) % CREATOR_CHALLENGE_POOL.length]);
+    }
+    return out;
+};
+const ensureChallengeProgressDay = (user) => {
+    const dayKey = getDayKey();
+    if (!user.challengeProgress || user.challengeProgress.dayKey !== dayKey) {
+        user.challengeProgress = { dayKey, partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 };
+    }
+    if (!user.challengeClaims) user.challengeClaims = {};
+};
+
+app.get('/api/challenges/daily', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    ensureChallengeProgressDay(user);
+    const day = getDayKey();
+    const challenges = getDailyChallenges().map(c => ({
+        id: c.id,
+        text: c.text,
+        reward: c.reward,
+        completed: c.check(user.challengeProgress),
+        claimed: user.challengeClaims[`${day}:${c.id}`] === true
+    }));
+    saveDB();
+    res.json({ day, challenges });
+});
+
+app.post('/api/challenges/progress', requireAuth, (req, res) => {
+    const { event, amount } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    ensureChallengeProgressDay(user);
+    const amt = Math.max(1, Math.min(1000, parseInt(amount) || 1));
+    if (event === 'partsPlaced') user.challengeProgress.partsPlaced += amt;
+    if (event === 'publishes') user.challengeProgress.publishes += amt;
+    if (event === 'cityVisits') user.challengeProgress.cityVisits += amt;
+    if (event === 'gamesPlayed') user.challengeProgress.gamesPlayed += amt;
+    saveDB();
+    res.json({ success: true, progress: user.challengeProgress });
+});
+
+app.post('/api/challenges/claim', requireAuth, (req, res) => {
+    const { id } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    ensureChallengeProgressDay(user);
+    const day = getDayKey();
+    const challenge = getDailyChallenges().find(c => c.id === id);
+    if (!challenge) return res.status(400).json({ error: 'Challenge not available today.' });
+    if (!challenge.check(user.challengeProgress)) return res.status(400).json({ error: 'Challenge requirements not met yet.' });
+    const claimKey = `${day}:${challenge.id}`;
+    if (user.challengeClaims[claimKey]) return res.status(400).json({ error: 'Already claimed today.' });
+    user.challengeClaims[claimKey] = true;
+    user.coins = (user.coins || 0) + challenge.reward;
+    saveDB();
+    res.json({ success: true, reward: challenge.reward, coins: user.coins });
+});
+
+const CREATOR_ACADEMY_TRACKS = [
+    {
+        id: 'lighting_basics',
+        title: 'Lighting Basics Masterclass',
+        description: 'Build atmosphere by balancing light, fog, and contrast for different moods.',
+        howTo: 'Open Studio world settings and test three times of day. Start with sun intensity at 0.9 for daytime, then 0.45 for sunset, then 0.2 for night scenes. Adjust fog distance until distant objects fade softly but remain readable, and set exposure low enough to preserve highlights. Save screenshots after each pass and keep the most readable version.',
+        reward: 10
+    },
+    {
+        id: 'polish_pass',
+        title: 'Polish Pass Workflow',
+        description: 'Learn a repeatable workflow for improving player readability and flow.',
+        howTo: 'Run a full map pass in this order: spawn clarity, path readability, interaction feedback, and final cleanup. Add signs or visual landmarks every major turn, verify at least one obvious objective in the first 10 seconds, and remove decorative clutter from jump lines. End by playtesting once on low graphics quality to catch contrast and performance issues.',
+        reward: 10
+    },
+    {
+        id: 'city_design',
+        title: 'Sculpt City District Design',
+        description: 'Create spaces that fit city districts and encourage repeat visits.',
+        howTo: 'Pick one district theme and design a loop with a clear entrance, central attraction, and reward exit. Include one social area (hangout), one utility area (shop/job), and one traversal shortcut. Use color coding or props so players instantly understand where to go next. Publish a short dev note explaining the district fantasy.',
+        reward: 10
+    },
+    {
+        id: 'collab_ready',
+        title: 'Collab Ready Production',
+        description: 'Prepare your project so collaborators can join quickly without confusion.',
+        howTo: 'Rename key objects with prefixes (ENV_, GAMEPLAY_, UI_), separate decorative and logic-heavy areas, and leave three TODO markers for teammates. Publish an update note describing current priorities and testing steps. Before sharing, verify spawn, checkpoints, and one full gameplay loop all function without manual fixes.',
+        reward: 10
+    },
+    {
+        id: 'audio_feedback',
+        title: 'Audio Feedback Foundations',
+        description: 'Use sound intentionally to improve interactions and game feel.',
+        howTo: 'Add at least three feedback sounds: success, failure, and traversal/impact. Keep volume levels balanced so no one sound clips over dialogue or ambience. Match tone to theme (horror, sci-fi, cozy, etc.) and ensure each core interaction has consistent audio feedback. Playtest with headphones and speakers to verify clarity.',
+        reward: 10
+    },
+    {
+        id: 'onboarding_flow',
+        title: 'First 60 Seconds Onboarding',
+        description: 'Teach players quickly with UI, layout, and early objectives.',
+        howTo: 'Define what players must know in the first minute, then place hints at spawn, first challenge, and first reward. Keep instruction text short, under one sentence each, and pair it with visual cues like arrows or landmarks. Test with a friend and note where they hesitate; revise those moments before marking this complete.',
+        reward: 10
+    },
+    {
+        id: 'performance_budget',
+        title: 'Performance Budgeting',
+        description: 'Keep your map smooth across desktop and mobile by controlling complexity.',
+        howTo: 'Audit dense areas for unnecessary parts, overlap, and transparency overuse. Replace repeated detail clusters with simpler variants and reduce expensive visual stacks in high-traffic zones. Test with graphics quality set to Low and verify playability without stutters. Document one optimization you made and why it helped.',
+        reward: 10
+    }
+];
+
+const getOrCreateCurrentJam = () => {
+    const now = Date.now();
+    let jam = (db.jams || []).find(j => j.startsAt <= now && j.endsAt > now);
+    if (!jam) {
+        const duration = 1000 * 60 * 60 * 24 * 7;
+        const startsAt = now - (now % duration);
+        const themes = ['Sky Islands', 'Neon Factory', 'Dungeon Rush', 'Robot Arena', 'Crystal Caverns'];
+        const index = Math.floor(startsAt / duration) % themes.length;
+        jam = {
+            id: `jam_${startsAt}`,
+            title: `Creator Jam: ${themes[index]}`,
+            theme: themes[index],
+            startsAt,
+            endsAt: startsAt + duration,
+            submissions: []
+        };
+        db.jams.push(jam);
+    }
+    return jam;
+};
+
+app.get('/api/academy/tracks', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user.academyProgress) user.academyProgress = {};
+    if (!user.academyClaims) user.academyClaims = {};
+    const tracks = CREATOR_ACADEMY_TRACKS.map(t => ({
+        ...t,
+        completed: user.academyProgress[t.id] === true,
+        claimed: user.academyClaims[t.id] === true
+    }));
+    saveDB();
+    res.json({ tracks });
+});
+
+app.post('/api/academy/complete', requireAuth, (req, res) => {
+    const { trackId } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const track = CREATOR_ACADEMY_TRACKS.find(t => t.id === trackId);
+    if (!track) return res.status(404).json({ error: 'Track not found.' });
+    if (!user.academyProgress) user.academyProgress = {};
+    if (!user.academyClaims) user.academyClaims = {};
+    user.academyProgress[track.id] = true;
+    if (!user.academyClaims[track.id]) {
+        user.academyClaims[track.id] = true;
+        user.coins = (user.coins || 0) + track.reward;
+    }
+    saveDB();
+    res.json({ success: true, reward: track.reward, coins: user.coins, claimed: true });
+});
+
+app.get('/api/jams/current', requireAuth, (req, res) => {
+    const jam = getOrCreateCurrentJam();
+    const user = db.users.find(u => u.id === req.userId);
+    const submissions = (jam.submissions || [])
+        .map(s => ({ ...s, voteCount: (s.votes || []).length }))
+        .sort((a, b) => b.voteCount - a.voteCount);
+    const userSubmission = submissions.find(s => s.authorId === user.id) || null;
+    saveDB();
+    res.json({ jam: { ...jam, submissions }, userSubmission });
+});
+
+app.post('/api/jams/submit', requireAuth, (req, res) => {
+    const { gameId, title, pitch } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const jam = getOrCreateCurrentJam();
+    const game = db.games.find(g => g.id === gameId);
+    if (!game) return res.status(404).json({ error: 'Game not found.' });
+    if (game.authorId !== user.id) return res.status(403).json({ error: 'You can only submit your own game.' });
+    let entry = jam.submissions.find(s => s.authorId === user.id);
+    if (!entry) {
+        entry = { id: crypto.randomUUID(), authorId: user.id, authorName: user.username, votes: [] };
+        jam.submissions.push(entry);
+    }
+    entry.gameId = game.id;
+    entry.title = (title || game.title || 'Untitled Jam Entry').slice(0, 80);
+    entry.pitch = (pitch || '').slice(0, 300);
+    entry.submittedAt = Date.now();
+    saveDB();
+    res.json({ success: true, entry });
+});
+
+app.post('/api/jams/vote', requireAuth, (req, res) => {
+    const { submissionId } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const jam = getOrCreateCurrentJam();
+    const submission = jam.submissions.find(s => s.id === submissionId);
+    if (!submission) return res.status(404).json({ error: 'Submission not found.' });
+    if (submission.authorId === user.id) return res.status(400).json({ error: 'You cannot vote for your own entry.' });
+    if (!submission.votes) submission.votes = [];
+    if (submission.votes.includes(user.id)) return res.status(400).json({ error: 'Already voted for this entry.' });
+    submission.votes.push(user.id);
+    saveDB();
+    res.json({ success: true, votes: submission.votes.length });
+});
+
+app.get('/api/blueprints/feed', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user.blueprintFavorites) user.blueprintFavorites = [];
+    const feed = (db.blueprints || [])
+        .map(bp => ({
+            ...bp,
+            favorites: (bp.favorites || []).length,
+            favorited: user.blueprintFavorites.includes(bp.id)
+        }))
+        .sort((a, b) => (b.favorites - a.favorites) || (b.createdAt - a.createdAt));
+    saveDB();
+    res.json({ blueprints: feed });
+});
+
+app.post('/api/blueprints', requireAuth, (req, res) => {
+    const { title, summary, tags } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const bp = {
+        id: crypto.randomUUID(),
+        title: (title || 'Untitled Blueprint').slice(0, 80),
+        summary: (summary || '').slice(0, 300),
+        tags: Array.isArray(tags) ? tags.slice(0, 6).map(t => String(t).slice(0, 20)) : [],
+        authorId: user.id,
+        authorName: user.username,
+        createdAt: Date.now(),
+        favorites: []
+    };
+    db.blueprints.push(bp);
+    saveDB();
+    res.json({ success: true, blueprint: bp });
+});
+
+app.post('/api/blueprints/:id/favorite', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const bp = (db.blueprints || []).find(b => b.id === req.params.id);
+    if (!bp) return res.status(404).json({ error: 'Blueprint not found.' });
+    if (!bp.favorites) bp.favorites = [];
+    if (!user.blueprintFavorites) user.blueprintFavorites = [];
+    const has = bp.favorites.includes(user.id);
+    if (has) {
+        bp.favorites = bp.favorites.filter(id => id !== user.id);
+        user.blueprintFavorites = user.blueprintFavorites.filter(id => id !== bp.id);
+    } else {
+        bp.favorites.push(user.id);
+        user.blueprintFavorites.push(bp.id);
+    }
+    saveDB();
+    res.json({ success: true, favorited: !has, favorites: bp.favorites.length });
+});
+
+const EPIC_QUESTLINES = [
+    {
+        id: 'legend_path',
+        title: 'Path to Creator Legend',
+        description: 'A multi-step questline to take a map from rough draft to polished experience.',
+        stages: [
+            { id: 'stage_plan', title: 'Plan the fantasy', reward: 20, instructions: 'Write a one-paragraph fantasy for your game and define the first challenge, midpoint moment, and final payoff. Keep each beat clear and measurable so collaborators understand scope immediately.' },
+            { id: 'stage_prototype', title: 'Build the prototype loop', reward: 25, instructions: 'Create one full gameplay loop from spawn to reward. Include at least one fail state and one success celebration. Verify players can recover after failure without restarting the entire map.' },
+            { id: 'stage_polish', title: 'Polish and ship', reward: 35, instructions: 'Complete a polish pass for lighting, signage, feedback sounds, and clear progression. Publish an update note with at least three improvements and one known future upgrade.' }
+        ]
+    },
+    {
+        id: 'city_tycoon',
+        title: 'City Tycoon Architect',
+        description: 'Design a city-ready destination with social and economic utility.',
+        stages: [
+            { id: 'stage_theme', title: 'District identity', reward: 20, instructions: 'Pick a district identity and produce a simple color/material guide for it. Ensure your entrance and center area communicate the theme within 10 seconds of arrival.' },
+            { id: 'stage_activity', title: 'Interactive utility', reward: 25, instructions: 'Add at least two interactions that players can repeatedly use, such as jobs, minigames, or collectibles. Each interaction should provide clear feedback and a visible completion state.' },
+            { id: 'stage_retention', title: 'Retention pass', reward: 35, instructions: 'Add reasons for return visits: daily bonus, alternate route, hidden reward, or rotating challenge. Publish a changelog note that explains why players should revisit tomorrow.' }
+        ]
+    }
+];
+
+const getOrCreateMegaBuild = () => {
+    const now = Date.now();
+    let event = (db.megaBuilds || []).find(e => e.startsAt <= now && e.endsAt > now);
+    if (!event) {
+        const length = 1000 * 60 * 60 * 24 * 7;
+        const startsAt = now - (now % length);
+        const themes = ['Sky Harbor Megacity', 'Underwater Arcology', 'Volcanic Cyber Forge', 'Crystal Metropolis'];
+        const theme = themes[Math.floor(startsAt / length) % themes.length];
+        event = {
+            id: `mega_${startsAt}`,
+            title: `Mega Build: ${theme}`,
+            theme,
+            startsAt,
+            endsAt: startsAt + length,
+            totalContrib: 0,
+            milestonesClaimedBy: {},
+            contributors: {}
+        };
+        db.megaBuilds.push(event);
+    }
+    return event;
+};
+
+app.get('/api/questlines', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user.questProgress) user.questProgress = {};
+    if (!user.questClaims) user.questClaims = {};
+    const data = EPIC_QUESTLINES.map(q => ({
+        id: q.id,
+        title: q.title,
+        description: q.description,
+        stages: q.stages.map(s => ({
+            ...s,
+            completed: user.questProgress[`${q.id}:${s.id}`] === true,
+            claimed: user.questClaims[`${q.id}:${s.id}`] === true
+        }))
+    }));
+    saveDB();
+    res.json({ questlines: data });
+});
+
+app.post('/api/questlines/complete', requireAuth, (req, res) => {
+    const { questId, stageId } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const quest = EPIC_QUESTLINES.find(q => q.id === questId);
+    const stage = quest ? quest.stages.find(s => s.id === stageId) : null;
+    if (!stage) return res.status(404).json({ error: 'Quest stage not found.' });
+    const key = `${questId}:${stageId}`;
+    if (!user.questProgress) user.questProgress = {};
+    if (!user.questClaims) user.questClaims = {};
+    user.questProgress[key] = true;
+    if (!user.questClaims[key]) {
+        user.questClaims[key] = true;
+        user.coins = (user.coins || 0) + stage.reward;
+    }
+    saveDB();
+    res.json({ success: true, coins: user.coins, reward: stage.reward });
+});
+
+app.get('/api/megabuild/current', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const event = getOrCreateMegaBuild();
+    if (!event.contributors) event.contributors = {};
+    const milestones = [300, 900, 1800, 3200].map(target => ({
+        target,
+        reached: event.totalContrib >= target,
+        reward: Math.floor(target / 30),
+        claimed: user.megaBuildClaims && user.megaBuildClaims[`${event.id}:${target}`] === true
+    }));
+    const leaderboard = Object.entries(event.contributors)
+        .map(([userId, points]) => {
+            const u = db.users.find(x => x.id === userId);
+            return { userId, username: u ? u.username : 'Unknown', points };
+        })
+        .sort((a, b) => b.points - a.points)
+        .slice(0, 12);
+    res.json({
+        event: {
+            id: event.id,
+            title: event.title,
+            theme: event.theme,
+            startsAt: event.startsAt,
+            endsAt: event.endsAt,
+            totalContrib: event.totalContrib
+        },
+        myContrib: event.contributors[user.id] || 0,
+        milestones,
+        leaderboard
+    });
+});
+
+app.post('/api/megabuild/contribute', requireAuth, (req, res) => {
+    const { points } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const event = getOrCreateMegaBuild();
+    const add = Math.max(5, Math.min(200, parseInt(points, 10) || 25));
+    if (!event.contributors) event.contributors = {};
+    event.contributors[user.id] = (event.contributors[user.id] || 0) + add;
+    event.totalContrib = (event.totalContrib || 0) + add;
+    saveDB();
+    res.json({ success: true, added: add, totalContrib: event.totalContrib, myContrib: event.contributors[user.id] });
+});
+
+app.post('/api/megabuild/claim', requireAuth, (req, res) => {
+    const { target } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const event = getOrCreateMegaBuild();
+    const validTargets = [300, 900, 1800, 3200];
+    const t = parseInt(target, 10);
+    if (!validTargets.includes(t)) return res.status(400).json({ error: 'Invalid milestone.' });
+    if ((event.totalContrib || 0) < t) return res.status(400).json({ error: 'Milestone not reached yet.' });
+    if (!user.megaBuildClaims) user.megaBuildClaims = {};
+    const key = `${event.id}:${t}`;
+    if (user.megaBuildClaims[key]) return res.status(400).json({ error: 'Already claimed.' });
+    const reward = Math.floor(t / 30);
+    user.megaBuildClaims[key] = true;
+    user.coins = (user.coins || 0) + reward;
+    saveDB();
+    res.json({ success: true, reward, coins: user.coins });
 });
 
 
@@ -1788,7 +2197,8 @@ app.post('/api/groups/:id/payout', requireAuth, (req, res) => {
 // --- Shop & Economy Routes ---
 
 app.get('/api/shop/items', (req, res) => {
-    res.json(db.shopItems.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    const approved = (db.shopItems || []).filter(i => (i.status || 'approved') === 'approved');
+    res.json(approved.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
 });
 
 app.post('/api/shop/items', requireAuth, (req, res) => {
@@ -1796,19 +2206,26 @@ app.post('/api/shop/items', requireAuth, (req, res) => {
     if (!name || !image) return res.status(400).json({ error: 'Missing required data.' });
 
     const user = db.users.find(u => u.id === req.userId);
-    if (user.coins < 15) return res.status(400).json({ error: 'Insufficient Funds.' });
-    user.coins -= 15;
+    const accountAgeMs = Date.now() - (user.createdAt || 0);
+    const minAgeMs = 3 * 24 * 60 * 60 * 1000;
+    if (accountAgeMs < minAgeMs) {
+        const hoursLeft = Math.ceil((minAgeMs - accountAgeMs) / (60 * 60 * 1000));
+        return res.status(403).json({ error: `Account must be at least 3 days old to upload accessories. (${hoursLeft}h remaining)` });
+    }
+    if (user.coins < 20) return res.status(400).json({ error: 'Insufficient Funds. Uploading costs 20 SC.' });
+    user.coins -= 20;
 
     const newItem = {
         id: crypto.randomUUID(), name, description: description || '', price: parseInt(price) || 0,
-        authorId: user.id, authorName: user.username, image, createdAt: new Date().toISOString()
+        authorId: user.id, authorName: user.username, image, createdAt: new Date().toISOString(),
+        status: 'pending', moderation: { reviewedBy: null, reviewedAt: null, reason: '' }
     };
     
     db.shopItems.push(newItem);
     user.inventory.push(newItem.id); 
     saveDB();
     
-    res.json({ message: 'Accessory published successfully!', item: newItem, coins: user.coins });
+    res.json({ message: 'Accessory submitted for moderation review.', item: newItem, coins: user.coins });
 });
 
 app.post('/api/shop/buy/:id', requireAuth, (req, res) => {
@@ -1816,13 +2233,86 @@ app.post('/api/shop/buy/:id', requireAuth, (req, res) => {
     const user = db.users.find(u => u.id === req.userId);
     
     if (!item) return res.status(404).json({ error: 'Item not found.' });
+    if ((item.status || 'approved') !== 'approved') return res.status(400).json({ error: 'This item is not approved for sale yet.' });
     if (user.inventory.includes(item.id)) return res.status(400).json({ error: 'You already own this item.' });
     if (user.coins < item.price) return res.status(400).json({ error: 'Insufficient Funds.' });
     
     user.coins -= item.price;
     user.inventory.push(item.id);
+    const author = db.users.find(u => u.id === item.authorId);
+    if (author) author.coins = (author.coins || 0) + item.price;
     saveDB();
     res.json({ message: 'Item purchased successfully!', coins: user.coins });
+});
+
+app.get('/api/clothing/items', (req, res) => {
+    const approved = (db.clothingItems || []).filter(i => i.visibility === 'public' && (i.status || 'approved') === 'approved');
+    res.json(approved.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+});
+
+app.post('/api/clothing/items', requireAuth, (req, res) => {
+    const { name, description, price, type, visibility, designImage } = req.body;
+    if (!name || !description || !designImage) return res.status(400).json({ error: 'Missing required clothing data.' });
+    if (!['shirt', 'pants'].includes(type)) return res.status(400).json({ error: 'Invalid clothing type.' });
+    if (!['public', 'private'].includes(visibility)) return res.status(400).json({ error: 'Invalid visibility.' });
+    const user = db.users.find(u => u.id === req.userId);
+    const item = {
+        id: crypto.randomUUID(),
+        name,
+        description,
+        price: Math.max(0, parseInt(price) || 0),
+        type,
+        visibility,
+        designImage,
+        authorId: user.id,
+        authorName: user.username,
+        createdAt: new Date().toISOString(),
+        status: visibility === 'public' ? 'pending' : 'approved',
+        moderation: { reviewedBy: null, reviewedAt: null, reason: '' }
+    };
+    db.clothingItems.push(item);
+    if (!Array.isArray(user.clothingInventory)) user.clothingInventory = [];
+    if (!user.clothingInventory.includes(item.id)) user.clothingInventory.push(item.id);
+    saveDB();
+    res.json({ message: visibility === 'public' ? 'Clothing submitted for moderation.' : 'Private clothing created.', item });
+});
+
+app.get('/api/me/clothing-inventory', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const items = (user.clothingInventory || []).map(id => (db.clothingItems || []).find(i => i.id === id)).filter(Boolean);
+    res.json({ items, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null });
+});
+
+app.post('/api/clothing/buy/:id', requireAuth, (req, res) => {
+    const item = (db.clothingItems || []).find(i => i.id === req.params.id);
+    const user = db.users.find(u => u.id === req.userId);
+    if (!item) return res.status(404).json({ error: 'Clothing not found.' });
+    if (item.visibility !== 'public' || (item.status || 'approved') !== 'approved') return res.status(400).json({ error: 'Clothing is not available for purchase.' });
+    if ((user.clothingInventory || []).includes(item.id)) return res.status(400).json({ error: 'You already own this clothing item.' });
+    if (user.coins < item.price) return res.status(400).json({ error: 'Insufficient Funds.' });
+    user.coins -= item.price;
+    if (!Array.isArray(user.clothingInventory)) user.clothingInventory = [];
+    user.clothingInventory.push(item.id);
+    const author = db.users.find(u => u.id === item.authorId);
+    if (author) author.coins = (author.coins || 0) + item.price;
+    saveDB();
+    res.json({ success: true, coins: user.coins });
+});
+
+app.post('/api/clothing/equip', requireAuth, (req, res) => {
+    const { itemId } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    if (!itemId) {
+        user.equippedShirt = null; user.equippedPants = null; saveDB();
+        return res.json({ equippedShirt: null, equippedPants: null });
+    }
+    if (!(user.clothingInventory || []).includes(itemId)) return res.status(403).json({ error: 'Not owned.' });
+    const item = (db.clothingItems || []).find(i => i.id === itemId);
+    if (!item) return res.status(404).json({ error: 'Clothing not found.' });
+    if (item.type === 'shirt') user.equippedShirt = item.id;
+    if (item.type === 'pants') user.equippedPants = item.id;
+    saveDB();
+    res.json({ equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null });
 });
 
 // --- Game Routes ---
@@ -1883,6 +2373,9 @@ app.post('/api/games/:id/publish', requireAuth, (req, res) => {
 
     if (!game.versions) game.versions = [];
     game.versions.push({ versionId: game.versions.length + 1, timestamp: Date.now(), gameData: JSON.parse(JSON.stringify(safeGameData)) });
+    const author = db.users.find(u => u.id === req.userId);
+    ensureChallengeProgressDay(author);
+    if (author) author.challengeProgress.publishes += 1;
 
     saveDB();
     res.json({ success: true, versionId: game.versions.length });
@@ -2103,6 +2596,61 @@ app.post('/api/moderate/images', requireAuth, (req, res) => {
     res.json({ success: true });
 });
 
+app.get('/api/moderate/accessories', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const pending = (db.shopItems || [])
+        .filter(i => (i.status || 'approved') === 'pending')
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    res.json(pending);
+});
+
+app.post('/api/moderate/accessories/:id', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const { action, reason } = req.body; // approve | reject
+    const item = (db.shopItems || []).find(i => i.id === req.params.id);
+    if (!item) return res.status(404).json({ error: 'Accessory not found.' });
+    if ((item.status || 'approved') !== 'pending') return res.status(400).json({ error: 'Accessory is not pending moderation.' });
+    if (!['approve', 'reject'].includes(action)) return res.status(400).json({ error: 'Invalid action.' });
+
+    item.status = action === 'approve' ? 'approved' : 'rejected';
+    item.moderation = {
+        reviewedBy: req.userId,
+        reviewedAt: Date.now(),
+        reason: String(reason || '').slice(0, 300)
+    };
+
+    if (action === 'reject') {
+        db.users.forEach(u => {
+            if (Array.isArray(u.inventory)) u.inventory = u.inventory.filter(id => id !== item.id);
+        });
+    }
+
+    saveDB();
+    res.json({ success: true, item });
+});
+
+app.get('/api/moderate/clothing', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const pending = (db.clothingItems || [])
+        .filter(i => i.visibility === 'public' && (i.status || 'approved') === 'pending')
+        .sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+    res.json(pending);
+});
+
+app.post('/api/moderate/clothing/:id', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const { action, reason } = req.body;
+    const item = (db.clothingItems || []).find(i => i.id === req.params.id);
+    if (!item) return res.status(404).json({ error: 'Clothing not found.' });
+    if ((item.status || 'approved') !== 'pending') return res.status(400).json({ error: 'Clothing is not pending moderation.' });
+    if (!['approve', 'reject'].includes(action)) return res.status(400).json({ error: 'Invalid action.' });
+    item.status = action === 'approve' ? 'approved' : 'rejected';
+    item.moderation = { reviewedBy: req.userId, reviewedAt: Date.now(), reason: String(reason || '').slice(0, 300) };
+    if (action === 'reject') {
+        db.users.forEach(u => {
+            if (Array.isArray(u.clothingInventory)) u.clothingInventory = u.clothingInventory.filter(id => id !== item.id);
+        });
+    }
+    saveDB();
+    res.json({ success: true, item });
+});
+
 app.get('/api/games/:id', (req, res) => {
     const game = db.games.find(g => g.id === req.params.id);
     if (!game) return res.status(404).json({ error: 'Game not found.' });
@@ -2242,8 +2790,8 @@ app.get('/api/games/:id/analytics', requireAuth, (req, res) => {
 app.get('/api/city/info', requireAuth, (req, res) => {
     const user = db.users.find(u => u.id === req.userId);
     if (user.cityData) {
-        if (!user.cityData.bucks) user.cityData.bucks = 0;
         if (!user.cityData.vehicles) user.cityData.vehicles = ['sedan_1'];
+        if (typeof user.cityData.tutorialComplete === 'undefined') user.cityData.tutorialComplete = false;
     }
     res.json({ cityData: user.cityData, plots: db.cityPlots || [] });
 });
@@ -2258,8 +2806,8 @@ app.post('/api/city/claim', requireAuth, (req, res) => {
     const isTaken = db.cityPlots.find(p => p.plotX === plotX && p.plotZ === plotZ && p.neighborhood === neighborhood);
     if (isTaken) return res.status(400).json({ error: 'Plot is already taken!' });
 
-    // Initialize the player with a Starter House, 0 Bucks, and a Sedan!
-    user.cityData = { neighborhood, plotX, plotZ, houseType: 'Starter', bucks: 0, vehicles: ['sedan_1'] };
+    // Initialize the player with a Starter House and a Sedan.
+    user.cityData = { neighborhood, plotX, plotZ, houseType: 'Starter', tutorialComplete: false, vehicles: ['sedan_1'] };
     db.cityPlots.push({
         id: crypto.randomUUID(), userId: user.id, username: user.username,
         neighborhood, plotX, plotZ, houseType: 'Starter'
@@ -2277,21 +2825,21 @@ app.post('/api/city/sync', requireAuth, (req, res) => {
     // Grant Coins
     if (req.body.coinsToAdd) user.coins = (user.coins || 0) + req.body.coinsToAdd;
     
-    // Grant Bucks
-    if (user.cityData && req.body.bucksToAdd) {
-        user.cityData.bucks = (user.cityData.bucks || 0) + req.body.bucksToAdd;
-    }
-    
     // Process Vehicle Purchases
     if (user.cityData && req.body.vehicleToBuy) {
         if (!user.cityData.vehicles) user.cityData.vehicles = ['sedan_1'];
-        if (user.cityData.bucks >= req.body.cost) {
-            user.cityData.bucks -= req.body.cost;
+        if (user.coins >= req.body.cost) {
+            user.coins -= req.body.cost;
             user.cityData.vehicles.push(req.body.vehicleToBuy);
         } else {
-            return res.status(400).json({error: 'Not enough Bucks!'});
+            return res.status(400).json({error: 'Not enough Sculpt Coins!'});
         }
     }
+    if (user.cityData && req.body.tutorialComplete === true) {
+        user.cityData.tutorialComplete = true;
+    }
+    ensureChallengeProgressDay(user);
+    if (user.challengeProgress.cityVisits < 1) user.challengeProgress.cityVisits += 1;
     
     saveDB();
     res.json({ coins: user.coins, cityData: user.cityData });
@@ -2309,6 +2857,8 @@ app.post('/api/games/:id/play', requireAuth, (req, res) => {
             if (group) { group.coins = (group.coins || 0) + 5; addGroupXp(group, 10); }
         }
     }
+    ensureChallengeProgressDay(user);
+    user.challengeProgress.gamesPlayed += 1;
 
     // PLAY STREAK MATH
     let streakReward = 0;
@@ -2579,7 +3129,7 @@ app.post('/api/games/:id/chat', requireAuth, (req, res) => {
 
 app.post('/api/games/:id/play-sync', requireAuth, (req, res) => {
     const gameId = req.params.id;
-    const { x, y, z, rotY, sceneId, color } = req.body;
+    const { x, y, z, rotY, sceneId, color, bodyColors } = req.body;
     const user = db.users.find(u => u.id === req.userId);
 
 if (!activePlayers[gameId]) activePlayers[gameId] = {};
@@ -2589,10 +3139,16 @@ const lastChatMessage = (gameChats[gameId] || [])
     .reverse()
     .find(m => m.userId === req.userId && (Date.now() - m.timestamp) < 7000);
 
+const shirtItem = (db.clothingItems || []).find(i => i.id === user.equippedShirt);
+const pantsItem = (db.clothingItems || []).find(i => i.id === user.equippedPants);
+
 activePlayers[gameId][req.userId] = { 
     x, y, z, rotY, sceneId, username: user.username, 
     color: color || user.color || '#e74c3c', 
     equipped: user.equipped,
+    bodyColors: bodyColors || null,
+    equippedShirtImage: shirtItem ? shirtItem.designImage : null,
+    equippedPantsImage: pantsItem ? pantsItem.designImage : null,
     timestamp: Date.now(),
     activeChatBubble: lastChatMessage ? {
         text: lastChatMessage.text,
