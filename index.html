@@ -441,6 +441,10 @@
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
                 <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -4161,12 +4165,15 @@ const dom = edRenderer.domElement;
                                 const angleDelta = (delta.x + delta.y) * 2.0; 
                                 const radSnap = THREE.MathUtils.degToRad(snapRot);
                                 const snappedAngle = Math.round(angleDelta / radSnap) * radSnap;
-
-                                // Create a precise rotation around the local axis
-                                const baseLocalAxis = new THREE.Vector3(); baseLocalAxis[axis] = 1;
-                                const rotQuat = new THREE.Quaternion().setFromAxisAngle(baseLocalAxis, snappedAngle);
-                                
-                                t.mesh.quaternion.copy(t.startQuat).multiply(rotQuat);
+                                const worldAxis = new THREE.Vector3();
+                                worldAxis[axis] = 1;
+                                worldAxis.applyQuaternion(customGizmo.quaternion).normalize();
+                                const rotQuat = new THREE.Quaternion().setFromAxisAngle(worldAxis, snappedAngle);
+                                const pivot = customGizmo.position.clone();
+                                const startOffset = t.startPos.clone().sub(pivot);
+                                const rotatedOffset = startOffset.clone().applyQuaternion(rotQuat);
+                                t.mesh.position.copy(pivot).add(rotatedOffset);
+                                t.mesh.quaternion.copy(rotQuat).multiply(t.startQuat);
                                 t.mesh.rotation.setFromQuaternion(t.mesh.quaternion, 'XYZ');
                             }
                             syncObjectDataToMesh(t.mesh);
@@ -5277,7 +5284,7 @@ let currentEditMode = 'translate';
             sprite.material.needsUpdate = true;
             const sx = Math.max(1, objData.scale?.x || 4);
             const sy = Math.max(0.6, (objData.textSize || 40) / 40);
-            sprite.scale.set(sx * 2.2, sy * 1.2, 1);
+            sprite.scale.set(sx * 3.2, Math.max(2, sy * 2.4), 1);
         };
 
       const addPart = (type) => {
@@ -5366,7 +5373,6 @@ const loadSponsoredAssetsDashboard = async () => {
                         const newObj = JSON.parse(JSON.stringify(objData));
                         newObj.id = crypto.randomUUID();
                         newObj.name = newObj.name + ' (Copy)';
-                        newObj.position.x += 1.5; newObj.position.y += 1.5; // Offset slightly
                         edData.objects.push(newObj);
                         newSelectionIds.push(newObj.id);
                     }
@@ -5510,8 +5516,8 @@ document.addEventListener('keydown', (e) => {
                         }
                         document.getElementById('prop-anchored').checked = objData.isAnchored !== false;
                         document.getElementById('prop-cancollide').checked = objData.canCollide !== false;
-                        const currentOpacity = typeof primary.material?.opacity === 'number' ? primary.material.opacity : 1;
-                        document.getElementById('prop-transparency').value = (1 - currentOpacity).toFixed(1);
+                        const tr = Math.max(0, Math.min(1, typeof objData.transparency === 'number' ? objData.transparency : (1 - (typeof primary.material?.opacity === 'number' ? primary.material.opacity : 1))));
+                        document.getElementById('prop-transparency').value = tr.toFixed(1);
                         const smartSection = document.getElementById('smart-props-section');
                         if (objData.smart && objData.smart.kind) {
                             ensureSmartLogicDefaults(objData);
@@ -5549,6 +5555,7 @@ document.addEventListener('keydown', (e) => {
             const name = document.getElementById('prop-name').value;
             const color = document.getElementById('prop-color').value;
             const material = document.getElementById('prop-material').value;
+            const transparency = Math.max(0, Math.min(1, parseFloat((document.getElementById('prop-transparency') || {}).value) || 0));
             const floatingTextValue = (document.getElementById('prop-ftext') || {}).value || 'Text';
             const floatingFont = (document.getElementById('prop-ffont') || {}).value || 'Arial';
             const floatingSize = Math.max(8, Math.min(160, parseInt((document.getElementById('prop-fsize') || {}).value, 10) || 40));
@@ -5561,6 +5568,7 @@ document.addEventListener('keydown', (e) => {
                     if (mesh === primary) objData.name = name; // Only rename the main clicked object
                     objData.color = color;
                     objData.material = material;
+                    objData.transparency = transparency;
                     if (objData.type === 'floatingText') {
                         objData.text = floatingTextValue;
                         objData.fontFamily = floatingFont;
@@ -5574,6 +5582,8 @@ document.addEventListener('keydown', (e) => {
                         // Ladders retain their texture, but we tint the color underneath
                         mesh.material.color.setHex(color.replace('#', '0x'));
                     }
+                    mesh.material.transparent = transparency > 0 || mesh.material.transparent;
+                    mesh.material.opacity = Math.max(0.02, 1 - transparency);
                     applyFloatingTextVisual(mesh, objData);
                 }
             });
@@ -6124,6 +6134,9 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     if (isLadder) mat = new THREE.MeshLambertMaterial({ color: objData.color, map: TextureManager.getLadder(), transparent: true });
                     else if (objData.type === 'floatingText') mat = new THREE.MeshLambertMaterial({ color: objData.color || '#ffffff', transparent: true, opacity: 0.05 });
                     else mat = getMaterialForType(objData.material || 'Plastic', objData.color || '#3498db');
+                    const objTransparency = Math.max(0, Math.min(1, objData.transparency || 0));
+                    mat.transparent = objTransparency > 0 || mat.transparent;
+                    mat.opacity = Math.max(0.02, 1 - objTransparency);
 
                     const mesh = new THREE.Mesh(geo, mat);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
@@ -6275,11 +6288,11 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     if (!res.acceptedLocalUpdate && res.lastEditTime > lastLocalEditTime) {
                         edData = res.gameData; lastLocalEditTime = res.lastEditTime; buildEditorScene();
                     }
-                    renderCollaboratorCursors((res.cursors || res.teamCursors || res.collaborators || []).filter(c => c && c.username && c.username !== currentUser.username));
+                    renderCollaboratorCursors((res.activeEditorsData || res.cursors || res.teamCursors || res.collaborators || []).filter(c => c && c.username && c.username !== currentUser.username));
                     const status = document.getElementById('autosave-status');
                     if (status && lastLocalEditTime > 0) { status.innerText = 'Autosaved'; setTimeout(() => status.innerText = '', 1000); }
                 } catch(e) {}
-            }, 1500); 
+            }, 700);
         };
         const stopTeamSync = () => {
             if (teamSyncInterval) clearInterval(teamSyncInterval);
@@ -6293,17 +6306,32 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                 const key = c.userId || c.username;
                 alive.add(key);
                 if (!collabMeshes[key]) {
+                    const ghostGroup = new THREE.Group();
                     const ghost = new THREE.Mesh(new THREE.SphereGeometry(0.6, 12, 12), new THREE.MeshBasicMaterial({ color: 0x00e5ff }));
                     ghost.userData.isCollabGhost = true;
                     ghost.renderOrder = 999;
-                    edScene.add(ghost);
-                    collabMeshes[key] = ghost;
+                    ghostGroup.add(ghost);
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 256; canvas.height = 64;
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, 256, 64);
+                    ctx.font = 'bold 28px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillText(c.username || 'Teammate', 128, 32);
+                    const labelTex = new THREE.CanvasTexture(canvas);
+                    const label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex, transparent: true }));
+                    label.position.set(0, 1.3, 0);
+                    label.scale.set(4.2, 1.1, 1);
+                    ghostGroup.add(label);
+                    edScene.add(ghostGroup);
+                    collabMeshes[key] = ghostGroup;
                 }
                 const cx = c.cursor && typeof c.cursor.x === 'number' ? c.cursor.x : 0;
                 const cy = c.cursor && typeof c.cursor.y === 'number' ? c.cursor.y : 0;
                 const cz = c.cursor && typeof c.cursor.z === 'number' ? c.cursor.z : 0;
                 collabMeshes[key].position.set(cx, cy + 1.2, cz);
-                collabMeshes[key].position.set(c.cursor?.x || 0, (c.cursor?.y || 0) + 1.2, c.cursor?.z || 0);
             });
             Object.keys(collabMeshes).forEach(key => {
                 if (!alive.has(key)) {
@@ -6747,6 +6775,7 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
             playScene.background = new THREE.Color(activeLevel.settings.skyColor);
             playScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = activeLevel.settings.brightness; });
             applyPlayGraphicsSettings(activeLevel.settings);
+            window.EnvironmentEngine.generateClouds(playScene, '#ffffff');
             
             playerObj.x = activeLevel.spawn ? activeLevel.spawn.x : 0; 
             playerObj.y = activeLevel.spawn ? activeLevel.spawn.y + 3 : 10;
@@ -6917,6 +6946,9 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     if (isLadder) mat = new THREE.MeshLambertMaterial({ color: objData.color, map: TextureManager.getLadder(), transparent: true });
                     else if (objData.type === 'floatingText') mat = new THREE.MeshLambertMaterial({ color: objData.color || '#ffffff', transparent: true, opacity: 0.01 });
                     else mat = getMaterialForType(objData.material || 'Plastic', objData.color || '#3498db');
+                    const objTransparency = Math.max(0, Math.min(1, objData.transparency || 0));
+                    mat.transparent = objTransparency > 0 || mat.transparent;
+                    mat.opacity = Math.max(0.02, 1 - objTransparency);
 
                     const mesh = new THREE.Mesh(geo, mat);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
@@ -9368,8 +9400,10 @@ document.getElementById('prop-transparency').addEventListener('input', (e) => {
     
     selectedObjects.forEach(mesh => {
         if (mesh.userData.isSpawn) return; // Cannot make spawn invisible
+        const objData = edData.objects.find(o => o.id === mesh.userData.id);
+        if (objData) objData.transparency = Math.max(0, Math.min(1, val));
         mesh.material.transparent = val > 0;
-        mesh.material.opacity = 1 - val; // 1 transparency = 0 opacity
+        mesh.material.opacity = Math.max(0.02, 1 - val); // 1 transparency = almost invisible
     });
     recordEdit(); // Save the state
 });
