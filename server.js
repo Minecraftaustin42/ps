@@ -64,6 +64,7 @@ if (!u.toolboxInventory) u.toolboxInventory = [];
             if (!u.clothingInventory) u.clothingInventory = [];
             if (typeof u.equippedShirt === 'undefined') u.equippedShirt = null;
             if (typeof u.equippedPants === 'undefined') u.equippedPants = null;
+            if (!u.challengeClaims) u.challengeClaims = {};
 
 // Add this right after parsing db.json
 if (typeof db.lastUserIdNum === 'undefined') {
@@ -569,7 +570,7 @@ if (typeof db.lastUserIdNum !== 'number') {
 userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
-        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
 
@@ -918,6 +919,20 @@ app.get('/api/me', requireAuth, (req, res) => {
         loginStreak: user.loginStreak, playStreak: user.playStreak, lastLoginDate: user.lastLoginDate,
         toolboxInventory: user.toolboxInventory // NEW
     });
+});
+
+app.post('/api/challenges/claim', requireAuth, (req, res) => {
+    const { id, reward } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    if (!id) return res.status(400).json({ error: 'Missing challenge id.' });
+    if (!user.challengeClaims) user.challengeClaims = {};
+    const dayKey = new Date().toISOString().slice(0, 10);
+    if (user.challengeClaims[id] === dayKey) return res.status(400).json({ error: 'Already claimed today.' });
+    const safeReward = Math.max(1, Math.min(200, parseInt(reward) || 10));
+    user.challengeClaims[id] = dayKey;
+    user.coins = (user.coins || 0) + safeReward;
+    saveDB();
+    res.json({ success: true, reward: safeReward, coins: user.coins });
 });
 
 

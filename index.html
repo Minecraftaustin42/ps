@@ -465,6 +465,10 @@
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
                 <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -1128,6 +1132,10 @@
                 <div id="dash-sponsored-assets" style="display: flex; gap: 15px; overflow-x: auto; padding-bottom: 10px;">
                     </div>
             </div>
+            <div class="card mt-20">
+                <h2 class="card-title">Creator Challenges</h2>
+                <div id="creator-challenges"></div>
+            </div>
             
             <div class="card mt-20">
                 <h2 class="card-title">Friends Activity & Friendship Levels</h2>
@@ -1609,6 +1617,20 @@
                     <h4 style="margin: 0; padding: 10px; background: #2c3e50; color: #fff;">Properties</h4>
 <div id="props-content" style="padding: 10px; font-size:13px; display:none;">
                         <button class="btn btn-info btn-sm mb-10" style="width: 100%;" onclick="duplicateSelectedParts()">Duplicate Part</button>
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:10px;">
+                            <button class="btn btn-sm" onclick="saveStudioSnapshot()">Save Snapshot</button>
+                            <button class="btn btn-sm" onclick="loadStudioSnapshot()">Load Snapshot</button>
+                            <button class="btn btn-sm" onclick="resetStudioCamera()">Reset Camera</button>
+                            <button class="btn btn-sm" onclick="alignSelectedToGround()">Align Ground</button>
+                            <button class="btn btn-sm" onclick="toggleSelectedWireframe()">Wireframe</button>
+                            <button class="btn btn-sm" onclick="copySelectedObjectId()">Copy Object ID</button>
+                            <button class="btn btn-sm" onclick="nudgeSelected('x', 1)">+X</button>
+                            <button class="btn btn-sm" onclick="nudgeSelected('x', -1)">-X</button>
+                            <button class="btn btn-sm" onclick="nudgeSelected('z', 1)">+Z</button>
+                            <button class="btn btn-sm" onclick="nudgeSelected('z', -1)">-Z</button>
+                            <button class="btn btn-sm" onclick="nudgeSelected('y', 1)">+Y</button>
+                            <button class="btn btn-sm" onclick="nudgeSelected('y', -1)">-Y</button>
+                        </div>
                         
                         <div style="background: #f9f9f9; padding: 10px; border: 1px solid #eee; border-radius: 4px; margin-bottom: 10px;">
                             <h5 style="margin: 0 0 5px 0; color: #2c3e50;">Snapping Increments</h5>
@@ -2648,6 +2670,7 @@ checkDailyReward(); // <-- ADDED HERE
 loadSponsoredAssetsDashboard(); // Add this line!
                 loadDashboardGames();
                 loadDashboardFriends();
+                loadCreatorChallenges();
             } else if (viewId === 'library') {
                 loadLibrary();
             } 
@@ -5232,10 +5255,48 @@ Keep playing together for more daily rewards.`, 'Aww!');
                 'Try mixing Neon + Fog for a cinematic sci-fi mood.',
                 'Press F in Studio to frame selected objects quickly.',
                 'Use low gravity zones to create floaty parkour routes.',
-                'Hidden shortcuts: Ctrl+D duplicate, Ctrl+Z undo, Ctrl+Y redo.'
+                'Hidden shortcuts: Ctrl+D duplicate, Ctrl+Z undo, Ctrl+Y redo.',
+                'Use group publishing to release multiplayer maps for your clan.',
+                'Set Spawn above the ground to avoid instant collision bugs.',
+                'Use Tool parts for pickup gameplay like blasters and wands.',
+                'Name objects clearly so scripting is easier later.',
+                'Combine checkpoints with teleports for race game loops.',
+                'Lower fog distance to improve performance on mobile maps.',
+                'Use smooth plastic for cleaner stylized lighting.',
+                'Try adding one moving platform to teach traversal.',
+                'Use sound IDs in scripts for feedback on interactions.',
+                'Keep collision off for decorative micro-details.',
+                'Build with snap=1, then detail with snap=0.25.',
+                'Use map updates to post devlogs and patch notes.',
+                'For PvP maps, separate red/blue spawns with shields.',
+                'Use speed zones sparingly so movement still feels fair.',
+                'Terrain + painted roads can make districts feel alive.',
+                'Mix scripted smart objects with static scenery for performance.',
+                'Use groups to co-build and split map systems by role.',
+                'Test with graphics quality set to Low before publishing.',
+                'Set sun intensity slightly lower for horror/night vibes.'
             ];
             showModal('Builder Tip', tips[Math.floor(Math.random() * tips.length)]);
         };
+        const loadCreatorChallenges = async () => {
+            const host = document.getElementById('creator-challenges');
+            if (!host) return;
+            const challenges = [
+                { id: 'build_5_parts', text: 'Place 5 parts in Studio', reward: 25 },
+                { id: 'publish_update', text: 'Publish one map update', reward: 60 },
+                { id: 'visit_city', text: 'Visit Sculpt City once', reward: 20 }
+            ];
+            host.innerHTML = challenges.map(c => `<div style="display:flex; justify-content:space-between; border:1px solid #eee; border-radius:6px; padding:8px; margin-bottom:8px;"><div>${c.text}<div style="font-size:12px; color:#777;">Reward: ${c.reward} SC</div></div><button class="btn btn-sm btn-success" onclick="claimCreatorChallenge('${c.id}', ${c.reward})">Claim</button></div>`).join('');
+        };
+        const claimCreatorChallenge = async (id, reward) => {
+            try {
+                const res = await apiCall('/challenges/claim', 'POST', { id, reward });
+                showModal('Challenge Claimed', `+${res.reward} SC`);
+                if (currentUser) currentUser.coins = res.coins;
+                updateCoinsUI();
+            } catch (e) { showModal('Challenge', e.message || 'Could not claim.'); }
+        };
+        window.claimCreatorChallenge = claimCreatorChallenge;
 
         const loadDashboardGames = async () => {
             try {
@@ -5807,6 +5868,51 @@ const loadSponsoredAssetsDashboard = async () => {
                 renderExplorer(); recordEdit();
             }
         };
+
+        const saveStudioSnapshot = () => {
+            localStorage.setItem('ps_studio_snapshot', JSON.stringify({ edData, title: document.getElementById('editor-title').value, genre: document.getElementById('editor-genre').value, savedAt: Date.now() }));
+            showModal('Snapshot Saved', 'Studio snapshot saved locally.');
+        };
+        const loadStudioSnapshot = () => {
+            try {
+                const snap = JSON.parse(localStorage.getItem('ps_studio_snapshot') || 'null');
+                if (!snap || !snap.edData) return showModal('No Snapshot', 'No studio snapshot found.');
+                edData = migrateLevelDataTo3D(snap.edData);
+                if (snap.title) document.getElementById('editor-title').value = snap.title;
+                if (snap.genre) document.getElementById('editor-genre').value = snap.genre;
+                buildEditorScene(); recordEdit(true);
+                showModal('Snapshot Loaded', 'Studio snapshot restored.');
+            } catch (e) { showModal('Error', 'Failed to parse snapshot.'); }
+        };
+        const resetStudioCamera = () => {
+            if (!edCamera) return;
+            edCamera.position.set(25, 25, 25);
+            if (edControls) edControls.target.set(0, 0, 0);
+            edCamera.lookAt(0, 0, 0);
+        };
+        const alignSelectedToGround = () => {
+            selectedObjects.forEach(m => { m.position.y = Math.max(m.scale.y / 2, 0.5); syncObjectDataToMesh(m); });
+            buildEditorScene(); recordEdit();
+        };
+        const nudgeSelected = (axis, amount) => {
+            selectedObjects.forEach(m => { m.position[axis] += amount; syncObjectDataToMesh(m); });
+            buildEditorScene(); recordEdit();
+        };
+        const toggleSelectedWireframe = () => {
+            selectedObjects.forEach(m => { if (m.material) m.material.wireframe = !m.material.wireframe; });
+        };
+        const copySelectedObjectId = async () => {
+            if (!selectedObjects.length) return showModal('Select Object', 'Select an object first.');
+            const id = selectedObjects[selectedObjects.length - 1].userData.id || 'spawn';
+            try { await navigator.clipboard.writeText(String(id)); showModal('Copied', `Object ID copied: ${id}`); } catch(e) {}
+        };
+        window.saveStudioSnapshot = saveStudioSnapshot;
+        window.loadStudioSnapshot = loadStudioSnapshot;
+        window.resetStudioCamera = resetStudioCamera;
+        window.alignSelectedToGround = alignSelectedToGround;
+        window.nudgeSelected = nudgeSelected;
+        window.toggleSelectedWireframe = toggleSelectedWireframe;
+        window.copySelectedObjectId = copySelectedObjectId;
 
         const selectObjectById = (id, shiftKey = false) => {
             const mesh = id === 'spawn' ? editorMeshes.find(m => m.userData.isSpawn) : editorMeshes.find(m => m.userData.id === id);
