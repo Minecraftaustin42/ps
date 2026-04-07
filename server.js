@@ -13,7 +13,7 @@ app.use("/seo", express.static(path.join(__dirname, "public", "seo")));
 // In-memory databases
 const DB_FILE = path.join(__dirname, 'db.json');
 let db = {
-    users: [], sessions: {}, games: [], shopItems: [], clothingItems: [], blueprints: [], groups: [], cityPlots: [], datastores: {},
+    users: [], sessions: {}, games: [], shopItems: [], clothingItems: [], blueprints: [], jams: [], groups: [], cityPlots: [], datastores: {},
     globalChat: [], toolboxItems: [], // NEW
     notifications: [],
     moderation: { bans: {}, ipBans: [], warnings: {} },  // <-- ADD THIS LINE
@@ -46,6 +46,7 @@ if (!db.friendPetDaily) db.friendPetDaily = {};
         if (!db.shopItems) db.shopItems = [];
         if (!db.clothingItems) db.clothingItems = [];
         if (!db.blueprints) db.blueprints = [];
+        if (!db.jams) db.jams = [];
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} };
         if (!db.groups) db.groups = [];
 if (!db.sounds) db.sounds = [];
@@ -67,6 +68,10 @@ if (!u.toolboxInventory) u.toolboxInventory = [];
             if (typeof u.equippedPants === 'undefined') u.equippedPants = null;
             if (!u.challengeClaims) u.challengeClaims = {};
             if (!u.challengeProgress) u.challengeProgress = { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 };
+            if (!u.academyProgress) u.academyProgress = {};
+            if (!u.academyClaims) u.academyClaims = {};
+            if (!u.jamVotes) u.jamVotes = {};
+            if (!u.blueprintFavorites) u.blueprintFavorites = [];
 
 // Add this right after parsing db.json
 if (typeof db.lastUserIdNum === 'undefined') {
@@ -572,7 +577,7 @@ if (typeof db.lastUserIdNum !== 'number') {
 userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
-        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 }, bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
 
@@ -989,6 +994,158 @@ app.post('/api/challenges/claim', requireAuth, (req, res) => {
     user.coins = (user.coins || 0) + challenge.reward;
     saveDB();
     res.json({ success: true, reward: challenge.reward, coins: user.coins });
+});
+
+const CREATOR_ACADEMY_TRACKS = [
+    { id: 'lighting_basics', title: 'Lighting Basics', description: 'Tune sun intensity, fog, and exposure for mood.', reward: 80 },
+    { id: 'polish_pass', title: 'Polish Pass', description: 'Learn quality passes that improve retention.', reward: 65 },
+    { id: 'city_design', title: 'Sculpt City Design', description: 'Build district-friendly destinations for visitors.', reward: 90 },
+    { id: 'collab_ready', title: 'Collab Ready', description: 'Prepare projects for team-based creator workflows.', reward: 75 }
+];
+
+const getOrCreateCurrentJam = () => {
+    const now = Date.now();
+    let jam = (db.jams || []).find(j => j.startsAt <= now && j.endsAt > now);
+    if (!jam) {
+        const duration = 1000 * 60 * 60 * 24 * 7;
+        const startsAt = now - (now % duration);
+        const themes = ['Sky Islands', 'Neon Factory', 'Dungeon Rush', 'Robot Arena', 'Crystal Caverns'];
+        const index = Math.floor(startsAt / duration) % themes.length;
+        jam = {
+            id: `jam_${startsAt}`,
+            title: `Creator Jam: ${themes[index]}`,
+            theme: themes[index],
+            startsAt,
+            endsAt: startsAt + duration,
+            submissions: []
+        };
+        db.jams.push(jam);
+    }
+    return jam;
+};
+
+app.get('/api/academy/tracks', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user.academyProgress) user.academyProgress = {};
+    if (!user.academyClaims) user.academyClaims = {};
+    const tracks = CREATOR_ACADEMY_TRACKS.map(t => ({
+        ...t,
+        completed: user.academyProgress[t.id] === true,
+        claimed: user.academyClaims[t.id] === true
+    }));
+    saveDB();
+    res.json({ tracks });
+});
+
+app.post('/api/academy/complete', requireAuth, (req, res) => {
+    const { trackId } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const track = CREATOR_ACADEMY_TRACKS.find(t => t.id === trackId);
+    if (!track) return res.status(404).json({ error: 'Track not found.' });
+    if (!user.academyProgress) user.academyProgress = {};
+    if (!user.academyClaims) user.academyClaims = {};
+    user.academyProgress[track.id] = true;
+    if (!user.academyClaims[track.id]) {
+        user.academyClaims[track.id] = true;
+        user.coins = (user.coins || 0) + track.reward;
+    }
+    saveDB();
+    res.json({ success: true, reward: track.reward, coins: user.coins, claimed: true });
+});
+
+app.get('/api/jams/current', requireAuth, (req, res) => {
+    const jam = getOrCreateCurrentJam();
+    const user = db.users.find(u => u.id === req.userId);
+    const submissions = (jam.submissions || [])
+        .map(s => ({ ...s, voteCount: (s.votes || []).length }))
+        .sort((a, b) => b.voteCount - a.voteCount);
+    const userSubmission = submissions.find(s => s.authorId === user.id) || null;
+    saveDB();
+    res.json({ jam: { ...jam, submissions }, userSubmission });
+});
+
+app.post('/api/jams/submit', requireAuth, (req, res) => {
+    const { gameId, title, pitch } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const jam = getOrCreateCurrentJam();
+    const game = db.games.find(g => g.id === gameId);
+    if (!game) return res.status(404).json({ error: 'Game not found.' });
+    if (game.authorId !== user.id) return res.status(403).json({ error: 'You can only submit your own game.' });
+    let entry = jam.submissions.find(s => s.authorId === user.id);
+    if (!entry) {
+        entry = { id: crypto.randomUUID(), authorId: user.id, authorName: user.username, votes: [] };
+        jam.submissions.push(entry);
+    }
+    entry.gameId = game.id;
+    entry.title = (title || game.title || 'Untitled Jam Entry').slice(0, 80);
+    entry.pitch = (pitch || '').slice(0, 300);
+    entry.submittedAt = Date.now();
+    saveDB();
+    res.json({ success: true, entry });
+});
+
+app.post('/api/jams/vote', requireAuth, (req, res) => {
+    const { submissionId } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const jam = getOrCreateCurrentJam();
+    const submission = jam.submissions.find(s => s.id === submissionId);
+    if (!submission) return res.status(404).json({ error: 'Submission not found.' });
+    if (submission.authorId === user.id) return res.status(400).json({ error: 'You cannot vote for your own entry.' });
+    if (!submission.votes) submission.votes = [];
+    if (submission.votes.includes(user.id)) return res.status(400).json({ error: 'Already voted for this entry.' });
+    submission.votes.push(user.id);
+    saveDB();
+    res.json({ success: true, votes: submission.votes.length });
+});
+
+app.get('/api/blueprints/feed', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user.blueprintFavorites) user.blueprintFavorites = [];
+    const feed = (db.blueprints || [])
+        .map(bp => ({
+            ...bp,
+            favorites: (bp.favorites || []).length,
+            favorited: user.blueprintFavorites.includes(bp.id)
+        }))
+        .sort((a, b) => (b.favorites - a.favorites) || (b.createdAt - a.createdAt));
+    saveDB();
+    res.json({ blueprints: feed });
+});
+
+app.post('/api/blueprints', requireAuth, (req, res) => {
+    const { title, summary, tags } = req.body;
+    const user = db.users.find(u => u.id === req.userId);
+    const bp = {
+        id: crypto.randomUUID(),
+        title: (title || 'Untitled Blueprint').slice(0, 80),
+        summary: (summary || '').slice(0, 300),
+        tags: Array.isArray(tags) ? tags.slice(0, 6).map(t => String(t).slice(0, 20)) : [],
+        authorId: user.id,
+        authorName: user.username,
+        createdAt: Date.now(),
+        favorites: []
+    };
+    db.blueprints.push(bp);
+    saveDB();
+    res.json({ success: true, blueprint: bp });
+});
+
+app.post('/api/blueprints/:id/favorite', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const bp = (db.blueprints || []).find(b => b.id === req.params.id);
+    if (!bp) return res.status(404).json({ error: 'Blueprint not found.' });
+    if (!bp.favorites) bp.favorites = [];
+    if (!user.blueprintFavorites) user.blueprintFavorites = [];
+    const has = bp.favorites.includes(user.id);
+    if (has) {
+        bp.favorites = bp.favorites.filter(id => id !== user.id);
+        user.blueprintFavorites = user.blueprintFavorites.filter(id => id !== bp.id);
+    } else {
+        bp.favorites.push(user.id);
+        user.blueprintFavorites.push(bp.id);
+    }
+    saveDB();
+    res.json({ success: true, favorited: !has, favorites: bp.favorites.length });
 });
 
 

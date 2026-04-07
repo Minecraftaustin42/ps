@@ -473,6 +473,10 @@
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
                 <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -595,6 +599,9 @@
             <a onclick="navigate('avatar')">Avatar</a>
             <a onclick="navigate('friends')">Friends</a>
             <a onclick="navigate('messages')">Messages</a>
+            <a onclick="navigate('academy')">Academy</a>
+            <a onclick="navigate('jams')">Jams</a>
+            <a onclick="navigate('blueprints')">Blueprints</a>
             <a id="nav-mod-panel" onclick="openModPanel()" style="display:none;">Mod Panel</a>
             <a onclick="navigateProfile()">Profile</a>
             <a onclick="navigate('settings')">Settings</a>
@@ -1170,6 +1177,42 @@
             <div class="card mt-20">
                 <h2 class="card-title">Games You Can Edit</h2>
                 <div id="editable-games-grid" class="game-grid"></div>
+            </div>
+        </div>
+
+        <div id="view-academy" class="view">
+            <div class="card">
+                <h2 class="card-title">Creator Academy</h2>
+                <p style="color:#666;">Complete guided creator tracks to earn Sculpt Coins and sharpen your design skills.</p>
+                <div id="academy-tracks-grid" class="game-grid"></div>
+            </div>
+        </div>
+
+        <div id="view-jams" class="view">
+            <div class="card">
+                <h2 class="card-title">Weekly Creator Jams</h2>
+                <div id="jam-header"></div>
+                <div style="display:grid; gap:10px; margin:12px 0;">
+                    <input id="jam-game-id" class="form-control" placeholder="Your Game ID to submit">
+                    <input id="jam-title" class="form-control" placeholder="Submission title">
+                    <textarea id="jam-pitch" class="form-control" placeholder="Short pitch (what makes your build special?)"></textarea>
+                    <button class="btn btn-success" onclick="submitJamEntry()">Submit / Update Entry</button>
+                </div>
+                <div id="jam-submissions" class="game-grid"></div>
+            </div>
+        </div>
+
+        <div id="view-blueprints" class="view">
+            <div class="card">
+                <h2 class="card-title">Blueprint Exchange</h2>
+                <p style="color:#666;">Share reusable build plans and favorite the best creator templates.</p>
+                <div style="display:grid; gap:10px; margin-bottom:14px;">
+                    <input id="bp-title" class="form-control" placeholder="Blueprint title">
+                    <input id="bp-tags" class="form-control" placeholder="Tags (comma separated)">
+                    <textarea id="bp-summary" class="form-control" placeholder="Blueprint summary"></textarea>
+                    <button class="btn btn-info" onclick="publishBlueprint()">Publish Blueprint</button>
+                </div>
+                <div id="blueprint-feed" class="game-grid"></div>
             </div>
         </div>
 
@@ -2704,6 +2747,12 @@ else if (viewId === 'groups') {
                 loadInventoryTab();
             } else if (viewId === 'avatar') {
                 loadAvatarTab();
+            } else if (viewId === 'academy') {
+                loadCreatorAcademy();
+            } else if (viewId === 'jams') {
+                loadCreatorJams();
+            } else if (viewId === 'blueprints') {
+                loadBlueprintExchange();
             } else if (viewId === 'settings') {
                 if (currentUser) document.getElementById('setting-username').value = currentUser.username;
            } else if (viewId === 'create') {
@@ -5285,22 +5334,153 @@ Keep playing together for more daily rewards.`, 'Aww!');
         const loadCreatorChallenges = async () => {
             const host = document.getElementById('creator-challenges');
             if (!host) return;
-            const challenges = [
-                { id: 'build_5_parts', text: 'Place 5 parts in Studio', reward: 25 },
-                { id: 'publish_update', text: 'Publish one map update', reward: 60 },
-                { id: 'visit_city', text: 'Visit Sculpt City once', reward: 20 }
-            ];
-            host.innerHTML = challenges.map(c => `<div style="display:flex; justify-content:space-between; border:1px solid #eee; border-radius:6px; padding:8px; margin-bottom:8px;"><div>${c.text}<div style="font-size:12px; color:#777;">Reward: ${c.reward} SC</div></div><button class="btn btn-sm btn-success" onclick="claimCreatorChallenge('${c.id}', ${c.reward})">Claim</button></div>`).join('');
-        };
-        const claimCreatorChallenge = async (id, reward) => {
             try {
-                const res = await apiCall('/challenges/claim', 'POST', { id, reward });
+                const data = await apiCall('/challenges/daily');
+                host.innerHTML = data.challenges.map(c => `
+                    <div style="display:flex; justify-content:space-between; border:1px solid #eee; border-radius:6px; padding:8px; margin-bottom:8px;">
+                        <div>
+                            ${c.text}
+                            <div style="font-size:12px; color:#777;">Reward: ${c.reward} SC</div>
+                            <div style="font-size:11px; color:${c.completed ? '#2ecc71' : '#e67e22'};">${c.completed ? 'Completed' : 'In progress'}</div>
+                        </div>
+                        <button class="btn btn-sm ${c.claimed ? '' : 'btn-success'}" ${c.claimed || !c.completed ? 'disabled' : ''} onclick="claimCreatorChallenge('${c.id}')">${c.claimed ? 'Claimed' : 'Claim'}</button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                host.innerHTML = '<p style="color:#e74c3c;">Could not load daily challenges.</p>';
+            }
+        };
+        const claimCreatorChallenge = async (id) => {
+            try {
+                const res = await apiCall('/challenges/claim', 'POST', { id });
                 showModal('Challenge Claimed', `+${res.reward} SC`);
                 if (currentUser) currentUser.coins = res.coins;
                 updateCoinsUI();
+                loadCreatorChallenges();
             } catch (e) { showModal('Challenge', e.message || 'Could not claim.'); }
         };
         window.claimCreatorChallenge = claimCreatorChallenge;
+
+        const loadCreatorAcademy = async () => {
+            const grid = document.getElementById('academy-tracks-grid');
+            if (!grid) return;
+            grid.innerHTML = '<p>Loading academy tracks...</p>';
+            try {
+                const data = await apiCall('/academy/tracks');
+                grid.innerHTML = data.tracks.map(t => `
+                    <div class="game-card">
+                        <h3>${t.title}</h3>
+                        <p style="font-size:13px; color:#555;">${t.description}</p>
+                        <p style="font-size:12px; color:#888;">Reward: ${t.reward} SC</p>
+                        <button class="btn btn-sm btn-success" ${t.claimed ? 'disabled' : ''} onclick="completeAcademyTrack('${t.id}')">${t.claimed ? 'Claimed' : 'Complete Track'}</button>
+                    </div>
+                `).join('');
+            } catch (e) {
+                grid.innerHTML = '<p style="color:#e74c3c;">Failed to load academy tracks.</p>';
+            }
+        };
+
+        const completeAcademyTrack = async (trackId) => {
+            try {
+                const res = await apiCall('/academy/complete', 'POST', { trackId });
+                showModal('Track Completed', `You earned ${res.reward} SC.`);
+                loadCreatorAcademy();
+            } catch (e) {}
+        };
+        window.completeAcademyTrack = completeAcademyTrack;
+
+        const loadCreatorJams = async () => {
+            const host = document.getElementById('jam-submissions');
+            const head = document.getElementById('jam-header');
+            if (!host || !head) return;
+            host.innerHTML = '<p>Loading jam...</p>';
+            try {
+                const data = await apiCall('/jams/current');
+                const jam = data.jam;
+                const timeLeft = Math.max(0, jam.endsAt - Date.now());
+                const hoursLeft = Math.floor(timeLeft / (1000 * 60 * 60));
+                head.innerHTML = `<p><strong>${jam.title}</strong> • Theme: <strong>${jam.theme}</strong> • ${hoursLeft}h left</p>`;
+                if (data.userSubmission) {
+                    document.getElementById('jam-game-id').value = data.userSubmission.gameId || '';
+                    document.getElementById('jam-title').value = data.userSubmission.title || '';
+                    document.getElementById('jam-pitch').value = data.userSubmission.pitch || '';
+                }
+                host.innerHTML = jam.submissions.length ? jam.submissions.map(s => `
+                    <div class="game-card">
+                        <h3>${s.title || 'Untitled Entry'}</h3>
+                        <p style="font-size:12px; color:#777;">by ${s.authorName}</p>
+                        <p style="font-size:13px;">${s.pitch || ''}</p>
+                        <button class="btn btn-sm btn-info" onclick="voteJamSubmission('${s.id}')">Vote (${s.voteCount || 0})</button>
+                    </div>
+                `).join('') : '<p>No submissions yet. Be the first!</p>';
+            } catch (e) {
+                host.innerHTML = '<p style="color:#e74c3c;">Failed to load jam.</p>';
+            }
+        };
+
+        const submitJamEntry = async () => {
+            const gameId = document.getElementById('jam-game-id').value.trim();
+            const title = document.getElementById('jam-title').value.trim();
+            const pitch = document.getElementById('jam-pitch').value.trim();
+            if (!gameId) return showModal('Missing Game ID', 'Enter a Game ID to submit.');
+            try {
+                await apiCall('/jams/submit', 'POST', { gameId, title, pitch });
+                showModal('Submitted', 'Your jam entry is live.');
+                loadCreatorJams();
+            } catch (e) {}
+        };
+        window.submitJamEntry = submitJamEntry;
+
+        const voteJamSubmission = async (submissionId) => {
+            try {
+                await apiCall('/jams/vote', 'POST', { submissionId });
+                loadCreatorJams();
+            } catch (e) {}
+        };
+        window.voteJamSubmission = voteJamSubmission;
+
+        const loadBlueprintExchange = async () => {
+            const feed = document.getElementById('blueprint-feed');
+            if (!feed) return;
+            feed.innerHTML = '<p>Loading blueprints...</p>';
+            try {
+                const data = await apiCall('/blueprints/feed');
+                feed.innerHTML = data.blueprints.length ? data.blueprints.map(bp => `
+                    <div class="game-card">
+                        <h3>${bp.title}</h3>
+                        <p style="font-size:12px; color:#777;">by ${bp.authorName}</p>
+                        <p style="font-size:13px;">${bp.summary || ''}</p>
+                        <p style="font-size:12px; color:#666;">Tags: ${(bp.tags || []).join(', ') || 'none'}</p>
+                        <button class="btn btn-sm btn-warning" onclick="toggleBlueprintFavorite('${bp.id}')">${bp.favorited ? '★ Favorited' : '☆ Favorite'} (${bp.favorites || 0})</button>
+                    </div>
+                `).join('') : '<p>No blueprints yet. Publish the first one.</p>';
+            } catch (e) {
+                feed.innerHTML = '<p style="color:#e74c3c;">Failed to load blueprints.</p>';
+            }
+        };
+
+        const publishBlueprint = async () => {
+            const title = document.getElementById('bp-title').value.trim();
+            const summary = document.getElementById('bp-summary').value.trim();
+            const tags = document.getElementById('bp-tags').value.split(',').map(t => t.trim()).filter(Boolean);
+            if (!title) return showModal('Missing title', 'Add a title for your blueprint.');
+            try {
+                await apiCall('/blueprints', 'POST', { title, summary, tags });
+                document.getElementById('bp-title').value = '';
+                document.getElementById('bp-summary').value = '';
+                document.getElementById('bp-tags').value = '';
+                loadBlueprintExchange();
+            } catch (e) {}
+        };
+        window.publishBlueprint = publishBlueprint;
+
+        const toggleBlueprintFavorite = async (id) => {
+            try {
+                await apiCall(`/blueprints/${id}/favorite`, 'POST', {});
+                loadBlueprintExchange();
+            } catch (e) {}
+        };
+        window.toggleBlueprintFavorite = toggleBlueprintFavorite;
 
         const loadDashboardGames = async () => {
             try {
