@@ -481,6 +481,10 @@
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
                 <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
             </div>
+            <div id="city-returning-step" style="display:none; margin-top: 20px;">
+                <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
+                <div id="city-district-buttons" style="display:flex; flex-direction:column; gap:10px;"></div>
+            </div>
 
             <div id="city-step-3" style="display:none; margin-top: 20px;">
                 <div class="city-plot-grid" id="city-plot-container"></div>
@@ -606,8 +610,7 @@
             <a onclick="navigate('academy')">Academy</a>
             <a onclick="navigate('jams')">Jams</a>
             <a onclick="navigate('blueprints')">Blueprints</a>
-            <a onclick="navigate('questlines')">Questlines</a>
-            <a onclick="navigate('megabuild')">Mega Build</a>
+            <a onclick="navigate('funlab')">Fun Lab</a>
             <a id="nav-mod-panel" onclick="openModPanel()" style="display:none;">Mod Panel</a>
             <a onclick="navigateProfile()">Profile</a>
             <a onclick="navigate('settings')">Settings</a>
@@ -1222,26 +1225,28 @@
             </div>
         </div>
 
-        <div id="view-questlines" class="view">
+        <div id="view-funlab" class="view">
             <div class="card">
-                <h2 class="card-title">Epic Creator Questlines</h2>
-                <p style="color:#666;">Long-form progression campaigns with staged rewards and production guidance.</p>
-                <div id="questline-list" class="game-grid"></div>
-            </div>
-        </div>
-
-        <div id="view-megabuild" class="view">
-            <div class="card">
-                <h2 class="card-title">Global Mega Build Event</h2>
-                <div id="megabuild-header"></div>
-                <div style="display:flex; gap:10px; flex-wrap:wrap; margin:12px 0;">
-                    <button class="btn btn-success" onclick="contributeMegaBuild(25)">Contribute +25</button>
-                    <button class="btn btn-info" onclick="contributeMegaBuild(75)">Contribute +75</button>
-                    <button class="btn btn-warning" onclick="contributeMegaBuild(150)">Contribute +150</button>
+                <h2 class="card-title">Creator Fun Lab (14 Epic Mini Features)</h2>
+                <p style="color:#666;">Quick creativity boosters and fun utilities for Playsculpt creators.</p>
+                <div style="display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));">
+                    <button class="btn btn-info" onclick="funIdeaGenerator()">1) Random Game Idea</button>
+                    <button class="btn btn-info" onclick="funNameForge()">2) Game Name Forge</button>
+                    <button class="btn btn-info" onclick="funPatchNotes()">3) Patch Notes Draft</button>
+                    <button class="btn btn-info" onclick="funPalette()">4) Color Palette Roll</button>
+                    <button class="btn btn-info" onclick="funCoinFlip()">5) Coin Flip Picker</button>
+                    <button class="btn btn-info" onclick="funQuote()">6) Motivation Quote</button>
+                    <button class="btn btn-info" onclick="funDevQuest()">7) Daily Dev Quest</button>
+                    <button class="btn btn-info" onclick="funPomodoro()">8) 25-min Focus Timer</button>
+                    <button class="btn btn-info" onclick="funBreakReminder()">9) Break Reminder Toggle</button>
+                    <button class="btn btn-info" onclick="funConfetti()">10) Celebration Burst</button>
+                    <button class="btn btn-info" onclick="funSaveNote()">11) Save Sticky Note</button>
+                    <button class="btn btn-info" onclick="funLoadNote()">12) Load Sticky Note</button>
+                    <button class="btn btn-info" onclick="funExportNote()">13) Export Sticky Note</button>
+                    <button class="btn btn-info" onclick="funKeyboardCheats()">14) Shortcut Cheat Sheet</button>
                 </div>
-                <div id="megabuild-milestones" class="game-grid"></div>
-                <h3 style="margin-top:20px;">Top Contributors</h3>
-                <div id="megabuild-leaderboard" class="game-grid"></div>
+                <textarea id="funlab-note" class="form-control mt-20" placeholder="Sticky creator notes..."></textarea>
+                <div id="funlab-output" style="margin-top:12px; background:#f8fafc; border:1px solid #dbe4ee; border-radius:8px; padding:10px; min-height:70px;"></div>
             </div>
         </div>
 
@@ -2782,10 +2787,8 @@ else if (viewId === 'groups') {
                 loadCreatorJams();
             } else if (viewId === 'blueprints') {
                 loadBlueprintExchange();
-            } else if (viewId === 'questlines') {
-                loadQuestlines();
-            } else if (viewId === 'megabuild') {
-                loadMegaBuild();
+            } else if (viewId === 'funlab') {
+                loadFunLab();
             } else if (viewId === 'settings') {
                 if (currentUser) document.getElementById('setting-username').value = currentUser.username;
            } else if (viewId === 'create') {
@@ -5525,74 +5528,87 @@ Keep playing together for more daily rewards.`, 'Aww!');
         };
         window.toggleBlueprintFavorite = toggleBlueprintFavorite;
 
-        const loadQuestlines = async () => {
-            const host = document.getElementById('questline-list');
-            if (!host) return;
-            host.innerHTML = '<p>Loading questlines...</p>';
-            try {
-                const data = await apiCall('/questlines');
-                host.innerHTML = data.questlines.map(q => `
-                    <div class="game-card">
-                        <h3>${q.title}</h3>
-                        <p style="font-size:12px; color:#666;">${q.description}</p>
-                        ${(q.stages || []).map(s => `
-                            <div style="border:1px solid #e8edf4; border-radius:8px; padding:8px; margin-top:8px; text-align:left;">
-                                <strong>${s.title}</strong> <span style="font-size:11px; color:#888;">(+${s.reward} SC)</span>
-                                <div style="font-size:12px; color:#2c3e50; margin-top:4px;">${s.instructions}</div>
-                                <button class="btn btn-sm btn-success" style="margin-top:8px;" ${s.claimed ? 'disabled' : ''} onclick="completeQuestStage('${q.id}','${s.id}')">${s.claimed ? 'Claimed' : 'Mark Complete'}</button>
-                            </div>
-                        `).join('')}
-                    </div>
-                `).join('');
-            } catch (e) {
-                host.innerHTML = '<p style="color:#e74c3c;">Failed to load questlines.</p>';
-            }
+        const funOut = (text) => {
+            const host = document.getElementById('funlab-output');
+            if (host) host.innerHTML = `<div style="white-space:pre-wrap;">${text}</div>`;
         };
-        const completeQuestStage = async (questId, stageId) => {
-            try {
-                const res = await apiCall('/questlines/complete', 'POST', { questId, stageId });
-                showModal('Quest Progressed', `+${res.reward} SC`);
-                loadQuestlines();
-            } catch (e) {}
+        const loadFunLab = () => funOut('Welcome to Fun Lab. Pick any mini feature to boost your creator session.');
+        const funIdeaGenerator = () => {
+            const genres = ['Obby', 'Tycoon', 'Horror', 'Racing', 'RPG', 'Shooter', 'Simulator'];
+            const hooks = ['time-loop mechanic', 'gravity flip zones', 'AI rival', 'daily random map seed', 'co-op boss phase', 'hidden speedrun routes'];
+            const settings = ['in a neon underwater city', 'inside a drifting sky temple', 'in a haunted toy factory', 'across volcanic islands'];
+            funOut(`Game Idea:\nBuild a ${genres[Math.floor(Math.random()*genres.length)]} game ${settings[Math.floor(Math.random()*settings.length)]} with a ${hooks[Math.floor(Math.random()*hooks.length)]}.`);
         };
-        window.completeQuestStage = completeQuestStage;
-
-        const loadMegaBuild = async () => {
-            const head = document.getElementById('megabuild-header');
-            const ms = document.getElementById('megabuild-milestones');
-            const lb = document.getElementById('megabuild-leaderboard');
-            if (!head || !ms || !lb) return;
-            try {
-                const data = await apiCall('/megabuild/current');
-                const e = data.event;
-                const hours = Math.max(0, Math.floor((e.endsAt - Date.now()) / 3600000));
-                head.innerHTML = `<p><strong>${e.title}</strong> • Theme: <strong>${e.theme}</strong> • ${hours}h left<br>Total Community Contribution: <strong>${e.totalContrib}</strong> • Your Contribution: <strong>${data.myContrib}</strong></p>`;
-                ms.innerHTML = data.milestones.map(m => `
-                    <div class="game-card">
-                        <h3>${m.target} points</h3>
-                        <p>Reward: ${m.reward} SC</p>
-                        <button class="btn btn-sm btn-warning" ${!m.reached || m.claimed ? 'disabled' : ''} onclick="claimMegaBuild(${m.target})">${m.claimed ? 'Claimed' : (m.reached ? 'Claim Reward' : 'Locked')}</button>
-                    </div>
-                `).join('');
-                lb.innerHTML = data.leaderboard.map(p => `<div class="game-card"><h3>${p.username}</h3><p>${p.points} points</p></div>`).join('') || '<p>No contributions yet.</p>';
-            } catch (e) {
-                head.innerHTML = '<p style="color:#e74c3c;">Failed to load mega build.</p>';
-            }
+        const funNameForge = () => {
+            const a = ['Sculpt', 'Turbo', 'Neon', 'Shadow', 'Sky', 'Pixel', 'Forge'];
+            const b = ['Rush', 'Heist', 'Odyssey', 'Tycoon', 'Lab', 'Arena', 'Trails'];
+            funOut(`Generated Name: ${a[Math.floor(Math.random()*a.length)]} ${b[Math.floor(Math.random()*b.length)]}`);
         };
-        const contributeMegaBuild = async (points) => {
-            try {
-                await apiCall('/megabuild/contribute', 'POST', { points });
-                loadMegaBuild();
-            } catch (e) {}
+        const funPatchNotes = () => funOut(`Patch Notes Draft\n- Improved spawn clarity\n- Added one new challenge route\n- Balanced coin rewards\n- Optimized dense area performance\n- Fixed collision on moving platform`);
+        const funPalette = () => {
+            const rand = () => '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
+            const colors = Array.from({ length: 5 }, rand);
+            funOut(`Palette:\n${colors.join('\n')}`);
         };
-        window.contributeMegaBuild = contributeMegaBuild;
-        const claimMegaBuild = async (target) => {
-            try {
-                await apiCall('/megabuild/claim', 'POST', { target });
-                loadMegaBuild();
-            } catch (e) {}
+        const funCoinFlip = () => funOut(`Decision: ${Math.random() > 0.5 ? 'Option A' : 'Option B'}`);
+        const funQuote = () => {
+            const quotes = ['Ship small wins daily.', 'Clear goals beat perfect assets.', 'Playtest early, polish later.', 'Readable maps are replayable maps.'];
+            funOut(quotes[Math.floor(Math.random() * quotes.length)]);
         };
-        window.claimMegaBuild = claimMegaBuild;
+        const funDevQuest = () => {
+            const quests = ['Add 1 hidden collectible path.', 'Record 3 player pain points and fix one.', 'Polish your spawn area for first impression.', 'Create one rewarding fail-forward mechanic.'];
+            funOut(`Today’s Dev Quest:\n${quests[Math.floor(Math.random()*quests.length)]}`);
+        };
+        const funPomodoro = () => {
+            funOut('Focus timer started: 25 minutes. You got this.');
+            setTimeout(() => showModal('Focus Timer', '25-minute focus session complete. Take a 5-minute break!'), 25 * 60 * 1000);
+        };
+        const funBreakReminder = () => {
+            const key = 'ps_break_reminder';
+            const on = localStorage.getItem(key) === '1';
+            localStorage.setItem(key, on ? '0' : '1');
+            funOut(`Break reminder ${on ? 'disabled' : 'enabled'} (every 45 minutes while tab is open).`);
+        };
+        const funConfetti = () => {
+            document.body.style.transition = 'background 0.4s ease';
+            document.body.style.background = 'linear-gradient(120deg,#ffeaa7,#74b9ff,#a29bfe)';
+            setTimeout(() => { document.body.style.background = ''; }, 900);
+            funOut('Celebration burst activated 🎉');
+        };
+        const funSaveNote = () => {
+            localStorage.setItem('ps_funlab_note', document.getElementById('funlab-note').value || '');
+            funOut('Sticky note saved locally.');
+        };
+        const funLoadNote = () => {
+            document.getElementById('funlab-note').value = localStorage.getItem('ps_funlab_note') || '';
+            funOut('Sticky note loaded.');
+        };
+        const funExportNote = () => {
+            const content = document.getElementById('funlab-note').value || '';
+            const blob = new Blob([content], { type: 'text/plain' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = 'playsculpt-note.txt';
+            a.click();
+            URL.revokeObjectURL(a.href);
+            funOut('Sticky note exported as .txt');
+        };
+        const funKeyboardCheats = () => funOut('Shortcut Sheet:\nCtrl+D duplicate\nCtrl+Z undo\nCtrl+Y redo\nF frame selection\nDelete remove selected');
+        window.funIdeaGenerator = funIdeaGenerator;
+        window.funNameForge = funNameForge;
+        window.funPatchNotes = funPatchNotes;
+        window.funPalette = funPalette;
+        window.funCoinFlip = funCoinFlip;
+        window.funQuote = funQuote;
+        window.funDevQuest = funDevQuest;
+        window.funPomodoro = funPomodoro;
+        window.funBreakReminder = funBreakReminder;
+        window.funConfetti = funConfetti;
+        window.funSaveNote = funSaveNote;
+        window.funLoadNote = funLoadNote;
+        window.funExportNote = funExportNote;
+        window.funKeyboardCheats = funKeyboardCheats;
+        setInterval(() => { if (localStorage.getItem('ps_break_reminder') === '1') showModal('Break Reminder', 'Stand up, hydrate, and rest your eyes for a minute.'); }, 45 * 60 * 1000);
 
         const loadDashboardGames = async () => {
             try {

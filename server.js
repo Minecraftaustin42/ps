@@ -13,7 +13,7 @@ app.use("/seo", express.static(path.join(__dirname, "public", "seo")));
 // In-memory databases
 const DB_FILE = path.join(__dirname, 'db.json');
 let db = {
-    users: [], sessions: {}, games: [], shopItems: [], clothingItems: [], blueprints: [], jams: [], megaBuilds: [], groups: [], cityPlots: [], datastores: {},
+    users: [], sessions: {}, games: [], shopItems: [], clothingItems: [], blueprints: [], jams: [], groups: [], cityPlots: [], datastores: {},
     globalChat: [], toolboxItems: [], // NEW
     notifications: [],
     moderation: { bans: {}, ipBans: [], warnings: {} },  // <-- ADD THIS LINE
@@ -47,7 +47,6 @@ if (!db.friendPetDaily) db.friendPetDaily = {};
         if (!db.clothingItems) db.clothingItems = [];
         if (!db.blueprints) db.blueprints = [];
         if (!db.jams) db.jams = [];
-        if (!db.megaBuilds) db.megaBuilds = [];
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} };
         if (!db.groups) db.groups = [];
 if (!db.sounds) db.sounds = [];
@@ -73,9 +72,6 @@ if (!u.toolboxInventory) u.toolboxInventory = [];
             if (!u.academyClaims) u.academyClaims = {};
             if (!u.jamVotes) u.jamVotes = {};
             if (!u.blueprintFavorites) u.blueprintFavorites = [];
-            if (!u.questProgress) u.questProgress = {};
-            if (!u.questClaims) u.questClaims = {};
-            if (!u.megaBuildClaims) u.megaBuildClaims = {};
 
 // Add this right after parsing db.json
 if (typeof db.lastUserIdNum === 'undefined') {
@@ -581,7 +577,7 @@ if (typeof db.lastUserIdNum !== 'number') {
 userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
-        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], questProgress: {}, questClaims: {}, megaBuildClaims: {}, bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
 
@@ -1196,151 +1192,6 @@ app.post('/api/blueprints/:id/favorite', requireAuth, (req, res) => {
     saveDB();
     res.json({ success: true, favorited: !has, favorites: bp.favorites.length });
 });
-
-const EPIC_QUESTLINES = [
-    {
-        id: 'legend_path',
-        title: 'Path to Creator Legend',
-        description: 'A multi-step questline to take a map from rough draft to polished experience.',
-        stages: [
-            { id: 'stage_plan', title: 'Plan the fantasy', reward: 20, instructions: 'Write a one-paragraph fantasy for your game and define the first challenge, midpoint moment, and final payoff. Keep each beat clear and measurable so collaborators understand scope immediately.' },
-            { id: 'stage_prototype', title: 'Build the prototype loop', reward: 25, instructions: 'Create one full gameplay loop from spawn to reward. Include at least one fail state and one success celebration. Verify players can recover after failure without restarting the entire map.' },
-            { id: 'stage_polish', title: 'Polish and ship', reward: 35, instructions: 'Complete a polish pass for lighting, signage, feedback sounds, and clear progression. Publish an update note with at least three improvements and one known future upgrade.' }
-        ]
-    },
-    {
-        id: 'city_tycoon',
-        title: 'City Tycoon Architect',
-        description: 'Design a city-ready destination with social and economic utility.',
-        stages: [
-            { id: 'stage_theme', title: 'District identity', reward: 20, instructions: 'Pick a district identity and produce a simple color/material guide for it. Ensure your entrance and center area communicate the theme within 10 seconds of arrival.' },
-            { id: 'stage_activity', title: 'Interactive utility', reward: 25, instructions: 'Add at least two interactions that players can repeatedly use, such as jobs, minigames, or collectibles. Each interaction should provide clear feedback and a visible completion state.' },
-            { id: 'stage_retention', title: 'Retention pass', reward: 35, instructions: 'Add reasons for return visits: daily bonus, alternate route, hidden reward, or rotating challenge. Publish a changelog note that explains why players should revisit tomorrow.' }
-        ]
-    }
-];
-
-const getOrCreateMegaBuild = () => {
-    const now = Date.now();
-    let event = (db.megaBuilds || []).find(e => e.startsAt <= now && e.endsAt > now);
-    if (!event) {
-        const length = 1000 * 60 * 60 * 24 * 7;
-        const startsAt = now - (now % length);
-        const themes = ['Sky Harbor Megacity', 'Underwater Arcology', 'Volcanic Cyber Forge', 'Crystal Metropolis'];
-        const theme = themes[Math.floor(startsAt / length) % themes.length];
-        event = {
-            id: `mega_${startsAt}`,
-            title: `Mega Build: ${theme}`,
-            theme,
-            startsAt,
-            endsAt: startsAt + length,
-            totalContrib: 0,
-            milestonesClaimedBy: {},
-            contributors: {}
-        };
-        db.megaBuilds.push(event);
-    }
-    return event;
-};
-
-app.get('/api/questlines', requireAuth, (req, res) => {
-    const user = db.users.find(u => u.id === req.userId);
-    if (!user.questProgress) user.questProgress = {};
-    if (!user.questClaims) user.questClaims = {};
-    const data = EPIC_QUESTLINES.map(q => ({
-        id: q.id,
-        title: q.title,
-        description: q.description,
-        stages: q.stages.map(s => ({
-            ...s,
-            completed: user.questProgress[`${q.id}:${s.id}`] === true,
-            claimed: user.questClaims[`${q.id}:${s.id}`] === true
-        }))
-    }));
-    saveDB();
-    res.json({ questlines: data });
-});
-
-app.post('/api/questlines/complete', requireAuth, (req, res) => {
-    const { questId, stageId } = req.body;
-    const user = db.users.find(u => u.id === req.userId);
-    const quest = EPIC_QUESTLINES.find(q => q.id === questId);
-    const stage = quest ? quest.stages.find(s => s.id === stageId) : null;
-    if (!stage) return res.status(404).json({ error: 'Quest stage not found.' });
-    const key = `${questId}:${stageId}`;
-    if (!user.questProgress) user.questProgress = {};
-    if (!user.questClaims) user.questClaims = {};
-    user.questProgress[key] = true;
-    if (!user.questClaims[key]) {
-        user.questClaims[key] = true;
-        user.coins = (user.coins || 0) + stage.reward;
-    }
-    saveDB();
-    res.json({ success: true, coins: user.coins, reward: stage.reward });
-});
-
-app.get('/api/megabuild/current', requireAuth, (req, res) => {
-    const user = db.users.find(u => u.id === req.userId);
-    const event = getOrCreateMegaBuild();
-    if (!event.contributors) event.contributors = {};
-    const milestones = [300, 900, 1800, 3200].map(target => ({
-        target,
-        reached: event.totalContrib >= target,
-        reward: Math.floor(target / 30),
-        claimed: user.megaBuildClaims && user.megaBuildClaims[`${event.id}:${target}`] === true
-    }));
-    const leaderboard = Object.entries(event.contributors)
-        .map(([userId, points]) => {
-            const u = db.users.find(x => x.id === userId);
-            return { userId, username: u ? u.username : 'Unknown', points };
-        })
-        .sort((a, b) => b.points - a.points)
-        .slice(0, 12);
-    res.json({
-        event: {
-            id: event.id,
-            title: event.title,
-            theme: event.theme,
-            startsAt: event.startsAt,
-            endsAt: event.endsAt,
-            totalContrib: event.totalContrib
-        },
-        myContrib: event.contributors[user.id] || 0,
-        milestones,
-        leaderboard
-    });
-});
-
-app.post('/api/megabuild/contribute', requireAuth, (req, res) => {
-    const { points } = req.body;
-    const user = db.users.find(u => u.id === req.userId);
-    const event = getOrCreateMegaBuild();
-    const add = Math.max(5, Math.min(200, parseInt(points, 10) || 25));
-    if (!event.contributors) event.contributors = {};
-    event.contributors[user.id] = (event.contributors[user.id] || 0) + add;
-    event.totalContrib = (event.totalContrib || 0) + add;
-    saveDB();
-    res.json({ success: true, added: add, totalContrib: event.totalContrib, myContrib: event.contributors[user.id] });
-});
-
-app.post('/api/megabuild/claim', requireAuth, (req, res) => {
-    const { target } = req.body;
-    const user = db.users.find(u => u.id === req.userId);
-    const event = getOrCreateMegaBuild();
-    const validTargets = [300, 900, 1800, 3200];
-    const t = parseInt(target, 10);
-    if (!validTargets.includes(t)) return res.status(400).json({ error: 'Invalid milestone.' });
-    if ((event.totalContrib || 0) < t) return res.status(400).json({ error: 'Milestone not reached yet.' });
-    if (!user.megaBuildClaims) user.megaBuildClaims = {};
-    const key = `${event.id}:${t}`;
-    if (user.megaBuildClaims[key]) return res.status(400).json({ error: 'Already claimed.' });
-    const reward = Math.floor(t / 30);
-    user.megaBuildClaims[key] = true;
-    user.coins = (user.coins || 0) + reward;
-    saveDB();
-    res.json({ success: true, reward, coins: user.coins });
-});
-
 
 // ==========================================
 // TOOLBOX SYSTEM
