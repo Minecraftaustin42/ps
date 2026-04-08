@@ -2455,7 +2455,8 @@ if (data.coins !== undefined && currentUser && !data.groupCoins) {
             renderGameGrid('editable-games-grid', myGames || [], true, 'You have no editable games yet.');
         };
 
-
+        window.loadLibrary = loadLibrary;
+        window.loadDashboardGames = loadDashboardGames;
 
 
 const toggleMultiSelect = () => {
@@ -7229,7 +7230,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
 playerObj = {
         x: 0, y: 10, z: 0,
         vx: 0, vy: 0, vz: 0, rotY: 0,
-        speed: 0.2, jump: 3.8,
+        speed: 0.2, jump: 4.8,
         health: 100, // ADD THIS
         blasterDamage: 20, blasterSpeed: 2.5, blasterSpread: 0, blasterFireRate: 150, blasterLifetime: 100, blasterColor: '#ffff00', lastShotAt: 0,
         grounded: false, sitting: false, seatCooldown: 0
@@ -8500,6 +8501,7 @@ const updateChatBubbles = () => {
         };
 
     const updatePhysics3D = () => {
+            const frameScale = Math.max(0.5, Math.min(2.0, (window.playDeltaMs || 16.67) / 16.67));
             if (playerObj.seatCooldown > 0) playerObj.seatCooldown--;
             if (jumpBufferFrames > 0) jumpBufferFrames--;
             if (coyoteFrames > 0) coyoteFrames--;
@@ -8612,7 +8614,7 @@ const updateChatBubbles = () => {
                     vehicle.userData.currentSpeed += (targetSpeed - vehicle.userData.currentSpeed) * 0.08; 
 
                     // Gravity
-                    vehicle.userData.vy = (vehicle.userData.vy || 0) - (activeLevel.settings ? activeLevel.settings.gravity : 0.35) * 0.15;
+                    vehicle.userData.vy = (vehicle.userData.vy || 0) - (activeLevel.settings ? activeLevel.settings.gravity : 0.35) * 0.15 * frameScale;
                     vehicle.position.y += vehicle.userData.vy;
 
                     vehicle.updateMatrixWorld(true);
@@ -8803,11 +8805,11 @@ const updateChatBubbles = () => {
             } 
             else { 
                 // Standard Gravity
-                playerObj.vy -= (activeLevel.settings ? activeLevel.settings.gravity : 0.35); 
+                playerObj.vy -= (activeLevel.settings ? activeLevel.settings.gravity : 0.35) * frameScale; 
             }
             
             // Apply vertical velocity to actual position
-            playerObj.y += playerObj.vy; 
+            playerObj.y += playerObj.vy * frameScale; 
 
             // --- Terrain Collisions ---
             if (activeLevel.terrain && activeLevel.terrain.active) {
@@ -10092,7 +10094,8 @@ const groupAsAircraft = () => {
                 
                 // FIX 1: Use the correct localStorage key
                 const token = localStorage.getItem('ps_token'); 
-                if (token) headers['Authorization'] = token; 
+                if (!token) return;
+                headers['Authorization'] = token; 
 
                 const res = await fetch('/api/ping', {
                     method: 'POST',
@@ -10100,6 +10103,7 @@ const groupAsAircraft = () => {
                     body: JSON.stringify({ location: loc })
                 });
 
+                if (!res.ok) return;
                 // FIX 2: Parse the response and update the UI live!
                 const data = await res.json();
                 
