@@ -1475,6 +1475,7 @@
                             <button class="tool-btn active" id="mode-translate" onclick="setTransformMode('translate')">Move</button>
                             <button class="tool-btn" id="mode-rotate" onclick="setTransformMode('rotate')">Rotate</button>
                             <button class="tool-btn" id="mode-scale" onclick="setTransformMode('scale')">Scale</button>
+                            <button class="tool-btn" id="btn-transform-space" onclick="toggleTransformSpace()">Space: Local</button>
                             <button class="tool-btn" id="btn-multi-select" onclick="toggleMultiSelect()">Multi-Select: OFF</button>
                             <button class="tool-btn btn-info" onclick="duplicateSelectedParts()">Duplicate</button>
                             <button class="btn btn-sm btn-danger" onclick="deleteSelectedParts()">Delete</button>
@@ -1642,7 +1643,11 @@
                         <h4 style="margin-top:0; color:#2c3e50; border-bottom: 1px solid #ccc; padding-bottom: 5px;">World Settings</h4>
                         <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Gravity:</label>
-                            <input type="number" id="ws-gravity" class="form-control" value="0.35" step="0.05" onchange="updateWorldSettings()">
+                            <input type="number" id="ws-gravity" class="form-control" value="0.08" step="0.01" onchange="updateWorldSettings()">
+                        </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold;">Step Height (auto climb):</label>
+                            <input type="number" id="ws-step-height" class="form-control" value="1.1" step="0.1" min="0" max="5" onchange="updateWorldSettings()">
                         </div>
                       <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Sky Color:</label>
@@ -1838,6 +1843,7 @@
     Invite Friend
 </button>
                             <button id="btn-save-game" class="btn btn-sm btn-info" onclick="toggleBookmarkFromPlay()">Save</button>
+                            <button class="btn btn-sm btn-warning" onclick="resetCharacter()">Reset Character</button>
                             <button class="btn btn-sm" id="btn-exit-game" onclick="navigate('library')">Exit Game</button>
                         </div>
                     </div>
@@ -4478,7 +4484,8 @@ const dom = edRenderer.domElement;
                         const primary = selectedObjects[selectedObjects.length - 1];
                         if (primary) { // FIX: Ensure primary exists before snapping!
                             customGizmo.position.copy(primary.position);
-                            customGizmo.quaternion.copy(primary.quaternion);
+                            const useLocal = currentEditMode === 'scale' || currentTransformSpace === 'local';
+                            customGizmo.quaternion.copy(useLocal ? primary.quaternion : new THREE.Quaternion());
                         }
                     }
                     return;
@@ -5759,7 +5766,7 @@ Keep playing together for more daily rewards.`, 'Aww!');
         // =========================================================================
         
 let edData = { 
-            settings: { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65 }, // FIX: Sculpt City Defaults!
+            settings: { gravity: 0.08, stepHeight: 1.1, skyColor: '#5b88a5', brightness: 0.65 }, // FIX: Sculpt City Defaults!
             spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, 
             objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], 
             uiLayout: [],
@@ -5786,6 +5793,7 @@ const studioMobileState = { initialized: false, moveActive: false, moveX: 0, mov
         let teamCollaboratorsOnline = 0;
 
 let currentEditMode = 'translate';
+let currentTransformSpace = 'local';
         let selectionBoxHelper = null;
         let isPhysicalDragging = false;
         let draggedMesh = null;
@@ -5910,7 +5918,7 @@ let currentEditMode = 'translate';
         // Auto-convert old grid games into the new freeform format
        // Auto-convert old grid games into the new freeform format
         const migrateLevelDataTo3D = (levelData) => {
-            let newData = { settings: { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
+            let newData = { settings: { gravity: 0.08, stepHeight: 1.1, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
             if (levelData.settings) newData.settings = levelData.settings;
             if (levelData.objects) { 
                 (levelData.objects || []).forEach(ensureSmartLogicDefaults);
@@ -6276,7 +6284,12 @@ const setTransformMode = (mode) => {
     } else {
         if (selectionBoxHelper) selectionBoxHelper.visible = false;
         if (customGizmo && selectedObjects.length > 0) {
+            const primary = selectedObjects[selectedObjects.length - 1];
             customGizmo.visible = true;
+            if (primary) {
+                const useLocal = mode === 'scale' || currentTransformSpace === 'local';
+                customGizmo.quaternion.copy(useLocal ? primary.quaternion : new THREE.Quaternion());
+            }
             // FIX: Beautifully simple traverse to hide/show handles!
             customGizmo.traverse(child => {
                 if (child.userData && child.userData.tool) {
@@ -6286,6 +6299,19 @@ const setTransformMode = (mode) => {
         }
     }
 };
+
+const updateTransformSpaceButton = () => {
+    const btn = document.getElementById('btn-transform-space');
+    if (btn) btn.innerText = `Space: ${currentTransformSpace === 'world' ? 'World' : 'Local'}`;
+};
+
+const toggleTransformSpace = () => {
+    currentTransformSpace = currentTransformSpace === 'local' ? 'world' : 'local';
+    updateTransformSpaceButton();
+    if (selectedObjects.length > 0) setTransformMode(currentEditMode);
+};
+window.toggleTransformSpace = toggleTransformSpace;
+setTimeout(updateTransformSpaceButton, 0);
 
 // ==========================================
 // STUDIO TOOL KEY SHORTCUTS
@@ -6345,7 +6371,8 @@ document.addEventListener('keydown', (e) => {
                     if (selectionBoxHelper) selectionBoxHelper.visible = false;
                     if (customGizmo) {
                         customGizmo.position.copy(primary.position);
-                        customGizmo.quaternion.copy(primary.quaternion); // ALIGN GIZMO TO OBJECT!
+                        const useLocal = currentEditMode === 'scale' || currentTransformSpace === 'local';
+                        customGizmo.quaternion.copy(useLocal ? primary.quaternion : new THREE.Quaternion());
                         setTransformMode(currentEditMode); // Refreshes visibility
                     }
                 }
@@ -6612,12 +6639,14 @@ document.addEventListener('keydown', (e) => {
             
             isEditingSettings = true; renderExplorer();
             
-if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
+if(!edData.settings) edData.settings = { gravity: 0.08, stepHeight: 1.1, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
             if (typeof edData.settings.sunIntensity === 'undefined') edData.settings.sunIntensity = 1.1;
             if (typeof edData.settings.fogDistance === 'undefined') edData.settings.fogDistance = 1600;
             if (typeof edData.settings.graphicsQuality === 'undefined') edData.settings.graphicsQuality = 'medium';
             if (typeof edData.settings.exposure === 'undefined') edData.settings.exposure = 1.0;
+            if (typeof edData.settings.stepHeight === 'undefined') edData.settings.stepHeight = 1.1;
             document.getElementById('ws-gravity').value = edData.settings.gravity;
+            document.getElementById('ws-step-height').value = edData.settings.stepHeight;
             document.getElementById('ws-skycolor').value = edData.settings.skyColor;
             document.getElementById('ws-brightness').value = edData.settings.brightness;
             document.getElementById('ws-sun-intensity').value = edData.settings.sunIntensity;
@@ -6629,7 +6658,8 @@ if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', bri
 
 
         const updateWorldSettings = () => {
-            edData.settings.gravity = parseFloat(document.getElementById('ws-gravity').value) || 0.35;
+            edData.settings.gravity = parseFloat(document.getElementById('ws-gravity').value) || 0.08;
+            edData.settings.stepHeight = parseFloat(document.getElementById('ws-step-height').value) || 1.1;
             edData.settings.skyColor = document.getElementById('ws-skycolor').value;
             edData.settings.brightness = parseFloat(document.getElementById('ws-brightness').value) || 1.0;
             edData.settings.sunIntensity = parseFloat(document.getElementById('ws-sun-intensity').value) || 1.1;
@@ -6867,7 +6897,7 @@ if (item.type === 'button' && item.onClickEvent) {
             const label = document.getElementById('player-health-label');
             if (fill) fill.style.width = `${pct}%`;
             if (label) label.innerText = `${Math.round(playerObj.health)} / ${maxHealth}`;
-            if (playerObj.health <= 0) startGame();
+            if (playerObj.health <= 0 && !isDeathAnimating) triggerCharacterDeath();
         };
 
         const damagePlayer = (amount) => {
@@ -6876,6 +6906,71 @@ if (item.type === 'button' && item.onClickEvent) {
             playerObj.health = Math.max(0, (playerObj.health || 100) - (parseFloat(amount) || 0));
             updatePlayerHealthHUD();
         };
+        
+        const spawnDeathPieces = () => {
+            if (!playScene || !playerMesh) return;
+            const toWorldPart = (partMesh) => {
+                partMesh.updateMatrixWorld(true);
+                const pos = new THREE.Vector3();
+                const quat = new THREE.Quaternion();
+                partMesh.getWorldPosition(pos);
+                partMesh.getWorldQuaternion(quat);
+                const debris = new THREE.Mesh(partMesh.geometry.clone(), partMesh.material.clone());
+                debris.position.copy(pos);
+                debris.quaternion.copy(quat);
+                const vel = new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.45 + playerObj.vx * 0.15,
+                    0.12 + Math.random() * 0.22,
+                    (Math.random() - 0.5) * 0.45 + playerObj.vz * 0.15
+                );
+                deathPieces.push({ mesh: debris, velocity: vel, life: 80 + Math.floor(Math.random() * 40) });
+                playScene.add(debris);
+            };
+
+            const parts = [];
+            playerMesh.traverse((child) => {
+                if (child.isMesh && child.geometry) parts.push(child);
+            });
+            parts.forEach(toWorldPart);
+            playerMesh.visible = false;
+        };
+
+        const updateDeathPieces = () => {
+            if (!deathPieces.length) return;
+            const gravity = (activeLevel?.settings?.gravity || 0.08) * 0.05;
+            deathPieces = deathPieces.filter((piece) => {
+                piece.velocity.y -= gravity;
+                piece.mesh.position.add(piece.velocity);
+                piece.mesh.rotation.x += piece.velocity.x * 0.25;
+                piece.mesh.rotation.z += piece.velocity.z * 0.25;
+                piece.life--;
+                if (piece.life <= 0 || piece.mesh.position.y < -200) {
+                    playScene.remove(piece.mesh);
+                    return false;
+                }
+                return true;
+            });
+        };
+
+        const triggerCharacterDeath = () => {
+            if (isDeathAnimating) return;
+            isDeathAnimating = true;
+            spawnDeathPieces();
+            showModal('Character Reset', 'You were reset. Respawning...');
+            setTimeout(() => {
+                deathPieces.forEach(p => { if (playScene) playScene.remove(p.mesh); });
+                deathPieces = [];
+                isDeathAnimating = false;
+                startGame();
+            }, 900);
+        };
+
+        const resetCharacter = () => {
+            if (!isPlayActive || isDeathAnimating) return;
+            playerObj.health = 0;
+            updatePlayerHealthHUD();
+        };
+        window.resetCharacter = resetCharacter;
 
         const openScriptEditor = (id) => {
             const obj = edData.objects.find(o => o.id === id);
@@ -6939,7 +7034,7 @@ const promptClearEditor = () => {
         // --- Editor Core Engine ---
      const clearEditor = () => {
             currentEditGameId = null; 
-            edData = { settings: { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
+            edData = { settings: { gravity: 0.08, stepHeight: 1.1, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
@@ -7245,6 +7340,8 @@ playerObj = {
         let playSyncInterval = null;
         let isPlayActive = false;
         let isTestingLocal = false;
+        let isDeathAnimating = false;
+        let deathPieces = [];
 
         // Tool System Variables
         let playerInventory = [];
@@ -7614,6 +7711,11 @@ const startGame = () => {
             currentSessionStartTime = Date.now(); 
             currentSessionJumps = 0; 
             currentSessionFalls = 0;
+            isDeathAnimating = false;
+            if (deathPieces.length && playScene) {
+                deathPieces.forEach(p => playScene.remove(p.mesh));
+            }
+            deathPieces = [];
 
             window.playLeaderboard = {};
 
@@ -7658,7 +7760,8 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
 
             stopGameLoop(); setupMobileControls();
             
-            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
+            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.08, stepHeight: 1.1, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
+            if (typeof activeLevel.settings.stepHeight === 'undefined') activeLevel.settings.stepHeight = 1.1;
             playScene.background = new THREE.Color(activeLevel.settings.skyColor);
             playScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = activeLevel.settings.brightness; });
             applyPlayGraphicsSettings(activeLevel.settings);
@@ -7669,7 +7772,7 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
             playerObj.z = activeLevel.spawn ? activeLevel.spawn.z : 0;
             playerObj.vx = 0; playerObj.vy = 0; playerObj.vz = 0; playerObj.rotY = 0;
             playerObj.speed = 0.2;
-playerObj.jump = 0.6;
+playerObj.jump = 4.8;
             playerObj.health = 100;
             playerObj.blasterDamage = 20; playerObj.blasterSpeed = 2.5; playerObj.blasterSpread = 0; playerObj.blasterFireRate = 150; playerObj.blasterLifetime = 100; playerObj.blasterColor = '#ffff00'; playerObj.lastShotAt = 0;
             playerObj.sitting = false;
@@ -7678,6 +7781,7 @@ playerObj.jump = 0.6;
             if (document.getElementById('play-speedometer')) document.getElementById('play-speedometer').style.display = 'none';
             
             buildPlayScene();
+            if (playerMesh) playerMesh.visible = true;
             uiRuntimeManager.build(activeLevel.uiLayout || []);
             updatePlayerHealthHUD();
 
@@ -7825,7 +7929,7 @@ animatePlay();
                     teleport: (x, y, z) => { playerObj.x = safeNum(x, playerObj.x); playerObj.y = safeNum(y, playerObj.y); playerObj.z = safeNum(z, playerObj.z); },
                     addHealth: (amount = 0) => { playerObj.health = Math.max(0, Math.min(100, (playerObj.health || 100) + safeNum(amount, 0))); },
                     setWalkSpeed: (speed = 0.2) => { playerObj.speed = Math.max(0.05, Math.min(2, safeNum(speed, 0.2))); },
-                    setJumpPower: (jump = 0.6) => { playerObj.jump = Math.max(0.1, Math.min(3, safeNum(jump, 0.6))); }
+                    setJumpPower: (jump = 4.8) => { playerObj.jump = Math.max(0.1, Math.min(12, safeNum(jump, 4.8))); }
                 },
                 world: {
                     objects: () => playMeshes,
@@ -7852,8 +7956,8 @@ animatePlay();
                         playMeshes = playMeshes.filter(m => m !== target);
                     },
                     message: (msg, title = 'Script') => showModal(title, String(msg || '')),
-                    getGravity: () => safeNum(activeLevel?.settings?.gravity, 0.35),
-                    setGravity: (value = 0.35) => { if (activeLevel?.settings) activeLevel.settings.gravity = Math.max(0, Math.min(5, safeNum(value, 0.35))); },
+                    getGravity: () => safeNum(activeLevel?.settings?.gravity, 0.08),
+                    setGravity: (value = 0.08) => { if (activeLevel?.settings) activeLevel.settings.gravity = Math.max(0, Math.min(5, safeNum(value, 0.08))); },
                     setSkyColor: (hex = '#87CEEB') => { if (activeLevel?.settings) activeLevel.settings.skyColor = String(hex); if (playScene) playScene.background = new THREE.Color(String(hex)); }
                 },
                 createObject: (cfg = {}) => {
@@ -8217,6 +8321,10 @@ const updateChatBubbles = () => {
             const nav = document.querySelector('.navbar');
             const container = document.querySelector('.container');
             const toolbars = document.querySelectorAll('#view-create .toolbar');
+            const explorer = document.getElementById('project-explorer');
+            const props = document.getElementById('properties-panel');
+            const editor3d = document.getElementById('editor-container-3d');
+            const output = document.getElementById('output-panel');
             
             isStudioFullscreen = !isStudioFullscreen;
             
@@ -8230,7 +8338,11 @@ const updateChatBubbles = () => {
                 // Dynamically calculate the remaining height
                 let tbHeight = 0;
                 toolbars.forEach(tb => tbHeight += tb.offsetHeight);
-                layout.style.height = `calc(100vh - ${tbHeight + 10}px)`; 
+                layout.style.height = `calc(100vh - ${tbHeight + 10}px)`;
+                if (explorer) explorer.style.display = 'none';
+                if (props) props.style.display = 'none';
+                if (editor3d) editor3d.style.marginRight = '0';
+                if (output) output.style.width = '100%';
             } else {
                 // Restore standard view
                 nav.style.display = 'flex';
@@ -8238,6 +8350,10 @@ const updateChatBubbles = () => {
                 container.style.padding = '10px';
                 container.style.maxWidth = '1000px';
                 layout.style.height = '500px';
+                if (explorer) explorer.style.display = '';
+                if (props) props.style.display = '';
+                if (editor3d) editor3d.style.marginRight = '250px';
+                if (output) output.style.width = 'calc(100% - 250px)';
             }
             
             // Force the 3D engine to recalculate the canvas size
@@ -8460,7 +8576,7 @@ const updateChatBubbles = () => {
 
         const updateDynamicObjectPhysics = () => {
             if (!activeLevel || !playScene) return;
-            const gravityStrength = Math.max(0.02, (activeLevel.settings?.gravity || 0.35) * 0.06);
+            const gravityStrength = Math.max(0.02, (activeLevel.settings?.gravity || 0.08) * 0.06);
             const playerPos = new THREE.Vector3(playerObj.x, playerObj.y + 2, playerObj.z);
             const staticMeshes = playMeshes.filter(m => m?.isMesh && !m.userData?.isTool && !m.userData?.noCollide && m.userData?.isAnchored !== false);
             const dynamicMeshes = playMeshes.filter(m => m?.isMesh && !m.userData?.isTool && !m.userData?.noCollide && m.userData?.isAnchored === false && !['seat', 'aircraftSeat'].includes(m.userData?.type));
@@ -8502,6 +8618,7 @@ const updateChatBubbles = () => {
 
     const updatePhysics3D = () => {
             const frameScale = Math.max(0.5, Math.min(2.0, (window.playDeltaMs || 16.67) / 16.67));
+            if (isDeathAnimating) return;
             if (playerObj.seatCooldown > 0) playerObj.seatCooldown--;
             if (jumpBufferFrames > 0) jumpBufferFrames--;
             if (coyoteFrames > 0) coyoteFrames--;
@@ -8614,7 +8731,7 @@ const updateChatBubbles = () => {
                     vehicle.userData.currentSpeed += (targetSpeed - vehicle.userData.currentSpeed) * 0.08; 
 
                     // Gravity
-                    vehicle.userData.vy = (vehicle.userData.vy || 0) - (activeLevel.settings ? activeLevel.settings.gravity : 0.35) * 0.15 * frameScale;
+                    vehicle.userData.vy = (vehicle.userData.vy || 0) - (activeLevel.settings ? activeLevel.settings.gravity : 0.08) * 0.15 * frameScale;
                     vehicle.position.y += vehicle.userData.vy;
 
                     vehicle.updateMatrixWorld(true);
@@ -8750,19 +8867,37 @@ const updateChatBubbles = () => {
                 playerObj.vz += moveDir.z * playerObj.speed; 
                 playerObj.rotY = Math.atan2(moveDir.x, moveDir.z); 
             }
+
+            const maxStepHeight = Math.max(0, Math.min(5, parseFloat(activeLevel?.settings?.stepHeight ?? 1.1) || 1.1));
+            const tryStepUp = () => {
+                if (maxStepHeight <= 0) return false;
+                const stepInc = 0.15;
+                for (let step = stepInc; step <= maxStepHeight + 0.001; step += stepInc) {
+                    if (!checkWallCollision(playerObj.x, playerObj.y + step, playerObj.z)) {
+                        playerObj.y += step;
+                        playerObj.grounded = false;
+                        return true;
+                    }
+                }
+                return false;
+            };
             
             // X-Axis Collision (Undo movement if hit)
             playerObj.x += playerObj.vx; 
             if (checkWallCollision(playerObj.x, playerObj.y, playerObj.z)) { 
-                playerObj.x -= playerObj.vx; 
-                playerObj.vx = 0; 
+                if (!tryStepUp()) {
+                    playerObj.x -= playerObj.vx; 
+                    playerObj.vx = 0; 
+                }
             }
             
             // Z-Axis Collision (Undo movement if hit)
             playerObj.z += playerObj.vz; 
             if (checkWallCollision(playerObj.x, playerObj.y, playerObj.z)) { 
-                playerObj.z -= playerObj.vz; 
-                playerObj.vz = 0; 
+                if (!tryStepUp()) {
+                    playerObj.z -= playerObj.vz; 
+                    playerObj.vz = 0; 
+                }
             }
             
             playerObj.vx *= 0.75; 
@@ -8805,7 +8940,7 @@ const updateChatBubbles = () => {
             } 
             else { 
                 // Standard Gravity
-                playerObj.vy -= (activeLevel.settings ? activeLevel.settings.gravity : 0.35) * frameScale; 
+                playerObj.vy -= (activeLevel.settings ? activeLevel.settings.gravity : 0.08) * frameScale; 
             }
             
             // Apply vertical velocity to actual position
@@ -8991,6 +9126,7 @@ const animatePlay = () => {
                     if (window.playLadders) { window.playLadders = playMeshes.filter(m => m.userData.type === 'ladder').map(m => { m.updateMatrixWorld(true); return new THREE.Box3().setFromObject(m); }); }
                 }
                 updatePhysics3D();
+                updateDeathPieces();
                 updateSmartObjectBehaviors();
                 triggerContextualInteract();
                 updatePlayerHealthHUD();
@@ -9862,7 +9998,8 @@ const groupAsAircraft = () => {
 
             activeLevel = {
                 settings: {
-                    gravity: 0.35,
+                    gravity: 0.08,
+                    stepHeight: 1.1,
                     skyColor: isIndustrial ? '#71808f' : (isGrass ? '#5b88a5' : '#a37b45'),
                     brightness: isIndustrial ? 0.6 : 0.65
                 },
