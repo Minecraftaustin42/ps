@@ -1676,13 +1676,16 @@
                     </div>
 
                     <div id="studio-mobile-controls">
+                        <div id="studio-look-zone" style="position:absolute; top:0; right:0; width:52%; height:76%; pointer-events:auto; touch-action:none;"></div>
                         <div style="display:flex; justify-content:space-between; align-items:flex-end; padding:0 10px; gap:8px;">
                             <div id="studio-joystick-base">
                                 <div id="studio-joystick-stick"></div>
                             </div>
                             <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
-                                <div class="studio-mobile-pill" id="studio-landscape-pill">Best in landscape mode 📱↔️ <button onclick="closeStudioLandscapeHint()" style="margin-left:6px; background:transparent; color:#fff; border:none; font-weight:700; pointer-events:auto;">✕</button></div>
+                                <div class="studio-mobile-pill" id="studio-landscape-pill">Move: left stick • Look: right side <button onclick="closeStudioLandscapeHint()" style="margin-left:6px; background:transparent; color:#fff; border:none; font-weight:700; pointer-events:auto;">✕</button></div>
                                 <div style="display:flex; gap:6px; pointer-events:auto;">
+                                    <button class="studio-mobile-btn" id="studio-fly-up">Up</button>
+                                    <button class="studio-mobile-btn" id="studio-fly-down">Down</button>
                                     <button class="studio-mobile-btn" onclick="setTransformMode('select')">Select</button>
                                     <button class="studio-mobile-btn" onclick="setTransformMode('translate')">Move</button>
                                     <button class="studio-mobile-btn" onclick="setTransformMode('rotate')">Rotate</button>
@@ -2407,6 +2410,53 @@ if (data.coins !== undefined && currentUser && !data.groupCoins) {
         };
 
 
+        const renderGameGrid = (containerId, games = [], showEdit = false, emptyText = 'No games found yet.') => {
+            const grid = document.getElementById(containerId);
+            if (!grid) return;
+            if (!games || games.length === 0) {
+                grid.innerHTML = `<p style="color:#777;">${emptyText}</p>`;
+                return;
+            }
+            grid.innerHTML = games.map(g => renderGameCard(g, showEdit)).join('');
+        };
+
+        const loadLibrary = async () => {
+            const qEl = document.getElementById('game-search');
+            const genreEl = document.getElementById('genre-filter');
+            const q = qEl ? qEl.value.trim() : '';
+            const genre = genreEl ? genreEl.value : 'All';
+            const params = new URLSearchParams();
+            if (q) params.set('q', q);
+            if (genre && genre !== 'All') params.set('genre', genre);
+            const endpoint = `/games${params.toString() ? `?${params.toString()}` : ''}`;
+            const games = await apiCall(endpoint, 'GET');
+            renderGameGrid('games-grid', games, false, 'No games match your search.');
+        };
+
+        const loadDashboardGames = async () => {
+            const [fresh, trending, liked, myGames, me] = await Promise.all([
+                apiCall('/games/fresh', 'GET'),
+                apiCall('/games/trending', 'GET'),
+                apiCall('/games/most-liked', 'GET'),
+                apiCall('/my-games', 'GET'),
+                apiCall('/me', 'GET')
+            ]);
+
+            const bookmarked = me && Array.isArray(me.bookmarkedGames) ? me.bookmarkedGames : [];
+            const recentlyPlayed = me && Array.isArray(me.recentlyPlayed)
+                ? [...me.recentlyPlayed].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                : [];
+
+            renderGameGrid('saved-games-grid', bookmarked, false, 'Save games to see them here.');
+            renderGameGrid('fresh-games-grid', fresh || [], false, 'No fresh games yet.');
+            renderGameGrid('trending-games-grid', trending || [], false, 'No trending games yet.');
+            renderGameGrid('most-liked-games-grid', liked || [], false, 'No liked games yet.');
+            renderGameGrid('recent-games-grid', recentlyPlayed, false, 'Play a game and it will show up here.');
+            renderGameGrid('editable-games-grid', myGames || [], true, 'You have no editable games yet.');
+        };
+
+
+
 
 const toggleMultiSelect = () => {
             isMultiSelect = !isMultiSelect;
@@ -2577,7 +2627,7 @@ const toggleMultiSelect = () => {
                     keys.d = false;
                 };
 
-                jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playInput.justJumped = true; jumpBtn.style.background = 'rgba(46, 204, 113, 0.9)'; }, { passive: false });
+                jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playInput.justJumped = true; jumpBufferFrames = 8; jumpBtn.style.background = 'rgba(46, 204, 113, 0.9)'; }, { passive: false });
                 jumpBtn.addEventListener('touchend', (e) => { e.preventDefault(); jumpBtn.style.background = 'rgba(46, 204, 113, 0.6)'; }, { passive: false });
 
                 const onLookMove = (touch) => {
@@ -4119,13 +4169,16 @@ let customGizmo = null;
             if (!isTouch) return;
             const base = document.getElementById('studio-joystick-base');
             const stick = document.getElementById('studio-joystick-stick');
-            if (!base || !stick) return;
+            const lookZone = document.getElementById('studio-look-zone');
+            const flyUpBtn = document.getElementById('studio-fly-up');
+            const flyDownBtn = document.getElementById('studio-fly-down');
+            if (!base || !stick || !lookZone || !flyUpBtn || !flyDownBtn) return;
 
             studioMobileState.initialized = true;
             const resetStick = () => {
-                studioMobileState.active = false;
-                studioMobileState.x = 0;
-                studioMobileState.y = 0;
+                studioMobileState.moveActive = false;
+                studioMobileState.moveX = 0;
+                studioMobileState.moveY = 0;
                 stick.style.transform = 'translate(0px, 0px)';
             };
 
@@ -4141,9 +4194,9 @@ let customGizmo = null;
                     dx = (dx / dist) * radius;
                     dy = (dy / dist) * radius;
                 }
-                studioMobileState.active = true;
-                studioMobileState.x = dx / radius;
-                studioMobileState.y = dy / radius;
+                studioMobileState.moveActive = true;
+                studioMobileState.moveX = dx / radius;
+                studioMobileState.moveY = dy / radius;
                 stick.style.transform = `translate(${dx}px, ${dy}px)`;
             };
 
@@ -4159,6 +4212,46 @@ let customGizmo = null;
             }, { passive: false });
             base.addEventListener('touchend', (e) => { e.preventDefault(); resetStick(); }, { passive: false });
             base.addEventListener('touchcancel', (e) => { e.preventDefault(); resetStick(); }, { passive: false });
+
+            const endLookTouch = () => {
+                studioMobileState.lookTouchId = null;
+                studioMobileState.lookPrev = null;
+            };
+            lookZone.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const t = e.changedTouches[0];
+                if (!t || studioMobileState.lookTouchId !== null) return;
+                studioMobileState.lookTouchId = t.identifier;
+                studioMobileState.lookPrev = { x: t.clientX, y: t.clientY };
+            }, { passive: false });
+            lookZone.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const t = e.changedTouches[i];
+                    if (t.identifier !== studioMobileState.lookTouchId || !studioMobileState.lookPrev || !window.StudioCamera) continue;
+                    const dx = t.clientX - studioMobileState.lookPrev.x;
+                    const dy = t.clientY - studioMobileState.lookPrev.y;
+                    window.StudioCamera.yaw -= dx * 0.0055;
+                    window.StudioCamera.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, window.StudioCamera.pitch - dy * 0.0045));
+                    window.StudioCamera.updateCamera();
+                    studioMobileState.lookPrev = { x: t.clientX, y: t.clientY };
+                }
+            }, { passive: false });
+            lookZone.addEventListener('touchend', (e) => { e.preventDefault(); endLookTouch(); }, { passive: false });
+            lookZone.addEventListener('touchcancel', (e) => { e.preventDefault(); endLookTouch(); }, { passive: false });
+
+            const bindFlyButton = (btn, keyName, stateName) => {
+                const setState = (pressed) => {
+                    studioMobileState[stateName] = pressed;
+                    keys[keyName] = pressed;
+                    btn.style.background = pressed ? 'rgba(52,152,219,1)' : 'rgba(52,152,219,0.86)';
+                };
+                btn.addEventListener('touchstart', (e) => { e.preventDefault(); setState(true); }, { passive: false });
+                btn.addEventListener('touchend', (e) => { e.preventDefault(); setState(false); }, { passive: false });
+                btn.addEventListener('touchcancel', (e) => { e.preventDefault(); setState(false); }, { passive: false });
+            };
+            bindFlyButton(flyUpBtn, 'e', 'flyUp');
+            bindFlyButton(flyDownBtn, 'q', 'flyDown');
 
             if (localStorage.getItem('ps_hide_landscape_hint') === '1') {
                 const pill = document.getElementById('studio-landscape-pill');
@@ -4335,15 +4428,12 @@ const dom = edRenderer.domElement;
                         const snapScale = parseFloat(document.getElementById('snap-scale').value) || 1;
                         const snapRot = parseFloat(document.getElementById('snap-rot').value) || 15;
                         
-                        dragStartTransforms.forEach(t => {
-                            // Calculate Local Axis perfectly matching the object's rotation
-                            const localAxisVec = new THREE.Vector3();
-                            localAxisVec[axis] = 1;
-                            localAxisVec.applyQuaternion(t.startQuat).normalize();
-                            
-                            // Align the vector to the specific handle the user grabbed (+ or -)
-                            const handleAxisVec = localAxisVec.clone().multiplyScalar(dir);
+                        const gizmoAxisVec = new THREE.Vector3();
+                        gizmoAxisVec[axis] = 1;
+                        gizmoAxisVec.applyQuaternion(customGizmo.quaternion).normalize();
+                        const handleAxisVec = gizmoAxisVec.clone().multiplyScalar(dir);
 
+                        dragStartTransforms.forEach(t => {
                             if (activeGizmoPart.action === 'translate') {
                                 let dragDist = delta.dot(handleAxisVec);
                                 dragDist = Math.round(dragDist / snapMove) * snapMove;
@@ -5682,7 +5772,7 @@ let edScene, edCamera, edRenderer, edControls; // Removed transformControl
 let edAmbientLight = null, edDirectionalLight = null;
 let playAmbientLight = null, playDirectionalLight = null;
 let autosaveRecoveryPrompted = false;
-const studioMobileState = { active: false, x: 0, y: 0, initialized: false };
+const studioMobileState = { initialized: false, moveActive: false, moveX: 0, moveY: 0, lookTouchId: null, lookPrev: null, flyUp: false, flyDown: false };
 
         let raycaster, mouse;
         let editorMeshes = []; 
@@ -7016,13 +7106,14 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         if (keys.q) edCamera.position.y -= moveSpeed;
                     }
 
-                    if (studioMobileState.active && window.StudioCamera) {
-                        window.StudioCamera.yaw -= studioMobileState.x * 0.045;
-                        window.StudioCamera.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, window.StudioCamera.pitch - studioMobileState.y * 0.02));
-                        window.StudioCamera.updateCamera();
-                        const forward = new THREE.Vector3();
-                        edCamera.getWorldDirection(forward); forward.y = 0; forward.normalize();
-                        edCamera.position.addScaledVector(forward, -studioMobileState.y * 0.55);
+                    if (studioMobileState.moveActive) {
+                        const mobileForward = new THREE.Vector3();
+                        edCamera.getWorldDirection(mobileForward);
+                        mobileForward.y = 0;
+                        if (mobileForward.lengthSq() > 0) mobileForward.normalize();
+                        const mobileRight = new THREE.Vector3().crossVectors(mobileForward, new THREE.Vector3(0,1,0)).normalize();
+                        edCamera.position.addScaledVector(mobileForward, -studioMobileState.moveY * 0.55);
+                        edCamera.position.addScaledVector(mobileRight, studioMobileState.moveX * 0.55);
                     }
                 }
 
@@ -7159,6 +7250,8 @@ playerObj = {
         let equippedToolIndex = -1;
         let playInput = { justClicked: false, justJumped: false, justInteract: false };
         let playAimNdc = { x: 0, y: 0 };
+        let jumpBufferFrames = 0;
+        let coyoteFrames = 0;
 
         const keys = { w: false, a: false, s: false, d: false, q: false, e: false, space: false };
 
@@ -7225,7 +7318,10 @@ if (e.code === 'Space') {
                 if (document.getElementById('view-play').classList.contains('active') || document.getElementById('view-create').classList.contains('active')) {
                     e.preventDefault(); // Stop the page from scrolling down!
                 }
-                if (!keys.space) playInput.justJumped = true; // FIX: Only trigger jump once per press!
+                if (!keys.space) {
+                    playInput.justJumped = true; // FIX: Only trigger jump once per press!
+                    jumpBufferFrames = 8;
+                }
                 keys.space = true;
             }
         
@@ -8405,6 +8501,8 @@ const updateChatBubbles = () => {
 
     const updatePhysics3D = () => {
             if (playerObj.seatCooldown > 0) playerObj.seatCooldown--;
+            if (jumpBufferFrames > 0) jumpBufferFrames--;
+            if (coyoteFrames > 0) coyoteFrames--;
             updateDynamicObjectPhysics();
 
             // --- ADVANCED VEHICLE & AIRCRAFT PHYSICS ---
@@ -8690,7 +8788,7 @@ const updateChatBubbles = () => {
                 else playerObj.vy = 0; // Stick to the ladder
                 
                 // JUMPING OFF LADDERS
-                if (playInput.justJumped || keys.space) {
+                if (playInput.justJumped || jumpBufferFrames > 0) {
                     playerObj.vy = playerObj.jump * 0.8; // Give a slight vertical boost
                     
                     // Push player backward based on camera so they detach from the rungs
@@ -8700,6 +8798,7 @@ const updateChatBubbles = () => {
                     playerObj.vz -= camForward.z * 0.8;
                     
                     playInput.justJumped = false; // Consume the input!
+                    jumpBufferFrames = 0;
                 }
             } 
             else { 
@@ -8729,6 +8828,7 @@ const updateChatBubbles = () => {
                             const impact = -playerObj.vy;
                             playerObj.y = exactHeight + 0.001; 
                             playerObj.grounded = true; // PROVEN GROUNDED
+                            coyoteFrames = 6;
                             playerObj.vy = 0; 
                             if (impact > 2.8) damagePlayer((impact - 2.8) * 10);
                             if (slopeDiff > 0.1) { playerObj.vx *= 0.6; playerObj.vz *= 0.6; } 
@@ -8744,6 +8844,7 @@ const updateChatBubbles = () => {
                     const impact = -playerObj.vy;
                     playerObj.y = hit.max.y + 0.001; 
                     playerObj.grounded = true; // PROVEN GROUNDED
+                    coyoteFrames = 6;
                     playerObj.vy = 0; 
                     if (impact > 3.2) damagePlayer((impact - 3.2) * 8);
                 } else if (playerObj.vy > 0) { 
@@ -8753,9 +8854,12 @@ const updateChatBubbles = () => {
             }
 
             // --- STANDARD JUMP EXECUTION ---
-            if ((keys.space || playInput.justJumped) && playerObj.grounded) {
+            const wantsJump = playInput.justJumped || jumpBufferFrames > 0;
+            if (wantsJump && (playerObj.grounded || coyoteFrames > 0)) {
                 playerObj.vy = playerObj.jump; 
                 playerObj.grounded = false; 
+                coyoteFrames = 0;
+                jumpBufferFrames = 0;
                 currentSessionJumps++; 
                 playInput.justJumped = false; // Consume the jump input!
             }
