@@ -615,7 +615,6 @@
             <a onclick="navigate('jams')">Jams</a>
             <a onclick="navigate('blueprints')">Blueprints</a>
             <a onclick="navigate('funlab')">Fun Lab</a>
-            <a onclick="navigate('war')">Red vs Blue War</a>
             <a id="nav-mod-panel" onclick="openModPanel()" style="display:none;">Mod Panel</a>
             <a onclick="navigateProfile()">Profile</a>
             <a onclick="navigate('settings')">Settings</a>
@@ -1255,73 +1254,7 @@
             </div>
         </div>
 
-        <div id="view-war" class="view">
-            <div class="card">
-                <h2 class="card-title">Red vs Blue War Command</h2>
-                <div id="war-cycle-meta" style="font-size:13px; color:#555;"></div>
-                <div id="war-faction-score" class="game-grid"></div>
-            </div>
-            <div class="card mt-20">
-                <h3 style="margin-top:0;">Faction Assignment + Party Deploy</h3>
-                <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                    <select id="war-pref" class="form-control" style="max-width:200px;">
-                        <option value="auto">Auto Preference</option>
-                        <option value="red">Prefer Red</option>
-                        <option value="blue">Prefer Blue</option>
-                    </select>
-                    <button class="btn btn-danger" onclick="warAssignFaction()">Join War Faction</button>
-                    <button class="btn btn-info" onclick="warCreateParty()">Create Party</button>
-                    <input id="war-party-code" class="form-control" style="max-width:130px;" placeholder="PARTY">
-                    <button class="btn" onclick="warJoinParty()">Join Party</button>
-                    <button class="btn btn-success" onclick="warDeployParty()">Deploy Party</button>
-                </div>
-                <div id="war-party-meta" style="margin-top:8px; font-size:12px; color:#666;"></div>
-            </div>
-            <div class="card mt-20">
-                <h3 style="margin-top:0;">Division + Rank</h3>
-                <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                    <select id="war-division" class="form-control" style="max-width:220px;"></select>
-                    <button class="btn btn-warning" onclick="warJoinDivision()">Join Division</button>
-                    <button class="btn btn-info" onclick="warRefresh()">Refresh</button>
-                </div>
-                <div id="war-rank-meta" style="margin-top:8px;"></div>
-            </div>
-            <div class="card mt-20">
-                <h3 style="margin-top:0;">War Power & Investments</h3>
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <button class="btn btn-success" onclick="warEarn('active')">+ Active Bonus</button>
-                    <button class="btn btn-success" onclick="warEarn('mission')">+ Mission Complete</button>
-                    <button class="btn btn-success" onclick="warEarn('win')">+ Match Win</button>
-                    <input id="war-invest-target" class="form-control" style="max-width:220px;" placeholder="e.g. turret_mk2">
-                    <button class="btn btn-danger" onclick="warInvest()">Invest 100 Power</button>
-                </div>
-            </div>
-            <div class="card mt-20">
-                <h3 style="margin-top:0;">Studio War Asset Publishing</h3>
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <input id="war-asset-name" class="form-control" placeholder="War Asset Name">
-                    <select id="war-asset-category" class="form-control" style="max-width:180px;"></select>
-                    <select id="war-asset-division-tag" class="form-control" style="max-width:200px;"></select>
-                    <input id="war-asset-cost" class="form-control" style="max-width:140px;" type="number" placeholder="Power Cost">
-                    <button class="btn btn-info" onclick="warPublishFromStudio()">Publish Draft from Studio</button>
-                </div>
-                <textarea id="war-asset-desc" class="form-control mt-10" placeholder="Describe gameplay role, balance intent, and counterplay."></textarea>
-                <div id="war-assets-list" class="game-grid mt-10"></div>
-            </div>
-            <div class="card mt-20">
-                <h3 style="margin-top:0;">War Event Zones & Leaderboard</h3>
-                <div style="display:flex; gap:8px; flex-wrap:wrap;">
-                    <select id="war-zone" class="form-control" style="max-width:220px;"></select>
-                    <button class="btn btn-danger" onclick="warContribute('capture')">Capture Push</button>
-                    <button class="btn btn-warning" onclick="warContribute('defend')">Defend Push</button>
-                    <button class="btn btn-info" onclick="warContribute('sabotage')">Sabotage Push</button>
-                </div>
-                <div id="war-zones-board" class="game-grid mt-10"></div>
-                <div id="war-player-board" class="game-grid mt-10"></div>
-            </div>
-        </div>
-
-        <!-- Search View -->
+                <!-- Search View -->
         <div id="view-search" class="view">
             <div class="card">
                 <h2 class="card-title">User Search Results</h2>
@@ -1484,7 +1417,6 @@
                     </select>
                     <input type="text" id="editor-title" class="form-control" placeholder="Game Title..." style="width: 150px; margin: 0;">
                    <button class="btn btn-success" id="editor-save-btn" onclick="saveGame()">Publish Game</button>
-                    <button class="btn btn-danger btn-sm" onclick="openWarAssetPublisherFromStudio()">Mark as War Asset</button>
 
 <button class="btn btn-sm btn-warning" style="margin-left: 10px;" onclick="downloadPsworld()">Save .psworld</button>
 <button class="btn btn-sm btn-warning" onclick="document.getElementById('psworld-upload').click()">Load .psworld</button>
@@ -1653,15 +1585,15 @@
 
 <div id="script-editor-panel" style="display:none; position:absolute; top: 10px; left: 10px; right: 10px; bottom: 10px; background: rgba(30,30,30,0.95); padding: 15px; border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 200; flex-direction: column;">
                         <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap:10px; flex-wrap:wrap;">
-                            <h3 style="margin:0; color:#fff;" id="script-editor-title">JavaScript Editor</h3>
+                            <h3 style="margin:0; color:#fff;" id="script-editor-title">SculptScript Editor</h3>
                             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
                                 <button class="btn btn-sm btn-info" onclick="toggleUIDesigner()">UI Designer</button>
-                                <button class="btn btn-sm btn-success" onclick="saveScript()">Save JavaScript</button>
+                                <button class="btn btn-sm btn-success" onclick="saveScript()">Save SculptScript</button>
                                 <button class="btn btn-sm btn-danger" onclick="document.getElementById('script-editor-panel').style.display='none'">Close</button>
                             </div>
                         </div>
-                        <p style="color:#bfc9d4; font-size:12px; margin:0 0 8px 0;">Write plain JavaScript. Your code runs with <code>ctx</code>, <code>event</code>, and <code>state</code>. Events include <code>start</code>, <code>update</code>, and <code>interact</code>.</p>
-                        <textarea id="script-js-editor" style="width:100%; flex:1; min-height:220px; resize:none; background:#111820; color:#dce9ff; border:1px solid #3b4e61; border-radius:6px; padding:10px; font-family:monospace; font-size:13px; line-height:1.45;" spellcheck="false"></textarea>
+                        <p style="color:#bfc9d4; font-size:12px; margin:0 0 8px 0;">Write SculptScript using plain-language commands like <code>set object = explorer "ObjectName"</code>, <code>set property "color" to "#ff0000"</code>, and <code>create object "MyBlock" type "block"</code>.</p>
+                        <textarea id="sculptscript-editor" style="width:100%; flex:1; min-height:220px; resize:none; background:#111820; color:#dce9ff; border:1px solid #3b4e61; border-radius:6px; padding:10px; font-family:monospace; font-size:13px; line-height:1.45;" spellcheck="false" placeholder="set object = explorer &quot;Baseplate&quot;&#10;set property &quot;color&quot; to &quot;#ff0000&quot;&#10;set property &quot;floatingText.text&quot; to &quot;Hello world&quot;&#10;create object &quot;MyNewBlock&quot; type &quot;block&quot;"></textarea>
                         <input type="hidden" id="script-editor-target-id">
                     </div>
 
@@ -1875,7 +1807,7 @@
                                 <label><strong>Enable Advanced Script:</strong></label>
                                 <input id="smart-advanced" type="checkbox" onchange="updateSmartObjectProperties()">
                             </div>
-                            <button class="btn btn-sm btn-info" style="width:100%;" onclick="openScriptEditorForSelected()">Open Advanced Script</button>
+                            <button class="btn btn-sm btn-info" style="width:100%;" onclick="openScriptEditorForSelected()">Open SculptScript Editor</button>
                         </div>
 
                         </div>
@@ -2861,8 +2793,6 @@ else if (viewId === 'groups') {
                 loadBlueprintExchange();
             } else if (viewId === 'funlab') {
                 loadFunLab();
-            } else if (viewId === 'war') {
-                loadWarDashboard();
             } else if (viewId === 'settings') {
                 if (currentUser) document.getElementById('setting-username').value = currentUser.username;
            } else if (viewId === 'create') {
@@ -5684,232 +5614,85 @@ Keep playing together for more daily rewards.`, 'Aww!');
         window.funKeyboardCheats = funKeyboardCheats;
         setInterval(() => { if (localStorage.getItem('ps_break_reminder') === '1') showModal('Break Reminder', 'Stand up, hydrate, and rest your eyes for a minute.'); }, 45 * 60 * 1000);
 
-        let warPartyCode = '';
-        const WAR_CATEGORIES_UI = ['Weapon', 'Vehicle', 'Structure', 'Gadget', 'Support Item'];
-        const WAR_DIVISION_TAGS_UI = ['Assault', 'Vehicle Corps', 'Defense Unit', 'Air Division', 'Special Ops', 'Universal'];
-        const loadWarDashboard = async () => {
-            try {
-                const data = await apiCall('/war/state');
-                const cycle = data.cycle;
-                const me = data.myWarProfile || {};
-                document.getElementById('war-cycle-meta').innerText = `Cycle ${cycle.cycleId} • Phase: ${cycle.phase} • Ends ${new Date(cycle.endsAt).toLocaleDateString()}`;
-                document.getElementById('war-faction-score').innerHTML = `
-                    <div class="game-card"><h3 style="color:#e74c3c;">Red</h3><p>Power: ${cycle.factions.red.power}</p><p>Score: ${cycle.factions.red.score}</p><p>Members: ${cycle.factions.red.members.length}</p></div>
-                    <div class="game-card"><h3 style="color:#3498db;">Blue</h3><p>Power: ${cycle.factions.blue.power}</p><p>Score: ${cycle.factions.blue.score}</p><p>Members: ${cycle.factions.blue.members.length}</p></div>
-                `;
-                document.getElementById('war-rank-meta').innerHTML = `<strong>Faction:</strong> ${me.faction || 'Unassigned'} • <strong>Division:</strong> ${me.division || 'None'} • <strong>Rank:</strong> ${me.rank || 'Recruit'} • <strong>War Power Earned:</strong> ${me.totalPowerEarned || 0}`;
-                const divSel = document.getElementById('war-division');
-                divSel.innerHTML = data.divisions.map(d => `<option value="${d.id}">${d.name}</option>`).join('');
-                document.getElementById('war-asset-category').innerHTML = WAR_CATEGORIES_UI.map(c => `<option value="${c}">${c}</option>`).join('');
-                document.getElementById('war-asset-division-tag').innerHTML = WAR_DIVISION_TAGS_UI.map(c => `<option value="${c}">${c}</option>`).join('');
-                document.getElementById('war-zone').innerHTML = cycle.zones.map(z => `<option value="${z.id}">${z.name}</option>`).join('');
-                document.getElementById('war-zones-board').innerHTML = cycle.zones.map(z => `<div class="game-card"><h3>${z.name}</h3><p>Owner: ${z.owner || 'Contested'}</p><p>Red ${z.progress.red} • Blue ${z.progress.blue}</p></div>`).join('');
-                const mine = await apiCall('/war/assets?mine=1');
-                document.getElementById('war-assets-list').innerHTML = mine.length ? mine.map(a => `<div class="game-card"><h3>${a.name}</h3><p>${a.category} • ${a.divisionTag}</p><p>Status: ${a.reviewStatus}/${a.publishStatus}</p><button class="btn btn-sm btn-success" ${a.reviewStatus !== 'draft' ? 'disabled' : ''} onclick="warSubmitAsset('${a.id}')">Submit for Review</button></div>`).join('') : '<p>No war assets yet.</p>';
-                const lb = await apiCall('/war/leaderboard');
-                document.getElementById('war-player-board').innerHTML = lb.players.slice(0, 12).map(p => `<div class="game-card"><h3>${p.username}</h3><p>${p.faction || 'None'} • ${p.rank || 'Recruit'}</p><p>Power ${p.power || 0}</p></div>`).join('');
-            } catch (e) {}
-        };
-        const warRefresh = () => loadWarDashboard();
-        const warAssignFaction = async () => {
-            try {
-                const preference = document.getElementById('war-pref').value;
-                await apiCall('/war/preference', 'POST', { preference });
-                const res = await apiCall('/war/assign', 'POST', { preference });
-                showModal('Faction Assigned', `You joined ${res.faction.toUpperCase()} for this cycle.`);
-                loadWarDashboard();
-            } catch (e) {}
-        };
-        const warCreateParty = async () => {
-            try {
-                const res = await apiCall('/war/party/create', 'POST', {});
-                warPartyCode = res.party.code;
-                document.getElementById('war-party-code').value = warPartyCode;
-                document.getElementById('war-party-meta').innerText = `Party ${warPartyCode} created.`;
-            } catch (e) {}
-        };
-        const warJoinParty = async () => {
-            try {
-                const code = document.getElementById('war-party-code').value.trim().toUpperCase();
-                const res = await apiCall('/war/party/join', 'POST', { code });
-                warPartyCode = res.party.code;
-                document.getElementById('war-party-meta').innerText = `Joined party ${warPartyCode} (${res.party.members.length} members).`;
-            } catch (e) {}
-        };
-        const warDeployParty = async () => {
-            try {
-                const code = (document.getElementById('war-party-code').value || warPartyCode).trim().toUpperCase();
-                const preference = document.getElementById('war-pref').value;
-                const res = await apiCall('/war/party/deploy', 'POST', { code, preference });
-                showModal('Party Deployed', `Party assigned to ${res.faction.toUpperCase()}.`);
-                loadWarDashboard();
-            } catch (e) {}
-        };
-        const warJoinDivision = async () => {
-            try {
-                const divisionId = document.getElementById('war-division').value;
-                const res = await apiCall('/war/division/join', 'POST', { divisionId });
-                showModal('Division Updated', `You joined ${res.division}.`);
-                loadWarDashboard();
-            } catch (e) {}
-        };
-        const warEarn = async (source) => {
-            try { await apiCall('/war/power/earn', 'POST', { source }); loadWarDashboard(); } catch (e) {}
-        };
-        const warInvest = async () => {
-            try {
-                const targetId = document.getElementById('war-invest-target').value.trim() || 'general';
-                await apiCall('/war/invest', 'POST', { targetType: 'unlock', targetId, amount: 100 });
-                loadWarDashboard();
-            } catch (e) {}
-        };
-        const warPublishFromStudio = async () => {
-            try {
-                const name = document.getElementById('war-asset-name').value.trim();
-                if (!name) return showModal('Missing Name', 'Enter a war asset name.');
-                const payload = {
-                    name,
-                    description: document.getElementById('war-asset-desc').value.trim(),
-                    category: document.getElementById('war-asset-category').value,
-                    divisionTag: document.getElementById('war-asset-division-tag').value,
-                    costPower: parseInt(document.getElementById('war-asset-cost').value, 10) || 200,
-                    factionAccess: 'both',
-                    statConfig: { damage: 20, speed: 20, armor: 20, utility: 20 },
-                    modelData: edData ? JSON.parse(JSON.stringify(edData)) : null
-                };
-                await apiCall('/war/assets', 'POST', payload);
-                showModal('War Asset Drafted', 'Asset saved. Submit it for review from your asset list.');
-                loadWarDashboard();
-            } catch (e) {}
-        };
-        const openWarAssetPublisherFromStudio = () => {
-            navigate('war');
-            const title = (document.getElementById('editor-title') || {}).value || '';
-            if (title) document.getElementById('war-asset-name').value = `${title} Asset`;
-            showModal('Studio → War Asset', 'You can now publish your current Studio build as a war asset draft.');
-        };
-        const warSubmitAsset = async (id) => {
-            try { await apiCall(`/war/assets/${id}/submit`, 'POST', {}); loadWarDashboard(); } catch (e) {}
-        };
-        const warContribute = async (objectiveType) => {
-            try {
-                const zoneId = document.getElementById('war-zone').value;
-                await apiCall('/war/event/contribute', 'POST', { zoneId, objectiveType, points: 25 });
-                loadWarDashboard();
-            } catch (e) {}
-        };
-        window.warAssignFaction = warAssignFaction;
-        window.warCreateParty = warCreateParty;
-        window.warJoinParty = warJoinParty;
-        window.warDeployParty = warDeployParty;
-        window.warJoinDivision = warJoinDivision;
-        window.warRefresh = warRefresh;
-        window.warEarn = warEarn;
-        window.warInvest = warInvest;
-        window.warPublishFromStudio = warPublishFromStudio;
-        window.openWarAssetPublisherFromStudio = openWarAssetPublisherFromStudio;
-        window.warSubmitAsset = warSubmitAsset;
-        window.warContribute = warContribute;
-
-        const loadDashboardGames = async () => {
-            try {
-                const myData = await apiCall('/me');
-                
-                const sGrid = document.getElementById('saved-games-grid');
-                sGrid.innerHTML = myData.bookmarkedGames.length === 0 ? '<p>You haven\'t saved any games.</p>' : '';
-                myData.bookmarkedGames.forEach(g => sGrid.innerHTML += renderGameCard(g, false));
-
-                const fresh = await apiCall('/games/fresh');
-                const fGrid = document.getElementById('fresh-games-grid');
-                fGrid.innerHTML = fresh.length === 0 ? '<p>No games have been published yet.</p>' : '';
-                fresh.forEach(g => fGrid.innerHTML += renderGameCard(g, false));
-
-                const trending = await apiCall('/games/trending');
-                const tGrid = document.getElementById('trending-games-grid');
-                tGrid.innerHTML = trending.length === 0 ? '<p>Not enough data yet.</p>' : '';
-                trending.forEach(g => tGrid.innerHTML += renderGameCard(g, false));
-
-                const mostLiked = await apiCall('/games/most-liked');
-                const mlGrid = document.getElementById('most-liked-games-grid');
-                mlGrid.innerHTML = mostLiked.length === 0 ? '<p>Not enough data yet.</p>' : '';
-                mostLiked.forEach(g => mlGrid.innerHTML += renderGameCard(g, false));
-
-                const games = await apiCall('/my-games');
-                const eGrid = document.getElementById('editable-games-grid');
-                eGrid.innerHTML = games.length === 0 ? '<p>You have no games. Go create one!</p>' : '';
-                games.forEach(g => eGrid.innerHTML += renderGameCard(g, true));
-
-                const recGrid = document.getElementById('recent-games-grid');
-                recGrid.innerHTML = myData.recentlyPlayed.length === 0 ? '<p>You haven\'t played any games recently.</p>' : '';
-                myData.recentlyPlayed.forEach(g => recGrid.innerHTML += renderGameCard(g, false));
-            } catch(e) {}
-        };
-
-        const loadLibrary = async () => {
-            const query = document.getElementById('game-search').value.trim();
-            const genreFilter = document.getElementById('genre-filter').value;
-            const grid = document.getElementById('games-grid');
-            grid.innerHTML = '<p>Loading games...</p>';
-            try {
-                let url = `/games?`;
-                if(query) url += `q=${encodeURIComponent(query)}&`;
-                if(genreFilter !== 'All') url += `genre=${encodeURIComponent(genreFilter)}`;
-                
-                const games = await apiCall(url);
-                grid.innerHTML = games.length === 0 ? '<p>No games found.</p>' : '';
-                games.forEach(g => grid.innerHTML += renderGameCard(g, false));
-            } catch (e) {}
-        };
-
-
-const playRandomGame = async () => {
-            try {
-                const res = await apiCall('/games/random');
-                loadGame(res.id);
-            } catch(e) {
-                showModal('Error', 'No community games are available to play yet!');
-            }
-        };
-
-
-
-
-
-
-// ==========================================
-        // JAVASCRIPT BEHAVIOR ENGINE
-        // ==========================================
-        class JavaScriptBehaviorEngine {
+        class SculptScriptEngine {
             constructor(scriptText, contextFactory) {
                 this.rawScript = String(scriptText || '');
                 this.contextFactory = contextFactory;
                 this.state = {};
-                this.compiled = null;
                 this.lastError = 0;
-                this.compile();
+                this.instructions = this.parse(this.rawScript);
             }
 
-            compile() {
-                const source = `"use strict";
-const window=undefined,document=undefined,fetch=undefined,XMLHttpRequest=undefined,WebSocket=undefined,eval=undefined,Function=undefined;
-${this.rawScript}`;
-                try {
-                    this.compiled = new Function('ctx', 'event', 'state', source);
-                } catch (e) {
-                    this.compiled = null;
-                    printOutput(`JS Compile Error: ${e.message}`, 'error');
+            parse(scriptText) {
+                return scriptText
+                    .split(/\r?\n/)
+                    .map(line => line.trim())
+                    .filter(line => line && !line.startsWith('#') && !line.startsWith('//'));
+            }
+
+            parseValue(raw) {
+                const value = String(raw || '').trim();
+                if (/^".*"$/.test(value) || /^'.*'$/.test(value)) return value.slice(1, -1);
+                if (value === 'true') return true;
+                if (value === 'false') return false;
+                if (!Number.isNaN(Number(value)) && value !== '') return Number(value);
+                return value;
+            }
+
+            setDeep(target, path, value) {
+                if (!target || !path) return;
+                const keys = path.split('.').map(k => k.trim()).filter(Boolean);
+                if (!keys.length) return;
+                let node = target;
+                for (let i = 0; i < keys.length - 1; i++) {
+                    const key = keys[i];
+                    if (typeof node[key] !== 'object' || node[key] === null) node[key] = {};
+                    node = node[key];
+                }
+                node[keys[keys.length - 1]] = value;
+            }
+
+            applyInstruction(ctx, line) {
+                const setObjMatch = line.match(/^set\s+object\s*=\s*explorer\s+["'](.+?)["']$/i);
+                if (setObjMatch) {
+                    const name = setObjMatch[1];
+                    const found = Array.isArray(ctx.explorer) ? ctx.explorer.find(o => o && o.name === name) : null;
+                    this.state.object = found || null;
+                    return;
+                }
+
+                const createMatch = line.match(/^create\s+object\s+["'](.+?)["'](?:\s+type\s+["'](.+?)["'])?$/i);
+                if (createMatch) {
+                    if (typeof ctx.createObject === 'function') {
+                        const created = ctx.createObject({ name: createMatch[1], type: createMatch[2] || 'block' });
+                        this.state.object = created || this.state.object || null;
+                    }
+                    return;
+                }
+
+                const setPropMatch = line.match(/^set\s+property\s+["'](.+?)["']\s+to\s+(.+)$/i);
+                if (setPropMatch && this.state.object) {
+                    this.setDeep(this.state.object, setPropMatch[1], this.parseValue(setPropMatch[2]));
+                    if (typeof ctx.syncObject === 'function') ctx.syncObject(this.state.object);
+                    return;
+                }
+
+                const whenMatch = line.match(/^when\s+event\s+["'](.+?)["']\s+set\s+property\s+["'](.+?)["']\s+to\s+(.+)$/i);
+                if (whenMatch && String(ctx.event || '').toLowerCase() === whenMatch[1].toLowerCase() && this.state.object) {
+                    this.setDeep(this.state.object, whenMatch[2], this.parseValue(whenMatch[3]));
+                    if (typeof ctx.syncObject === 'function') ctx.syncObject(this.state.object);
+                    return;
                 }
             }
 
             run(eventName = 'update') {
-                if (!this.compiled) return;
                 try {
-                    const ctx = Object.freeze(this.contextFactory());
-                    this.compiled(ctx, eventName, this.state);
+                    const ctx = Object.freeze(this.contextFactory(eventName));
+                    this.instructions.forEach(line => this.applyInstruction({ ...ctx, event: eventName }, line));
                 } catch (e) {
                     const now = Date.now();
                     if (now - this.lastError > 1000) {
-                        printOutput(`JS Runtime Error (${eventName}): ${e.message}`, 'error');
+                        printOutput(`SculptScript Error (${eventName}): ${e.message}`, 'error');
                         this.lastError = now;
                     }
                 }
@@ -6846,7 +6629,7 @@ if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', bri
             edData.objects.forEach(obj => {
                 const isSel = selectedObjects.some(m => m.userData.id === obj.id);
                 // Highlight items that have scripts with a small yellow dot
-                const scriptIndicator = ((obj.scriptJs && obj.scriptJs.trim() !== '') || (obj.script && obj.script.trim() !== '')) ? '<span style="color:#f1c40f; margin-right:5px;">●</span>' : '';
+                const scriptIndicator = (obj.script && obj.script.trim() !== '') ? '<span style="color:#f1c40f; margin-right:5px;">●</span>' : '';
                 
                 list.innerHTML += `
                     <div class="explorer-item ${isSel ? 'selected' : ''}" onclick="selectObjectById('${obj.id}', event.shiftKey)">
@@ -7047,23 +6830,22 @@ if (item.type === 'button' && item.onClickEvent) {
             playerObj.health = Math.max(0, (playerObj.health || 100) - (parseFloat(amount) || 0));
             updatePlayerHealthHUD();
         };
-        // Legacy visual block scripting removed: Playsculpt now uses JavaScript editing only.
 
         const openScriptEditor = (id) => {
             const obj = edData.objects.find(o => o.id === id);
             if (!obj) return;
-            document.getElementById('script-editor-title').innerText = `JavaScript: ${obj.name}`;
+            document.getElementById('script-editor-title').innerText = `SculptScript: ${obj.name}`;
             document.getElementById('script-editor-target-id').value = id;
             document.getElementById('script-editor-panel').style.display = 'flex';
-            document.getElementById('script-js-editor').value = obj.scriptJs || '';
+            document.getElementById('sculptscript-editor').value = obj.script || '';
         };
 
         const saveScript = () => {
             const id = document.getElementById('script-editor-target-id').value;
-            const scriptText = String(document.getElementById('script-js-editor').value || '').slice(0, 12000);
+            const scriptText = String(document.getElementById('sculptscript-editor').value || '').slice(0, 12000);
             const obj = edData.objects.find(o => o.id === id);
             if (obj) {
-                obj.scriptJs = scriptText;
+                obj.script = scriptText;
                 recordEdit();
                 renderExplorer();
                 document.getElementById('script-editor-panel').style.display = 'none';
@@ -7889,8 +7671,10 @@ animatePlay();
 
 
 
-        const buildScriptContext = (mesh) => ({
+        const buildScriptContext = (mesh, eventName = 'update') => ({
             mesh,
+            event: eventName,
+            explorer: activeLevel.objects || [],
             player: playerObj,
             time: () => performance.now() / 1000,
             deltaTime: () => Math.max(0.001, Math.min(0.06, (window.playDeltaMs || 16) / 1000)),
@@ -7929,6 +7713,24 @@ animatePlay();
                 },
                 message: (msg, title = 'Script') => showModal(title, String(msg || ''))
             },
+            createObject: (cfg = {}) => {
+                if (!activeLevel || !Array.isArray(activeLevel.objects)) return null;
+                const basePos = mesh && mesh.position ? mesh.position : { x: 0, y: 2, z: 0 };
+                const newObj = {
+                    id: crypto.randomUUID(),
+                    name: String(cfg.name || 'Part').slice(0, 48),
+                    type: String(cfg.type || 'block').slice(0, 24),
+                    position: { x: Number(basePos.x) || 0, y: Number(basePos.y) || 2, z: Number(basePos.z) || 0 },
+                    rotation: { x: 0, y: 0, z: 0 },
+                    scale: { x: 1, y: 1, z: 1 },
+                    color: '#3498db',
+                    material: 'Plastic',
+                    script: ''
+                };
+                activeLevel.objects.push(newObj);
+                return newObj;
+            },
+            syncObject: () => {},
             effects: {
                 shoot: (color = '#ffff00', speed = 2.5, opts = {}) => {
                     if (typeof window.__playShoot === 'function') window.__playShoot(color, speed, opts);
@@ -7976,9 +7778,9 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         playMeshes.push(childMesh); // Push children to playMeshes so seats can be detected!
                     });
 
-                    const vehicleScriptSource = objData.scriptJs || objData.script || '';
+                    const vehicleScriptSource = objData.script || '';
                     if (vehicleScriptSource.trim() !== '') {
-                        const engine = new JavaScriptBehaviorEngine(vehicleScriptSource, () => buildScriptContext(group));
+                        const engine = new SculptScriptEngine(vehicleScriptSource, (eventName) => buildScriptContext(group, eventName));
                         group.userData.sculptEngine = engine;
                         engine.triggerEvent('start');
                     }
@@ -8010,9 +7812,9 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
 mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: (objData.noCollide || objData.canCollide === false), isAnchored: objData.isAnchored !== false, smart: objData.smart || null, smartState: {} };
                     if (objData.type === 'floatingText') applyFloatingTextVisual(mesh, objData);
                     
-                    const scriptSource = objData.scriptJs || objData.script || '';
+                    const scriptSource = objData.script || '';
                     if (scriptSource.trim() !== '') {
-                        const engine = new JavaScriptBehaviorEngine(scriptSource, () => buildScriptContext(mesh));
+                        const engine = new SculptScriptEngine(scriptSource, (eventName) => buildScriptContext(mesh, eventName));
                         mesh.userData.sculptEngine = engine;
                         engine.triggerEvent('start');
                     }
