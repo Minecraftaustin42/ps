@@ -1777,7 +1777,22 @@
                             </div>
                             <div class="form-group mb-10">
                                 <label><strong>Font:</strong></label>
-                                <input id="prop-ffont" class="form-control" value="Arial" onchange="updateSelectedProperties()">
+                                <select id="prop-ffont" class="form-control" onchange="updateSelectedProperties()">
+                                    <option value="Arial">Arial</option>
+                                    <option value="Verdana">Verdana</option>
+                                    <option value="Tahoma">Tahoma</option>
+                                    <option value="Trebuchet MS">Trebuchet MS</option>
+                                    <option value="Georgia">Georgia</option>
+                                    <option value="Times New Roman">Times New Roman</option>
+                                    <option value="Garamond">Garamond</option>
+                                    <option value="Palatino Linotype">Palatino Linotype</option>
+                                    <option value="Courier New">Courier New</option>
+                                    <option value="Lucida Console">Lucida Console</option>
+                                    <option value="Impact">Impact</option>
+                                    <option value="Comic Sans MS">Comic Sans MS</option>
+                                    <option value="Open Sans">Open Sans</option>
+                                    <option value="Audiowide">Audiowide</option>
+                                </select>
                             </div>
                             <div class="form-group mb-10">
                                 <label><strong>Text Size:</strong></label>
@@ -2782,11 +2797,12 @@ checkDailyReward(); // <-- ADDED HERE
                 `We found an autosave from ${stamp}. Recover it now?`,
                 'Recover',
                 () => {
-                    edData = saved.edData;
+                    edData = migrateLevelDataTo3D(saved.edData);
                     if (saved.genre) document.getElementById('editor-genre').value = saved.genre;
                     if (saved.title) document.getElementById('editor-title').value = saved.title;
                     historyStack = []; historyIndex = -1;
                     buildEditorScene();
+                    renderExplorer();
                     recordEdit(true);
                     showModal('Recovered', 'Studio autosave restored.');
                 },
@@ -6915,16 +6931,16 @@ if (item.type === 'button' && item.onClickEvent) {
                 const quat = new THREE.Quaternion();
                 partMesh.getWorldPosition(pos);
                 partMesh.getWorldQuaternion(quat);
-                const debris = new THREE.Mesh(partMesh.geometry.clone(), partMesh.material.clone());
-                debris.position.copy(pos);
-                debris.quaternion.copy(quat);
+                if (partMesh.parent) partMesh.parent.remove(partMesh);
+                playScene.add(partMesh);
+                partMesh.position.copy(pos);
+                partMesh.quaternion.copy(quat);
                 const vel = new THREE.Vector3(
                     (Math.random() - 0.5) * 0.45 + playerObj.vx * 0.15,
                     0.12 + Math.random() * 0.22,
                     (Math.random() - 0.5) * 0.45 + playerObj.vz * 0.15
                 );
-                deathPieces.push({ mesh: debris, velocity: vel, life: 80 + Math.floor(Math.random() * 40) });
-                playScene.add(debris);
+                deathPieces.push({ mesh: partMesh, velocity: vel, life: 80 + Math.floor(Math.random() * 40) });
             };
 
             const parts = [];
@@ -8339,10 +8355,10 @@ const updateChatBubbles = () => {
                 let tbHeight = 0;
                 toolbars.forEach(tb => tbHeight += tb.offsetHeight);
                 layout.style.height = `calc(100vh - ${tbHeight + 10}px)`;
-                if (explorer) explorer.style.display = 'none';
-                if (props) props.style.display = 'none';
-                if (editor3d) editor3d.style.marginRight = '0';
-                if (output) output.style.width = '100%';
+                if (explorer) explorer.style.display = '';
+                if (props) props.style.display = '';
+                if (editor3d) editor3d.style.marginRight = '250px';
+                if (output) output.style.width = 'calc(100% - 250px)';
             } else {
                 // Restore standard view
                 nav.style.display = 'flex';
@@ -8377,6 +8393,16 @@ const updateChatBubbles = () => {
 
                 if (playerBox.intersectsBox(collider.box)) {
                     const type = collider.mesh.userData.type || 'block';
+                    if (type === 'cylinder') {
+                        const center = new THREE.Vector3();
+                        const size = new THREE.Vector3();
+                        collider.box.getCenter(center);
+                        collider.box.getSize(size);
+                        const horizDist = Math.hypot(px - center.x, pz - center.z);
+                        const radius = Math.max(size.x, size.z) * 0.5 + 0.85;
+                        const verticalOverlap = (py + 5) > collider.box.min.y && py < collider.box.max.y;
+                        if (verticalOverlap && horizDist < radius) return true;
+                    }
                     
                     // FIX: If a block is rotated AT ALL, we MUST use complex shape collision!
                     const isRotated = collider.mesh.rotation.x !== 0 || collider.mesh.rotation.y !== 0 || collider.mesh.rotation.z !== 0;
@@ -8872,9 +8898,15 @@ const updateChatBubbles = () => {
             const tryStepUp = () => {
                 if (maxStepHeight <= 0) return false;
                 const stepInc = 0.15;
+                const baseY = playerObj.y;
                 for (let step = stepInc; step <= maxStepHeight + 0.001; step += stepInc) {
-                    if (!checkWallCollision(playerObj.x, playerObj.y + step, playerObj.z)) {
-                        playerObj.y += step;
+                    const targetY = baseY + step;
+                    if (!checkWallCollision(playerObj.x, targetY, playerObj.z)) {
+                        const supportHit = checkCollision(playerObj.x, targetY - 0.22, playerObj.z);
+                        if (!supportHit) continue;
+                        const supportDelta = Math.abs((supportHit.max.y + 0.001) - targetY);
+                        if (supportDelta > 0.45) continue;
+                        playerObj.y = supportHit.max.y + 0.001;
                         playerObj.grounded = false;
                         return true;
                     }
