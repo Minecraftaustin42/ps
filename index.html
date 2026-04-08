@@ -1585,15 +1585,15 @@
 
 <div id="script-editor-panel" style="display:none; position:absolute; top: 10px; left: 10px; right: 10px; bottom: 10px; background: rgba(30,30,30,0.95); padding: 15px; border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 200; flex-direction: column;">
                         <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap:10px; flex-wrap:wrap;">
-                            <h3 style="margin:0; color:#fff;" id="script-editor-title">SculptScript Editor</h3>
+                            <h3 style="margin:0; color:#fff;" id="script-editor-title">JavaScript Editor</h3>
                             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
                                 <button class="btn btn-sm btn-info" onclick="toggleUIDesigner()">UI Designer</button>
-                                <button class="btn btn-sm btn-success" onclick="saveScript()">Save SculptScript</button>
+                                <button class="btn btn-sm btn-success" onclick="saveScript()">Save JavaScript</button>
                                 <button class="btn btn-sm btn-danger" onclick="document.getElementById('script-editor-panel').style.display='none'">Close</button>
                             </div>
                         </div>
-                        <p style="color:#bfc9d4; font-size:12px; margin:0 0 8px 0;">Write SculptScript using plain-language commands like <code>set object = explorer "ObjectName"</code>, <code>set property "color" to "#ff0000"</code>, and <code>create object "MyBlock" type "block"</code>.</p>
-                        <textarea id="sculptscript-editor" style="width:100%; flex:1; min-height:220px; resize:none; background:#111820; color:#dce9ff; border:1px solid #3b4e61; border-radius:6px; padding:10px; font-family:monospace; font-size:13px; line-height:1.45;" spellcheck="false" placeholder="set object = explorer &quot;Baseplate&quot;&#10;set property &quot;color&quot; to &quot;#ff0000&quot;&#10;set property &quot;floatingText.text&quot; to &quot;Hello world&quot;&#10;create object &quot;MyNewBlock&quot; type &quot;block&quot;"></textarea>
+                        <p style="color:#bfc9d4; font-size:12px; margin:0 0 8px 0;">Write JavaScript for play mode with <code>ctx.world</code>, <code>ctx.part</code>, <code>ctx.playerApi</code>, <code>ctx.leaderstats</code>, <code>ctx.guns</code>, <code>ctx.storage</code>, <code>ctx.input</code>, and more. Use <code>ctx.event</code> (start/update/interact/click/custom) to control execution timing.</p>
+                        <textarea id="sculptscript-editor" style="width:100%; flex:1; min-height:220px; resize:none; background:#111820; color:#dce9ff; border:1px solid #3b4e61; border-radius:6px; padding:10px; font-family:monospace; font-size:13px; line-height:1.45;" spellcheck="false" placeholder="if (ctx.event === &quot;start&quot;) {&#10;  ctx.leaderstats.set(&quot;Coins&quot;, 0);&#10;  ctx.storage.set(&quot;spawns&quot;, 0);&#10;}&#10;if (ctx.event === &quot;interact&quot;) {&#10;  ctx.guns.configurePlayer({ damage: 35, fireRate: 100, color: &quot;#ff5500&quot; });&#10;  ctx.leaderstats.add(&quot;Coins&quot;, 25);&#10;  ctx.world.message(&quot;Weapon equipped!&quot;, &quot;Loadout&quot;);&#10;}&#10;if (ctx.event === &quot;update&quot;) {&#10;  // per-frame logic here&#10;}"></textarea>
                         <input type="hidden" id="script-editor-target-id">
                     </div>
 
@@ -1807,7 +1807,7 @@
                                 <label><strong>Enable Advanced Script:</strong></label>
                                 <input id="smart-advanced" type="checkbox" onchange="updateSmartObjectProperties()">
                             </div>
-                            <button class="btn btn-sm btn-info" style="width:100%;" onclick="openScriptEditorForSelected()">Open SculptScript Editor</button>
+                            <button class="btn btn-sm btn-info" style="width:100%;" onclick="openScriptEditorForSelected()">Open JavaScript Editor</button>
                         </div>
 
                         </div>
@@ -5614,93 +5614,43 @@ Keep playing together for more daily rewards.`, 'Aww!');
         window.funKeyboardCheats = funKeyboardCheats;
         setInterval(() => { if (localStorage.getItem('ps_break_reminder') === '1') showModal('Break Reminder', 'Stand up, hydrate, and rest your eyes for a minute.'); }, 45 * 60 * 1000);
 
-        class SculptScriptEngine {
+        class JavaScriptEngine {
             constructor(scriptText, contextFactory) {
                 this.rawScript = String(scriptText || '');
                 this.contextFactory = contextFactory;
-                this.state = {};
                 this.lastError = 0;
-                this.instructions = this.parse(this.rawScript);
+                this.compiled = this.compile(this.rawScript);
             }
 
-            parse(scriptText) {
-                return scriptText
-                    .split(/\r?\n/)
-                    .map(line => line.trim())
-                    .filter(line => line && !line.startsWith('#') && !line.startsWith('//'));
-            }
-
-            parseValue(raw) {
-                const value = String(raw || '').trim();
-                if (/^".*"$/.test(value) || /^'.*'$/.test(value)) return value.slice(1, -1);
-                if (value === 'true') return true;
-                if (value === 'false') return false;
-                if (!Number.isNaN(Number(value)) && value !== '') return Number(value);
-                return value;
-            }
-
-            setDeep(target, path, value) {
-                if (!target || !path) return;
-                const keys = path.split('.').map(k => k.trim()).filter(Boolean);
-                if (!keys.length) return;
-                let node = target;
-                for (let i = 0; i < keys.length - 1; i++) {
-                    const key = keys[i];
-                    if (typeof node[key] !== 'object' || node[key] === null) node[key] = {};
-                    node = node[key];
-                }
-                node[keys[keys.length - 1]] = value;
-            }
-
-            applyInstruction(ctx, line) {
-                const setObjMatch = line.match(/^set\s+object\s*=\s*explorer\s+["'](.+?)["']$/i);
-                if (setObjMatch) {
-                    const name = setObjMatch[1];
-                    const found = Array.isArray(ctx.explorer) ? ctx.explorer.find(o => o && o.name === name) : null;
-                    this.state.object = found || null;
-                    return;
-                }
-
-                const createMatch = line.match(/^create\s+object\s+["'](.+?)["'](?:\s+type\s+["'](.+?)["'])?$/i);
-                if (createMatch) {
-                    if (typeof ctx.createObject === 'function') {
-                        const created = ctx.createObject({ name: createMatch[1], type: createMatch[2] || 'block' });
-                        this.state.object = created || this.state.object || null;
-                    }
-                    return;
-                }
-
-                const setPropMatch = line.match(/^set\s+property\s+["'](.+?)["']\s+to\s+(.+)$/i);
-                if (setPropMatch && this.state.object) {
-                    this.setDeep(this.state.object, setPropMatch[1], this.parseValue(setPropMatch[2]));
-                    if (typeof ctx.syncObject === 'function') ctx.syncObject(this.state.object);
-                    return;
-                }
-
-                const whenMatch = line.match(/^when\s+event\s+["'](.+?)["']\s+set\s+property\s+["'](.+?)["']\s+to\s+(.+)$/i);
-                if (whenMatch && String(ctx.event || '').toLowerCase() === whenMatch[1].toLowerCase() && this.state.object) {
-                    this.setDeep(this.state.object, whenMatch[2], this.parseValue(whenMatch[3]));
-                    if (typeof ctx.syncObject === 'function') ctx.syncObject(this.state.object);
-                    return;
+            compile(source) {
+                const wrapped = `"use strict";\nreturn (function runUserScript(ctx){\n${String(source || '')}\n});`;
+                try {
+                    return new Function(wrapped)();
+                } catch (e) {
+                    printOutput(`JavaScript compile error: ${e.message}`, 'error');
+                    return null;
                 }
             }
 
             run(eventName = 'update') {
+                if (typeof this.compiled !== 'function') return;
                 try {
-                    const ctx = Object.freeze(this.contextFactory(eventName));
-                    this.instructions.forEach(line => this.applyInstruction({ ...ctx, event: eventName }, line));
+                    const ctx = this.contextFactory(eventName);
+                    this.compiled(ctx);
                 } catch (e) {
                     const now = Date.now();
-                    if (now - this.lastError > 1000) {
-                        printOutput(`SculptScript Error (${eventName}): ${e.message}`, 'error');
+                    if (now - this.lastError > 600) {
+                        printOutput(`JavaScript runtime error (${eventName}): ${e.message}`, 'error');
                         this.lastError = now;
                     }
                 }
             }
 
-            triggerEvent(eventName) { this.run(eventName); }
+            triggerEvent(eventName) { this.run(eventName || 'update'); }
             invokeHook(name) { this.run(name || 'interact'); }
         }
+
+        const SculptScriptEngine = JavaScriptEngine;
 
 
 
@@ -6834,7 +6784,7 @@ if (item.type === 'button' && item.onClickEvent) {
         const openScriptEditor = (id) => {
             const obj = edData.objects.find(o => o.id === id);
             if (!obj) return;
-            document.getElementById('script-editor-title').innerText = `SculptScript: ${obj.name}`;
+            document.getElementById('script-editor-title').innerText = `JavaScript: ${obj.name}`;
             document.getElementById('script-editor-target-id').value = id;
             document.getElementById('script-editor-panel').style.display = 'flex';
             document.getElementById('sculptscript-editor').value = obj.script || '';
@@ -7671,76 +7621,186 @@ animatePlay();
 
 
 
-        const buildScriptContext = (mesh, eventName = 'update') => ({
-            mesh,
-            event: eventName,
-            explorer: activeLevel.objects || [],
-            player: playerObj,
-            time: () => performance.now() / 1000,
-            deltaTime: () => Math.max(0.001, Math.min(0.06, (window.playDeltaMs || 16) / 1000)),
-            part: {
-                setPosition: (x, y, z) => mesh.position.set(Number(x) || 0, Number(y) || 0, Number(z) || 0),
-                move: (dx = 0, dy = 0, dz = 0) => mesh.position.add(new THREE.Vector3(Number(dx) || 0, Number(dy) || 0, Number(dz) || 0)),
-                setRotation: (x = 0, y = 0, z = 0) => mesh.rotation.set(Number(x) || 0, Number(y) || 0, Number(z) || 0),
-                rotate: (dx = 0, dy = 0, dz = 0) => { mesh.rotation.x += Number(dx) || 0; mesh.rotation.y += Number(dy) || 0; mesh.rotation.z += Number(dz) || 0; },
-                setScale: (x = 1, y = 1, z = 1) => mesh.scale.set(Math.max(0.05, Number(x) || 1), Math.max(0.05, Number(y) || 1), Math.max(0.05, Number(z) || 1)),
-                setColor: (hex = '#3498db') => { if (mesh.material && mesh.material.color) mesh.material.color.set(String(hex)); },
-                lookAtPlayer: () => mesh.lookAt(new THREE.Vector3(playerObj.x, playerObj.y + 2, playerObj.z))
-            },
-            ui: uiRuntimeManager,
-            scene: playScene,
-            showModal,
-            damagePlayer,
-            stateStore: window.smartRuntime,
-            world: {
-                objects: () => playMeshes,
-                findById: (id) => playMeshes.find(m => m.userData && m.userData.id === id),
-                findByName: (name) => playMeshes.find(m => (m.userData && m.userData.id && (activeLevel.objects || []).find(o => o.id === m.userData.id && (o.name || '').toLowerCase() === String(name || '').toLowerCase()))),
-                spawnPart: (cfg = {}) => {
-                    const geo = cfg.type === 'sphere' ? new THREE.SphereGeometry(0.5, 18, 18) : (cfg.type === 'cylinder' ? new THREE.CylinderGeometry(0.5,0.5,1,18) : new THREE.BoxGeometry(1,1,1));
-                    const mat = getMaterialForType(cfg.material || 'Plastic', cfg.color || '#3498db');
-                    const part = new THREE.Mesh(geo, mat);
-                    part.position.set(cfg.x || mesh.position.x, cfg.y || mesh.position.y, cfg.z || mesh.position.z);
-                    part.userData = { id: crypto.randomUUID(), type: cfg.type || 'block', isTool: false, noCollide: !!cfg.noCollide };
-                    playScene.add(part);
-                    playMeshes.push(part);
-                    return part;
+        const buildScriptContext = (mesh, eventName = 'update') => {
+            window.playLeaderboard = window.playLeaderboard || {};
+            const leaderboard = window.playLeaderboard;
+            const safeNum = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
+            const linkedData = (activeLevel.objects || []).find(o => o.id === (mesh?.userData?.id || null)) || null;
+            const findObjectData = (targetMesh) => (activeLevel.objects || []).find(o => o.id === (targetMesh?.userData?.id || null)) || null;
+            return {
+                mesh,
+                event: eventName,
+                explorer: activeLevel.objects || [],
+                player: playerObj,
+                time: () => performance.now() / 1000,
+                deltaTime: () => Math.max(0.001, Math.min(0.06, (window.playDeltaMs || 16) / 1000)),
+                input: {
+                    interactPressed: () => !!playInput.justInteract,
+                    clickPressed: () => !!playInput.justClicked,
+                    jumpPressed: () => !!playInput.justJumped,
+                    keysDown: () => ({ ...keys })
                 },
-                destroy: (target) => {
-                    if (!target) return;
-                    if (target.parent) target.parent.remove(target);
-                    playMeshes = playMeshes.filter(m => m !== target);
+                random: (min = 0, max = 1) => {
+                    const a = Number(min) || 0;
+                    const b = Number(max) || 1;
+                    return Math.random() * (b - a) + a;
                 },
-                message: (msg, title = 'Script') => showModal(title, String(msg || ''))
-            },
-            createObject: (cfg = {}) => {
-                if (!activeLevel || !Array.isArray(activeLevel.objects)) return null;
-                const basePos = mesh && mesh.position ? mesh.position : { x: 0, y: 2, z: 0 };
-                const newObj = {
-                    id: crypto.randomUUID(),
-                    name: String(cfg.name || 'Part').slice(0, 48),
-                    type: String(cfg.type || 'block').slice(0, 24),
-                    position: { x: Number(basePos.x) || 0, y: Number(basePos.y) || 2, z: Number(basePos.z) || 0 },
-                    rotation: { x: 0, y: 0, z: 0 },
-                    scale: { x: 1, y: 1, z: 1 },
-                    color: '#3498db',
-                    material: 'Plastic',
-                    script: ''
-                };
-                activeLevel.objects.push(newObj);
-                return newObj;
-            },
-            syncObject: () => {},
-            effects: {
-                shoot: (color = '#ffff00', speed = 2.5, opts = {}) => {
-                    if (typeof window.__playShoot === 'function') window.__playShoot(color, speed, opts);
+                math: {
+                    clamp: (n, min, max) => Math.max(Number(min) || 0, Math.min(Number(max) || 0, Number(n) || 0)),
+                    lerp: (a, b, t) => THREE.MathUtils.lerp(Number(a) || 0, Number(b) || 0, Number(t) || 0),
+                    degToRad: (d) => THREE.MathUtils.degToRad(Number(d) || 0),
+                    radToDeg: (r) => THREE.MathUtils.radToDeg(Number(r) || 0),
+                    distanceToPlayer: () => mesh.position.distanceTo(new THREE.Vector3(playerObj.x, playerObj.y + 2, playerObj.z))
+                },
+                log: (...args) => printOutput(`[Script] ${args.map(a => String(a)).join(' ')}`, 'info'),
+                wait: (ms = 0) => new Promise(resolve => setTimeout(resolve, Math.max(0, Number(ms) || 0))),
+                part: {
+                    setPosition: (x, y, z) => mesh.position.set(Number(x) || 0, Number(y) || 0, Number(z) || 0),
+                    move: (dx = 0, dy = 0, dz = 0) => mesh.position.add(new THREE.Vector3(Number(dx) || 0, Number(dy) || 0, Number(dz) || 0)),
+                    setRotation: (x = 0, y = 0, z = 0) => mesh.rotation.set(Number(x) || 0, Number(y) || 0, Number(z) || 0),
+                    rotate: (dx = 0, dy = 0, dz = 0) => { mesh.rotation.x += Number(dx) || 0; mesh.rotation.y += Number(dy) || 0; mesh.rotation.z += Number(dz) || 0; },
+                    setScale: (x = 1, y = 1, z = 1) => mesh.scale.set(Math.max(0.05, Number(x) || 1), Math.max(0.05, Number(y) || 1), Math.max(0.05, Number(z) || 1)),
+                    setColor: (hex = '#3498db') => { if (mesh.material && mesh.material.color) mesh.material.color.set(String(hex)); },
+                    lookAtPlayer: () => mesh.lookAt(new THREE.Vector3(playerObj.x, playerObj.y + 2, playerObj.z)),
+                    anchor: (anchored = true) => { mesh.userData.isAnchored = !!anchored; },
+                    collide: (canCollide = true) => { mesh.userData.noCollide = !canCollide; },
+                    transparency: (value = 0) => {
+                        if (!mesh.material) return;
+                        const t = Math.max(0, Math.min(1, safeNum(value, 0)));
+                        mesh.material.transparent = t > 0;
+                        mesh.material.opacity = Math.max(0.02, 1 - t);
+                    },
+                    data: () => linkedData
+                },
+                ui: uiRuntimeManager,
+                scene: playScene,
+                showModal,
+                damagePlayer,
+                stateStore: window.smartRuntime,
+                leaderstats: {
+                    getAll: () => ({ ...leaderboard }),
+                    get: (name, fallback = 0) => leaderboard[name] ?? fallback,
+                    set: (name, value) => { leaderboard[String(name || 'Stat')] = value; return leaderboard[String(name || 'Stat')]; },
+                    add: (name, amount = 1) => {
+                        const key = String(name || 'Stat');
+                        const next = (Number(leaderboard[key]) || 0) + (Number(amount) || 0);
+                        leaderboard[key] = next;
+                        return next;
+                    },
+                    remove: (name) => { delete leaderboard[String(name || 'Stat')]; }
+                },
+                guns: {
+                    configurePlayer: (cfg = {}) => {
+                        playerObj.blasterDamage = Math.max(1, Number(cfg.damage ?? playerObj.blasterDamage) || playerObj.blasterDamage);
+                        playerObj.blasterSpeed = Math.max(0.2, Number(cfg.speed ?? playerObj.blasterSpeed) || playerObj.blasterSpeed);
+                        playerObj.blasterSpread = Math.max(0, Number(cfg.spread ?? playerObj.blasterSpread) || playerObj.blasterSpread);
+                        playerObj.blasterFireRate = Math.max(35, Number(cfg.fireRate ?? playerObj.blasterFireRate) || playerObj.blasterFireRate);
+                        playerObj.blasterLifetime = Math.max(20, Number(cfg.lifetime ?? playerObj.blasterLifetime) || playerObj.blasterLifetime);
+                        if (cfg.color) playerObj.blasterColor = String(cfg.color);
+                    },
+                    shoot: (color = '#ffff00', speed = 2.5, opts = {}) => {
+                        if (typeof window.__playShoot === 'function') window.__playShoot(color, speed, opts);
+                    },
+                    setWeaponPreset: (name = 'rifle') => {
+                        const n = String(name || '').toLowerCase();
+                        const preset = n === 'sniper'
+                            ? { damage: 80, speed: 4.2, spread: 0.01, fireRate: 600, lifetime: 180, color: '#ff4444' }
+                            : (n === 'shotgun'
+                                ? { damage: 18, speed: 2.2, spread: 0.28, fireRate: 400, lifetime: 80, color: '#f39c12' }
+                                : (n === 'smg'
+                                    ? { damage: 12, speed: 2.9, spread: 0.06, fireRate: 70, lifetime: 70, color: '#9b59b6' }
+                                    : { damage: 25, speed: 2.7, spread: 0.04, fireRate: 150, lifetime: 100, color: '#ffff00' }));
+                        playerObj.blasterDamage = preset.damage;
+                        playerObj.blasterSpeed = preset.speed;
+                        playerObj.blasterSpread = preset.spread;
+                        playerObj.blasterFireRate = preset.fireRate;
+                        playerObj.blasterLifetime = preset.lifetime;
+                        playerObj.blasterColor = preset.color;
+                        return preset;
+                    }
+                },
+                playerApi: {
+                    teleport: (x, y, z) => { playerObj.x = safeNum(x, playerObj.x); playerObj.y = safeNum(y, playerObj.y); playerObj.z = safeNum(z, playerObj.z); },
+                    addHealth: (amount = 0) => { playerObj.health = Math.max(0, Math.min(100, (playerObj.health || 100) + safeNum(amount, 0))); },
+                    setWalkSpeed: (speed = 0.2) => { playerObj.speed = Math.max(0.05, Math.min(2, safeNum(speed, 0.2))); },
+                    setJumpPower: (jump = 0.6) => { playerObj.jump = Math.max(0.1, Math.min(3, safeNum(jump, 0.6))); }
+                },
+                world: {
+                    objects: () => playMeshes,
+                    findById: (id) => playMeshes.find(m => m.userData && m.userData.id === id),
+                    findByName: (name) => playMeshes.find(m => (m.userData && m.userData.id && (activeLevel.objects || []).find(o => o.id === m.userData.id && (o.name || '').toLowerCase() === String(name || '').toLowerCase()))),
+                    findDataByName: (name) => (activeLevel.objects || []).find(o => (o.name || '').toLowerCase() === String(name || '').toLowerCase()) || null,
+                    forEach: (fn) => {
+                        if (typeof fn !== 'function') return;
+                        playMeshes.forEach((m, idx) => fn(m, idx, findObjectData(m)));
+                    },
+                    spawnPart: (cfg = {}) => {
+                        const geo = cfg.type === 'sphere' ? new THREE.SphereGeometry(0.5, 18, 18) : (cfg.type === 'cylinder' ? new THREE.CylinderGeometry(0.5,0.5,1,18) : new THREE.BoxGeometry(1,1,1));
+                        const mat = getMaterialForType(cfg.material || 'Plastic', cfg.color || '#3498db');
+                        const part = new THREE.Mesh(geo, mat);
+                        part.position.set(cfg.x || mesh.position.x, cfg.y || mesh.position.y, cfg.z || mesh.position.z);
+                        part.userData = { id: crypto.randomUUID(), type: cfg.type || 'block', isTool: false, noCollide: !!cfg.noCollide };
+                        playScene.add(part);
+                        playMeshes.push(part);
+                        return part;
+                    },
+                    destroy: (target) => {
+                        if (!target) return;
+                        if (target.parent) target.parent.remove(target);
+                        playMeshes = playMeshes.filter(m => m !== target);
+                    },
+                    message: (msg, title = 'Script') => showModal(title, String(msg || '')),
+                    getGravity: () => safeNum(activeLevel?.settings?.gravity, 0.35),
+                    setGravity: (value = 0.35) => { if (activeLevel?.settings) activeLevel.settings.gravity = Math.max(0, Math.min(5, safeNum(value, 0.35))); },
+                    setSkyColor: (hex = '#87CEEB') => { if (activeLevel?.settings) activeLevel.settings.skyColor = String(hex); if (playScene) playScene.background = new THREE.Color(String(hex)); }
+                },
+                createObject: (cfg = {}) => {
+                    if (!activeLevel || !Array.isArray(activeLevel.objects)) return null;
+                    const basePos = mesh && mesh.position ? mesh.position : { x: 0, y: 2, z: 0 };
+                    const newObj = {
+                        id: crypto.randomUUID(),
+                        name: String(cfg.name || 'Part').slice(0, 48),
+                        type: String(cfg.type || 'block').slice(0, 24),
+                        position: { x: Number(basePos.x) || 0, y: Number(basePos.y) || 2, z: Number(basePos.z) || 0 },
+                        rotation: { x: 0, y: 0, z: 0 },
+                        scale: { x: 1, y: 1, z: 1 },
+                        color: '#3498db',
+                        material: 'Plastic',
+                        script: ''
+                    };
+                    activeLevel.objects.push(newObj);
+                    return newObj;
+                },
+                syncObject: () => {},
+                storage: {
+                    get: (key, fallback = null) => {
+                        const bucket = window.smartRuntime?.scriptStore || {};
+                        return Object.prototype.hasOwnProperty.call(bucket, key) ? bucket[key] : fallback;
+                    },
+                    set: (key, value) => {
+                        window.smartRuntime = window.smartRuntime || {};
+                        window.smartRuntime.scriptStore = window.smartRuntime.scriptStore || {};
+                        window.smartRuntime.scriptStore[key] = value;
+                    },
+                    remove: (key) => {
+                        if (window.smartRuntime?.scriptStore) delete window.smartRuntime.scriptStore[key];
+                    },
+                    clear: () => { if (window.smartRuntime) window.smartRuntime.scriptStore = {}; }
+                },
+                effects: {
+                    shoot: (color = '#ffff00', speed = 2.5, opts = {}) => {
+                        if (typeof window.__playShoot === 'function') window.__playShoot(color, speed, opts);
+                    },
+                    sound: (id, volume = 0.5) => {
+                        if (window.playFxContext && typeof window.playFxContext.playSound === 'function') window.playFxContext.playSound(id, volume);
+                    }
+                },
+                tools: {
+                    equipped: () => equippedToolIndex >= 0 ? playerInventory[equippedToolIndex]?.mesh : null,
+                    inventory: () => playerInventory
                 }
-            },
-            tools: {
-                equipped: () => equippedToolIndex >= 0 ? playerInventory[equippedToolIndex]?.mesh : null,
-                inventory: () => playerInventory
-            }
-        });
+            };
+        };
  const buildPlayScene = () => {
 
 if (window.playTerrainMesh) {
@@ -8280,6 +8340,22 @@ const updateChatBubbles = () => {
             });
         };
 
+        const triggerContextualInteract = () => {
+            if (!playInput.justInteract || !playScene || !playCamera) return;
+            if (!raycaster) raycaster = new THREE.Raycaster();
+            const center = new THREE.Vector2(0, 0);
+            raycaster.setFromCamera(center, playCamera);
+            const candidates = playMeshes.filter(m => m && m.userData && m.userData.sculptEngine && !m.userData.isTool);
+            const hits = raycaster.intersectObjects(candidates, true);
+            const first = hits.find(h => h.distance <= 18 && h.object);
+            if (!first) return;
+            let hitMesh = first.object;
+            while (hitMesh && !(hitMesh.userData && hitMesh.userData.sculptEngine) && hitMesh.parent) hitMesh = hitMesh.parent;
+            if (hitMesh && hitMesh.userData && hitMesh.userData.sculptEngine) {
+                hitMesh.userData.sculptEngine.triggerEvent('interact');
+            }
+        };
+
         const updateDynamicObjectPhysics = () => {
             if (!activeLevel || !playScene) return;
             const gravityStrength = Math.max(0.02, (activeLevel.settings?.gravity || 0.35) * 0.06);
@@ -8758,6 +8834,7 @@ const animatePlay = () => {
                 };
                 playCamera.getWorldDirection(ctx.cameraDir);
                 window.__playShoot = ctx.shoot;
+                window.playFxContext = ctx;
                 if (playInput.justClicked && equippedToolIndex !== -1) {
                     const eqTool = playerInventory[equippedToolIndex] ? playerInventory[equippedToolIndex].mesh : null;
                     if (eqTool && eqTool.userData && eqTool.userData.sculptEngine) eqTool.userData.sculptEngine.triggerEvent('click');
@@ -8804,6 +8881,7 @@ const animatePlay = () => {
                 }
                 updatePhysics3D();
                 updateSmartObjectBehaviors();
+                triggerContextualInteract();
                 updatePlayerHealthHUD();
 
 if (playerMesh) {
