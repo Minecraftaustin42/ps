@@ -2577,7 +2577,7 @@ const toggleMultiSelect = () => {
                     keys.d = false;
                 };
 
-                jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playInput.justJumped = true; jumpBtn.style.background = 'rgba(46, 204, 113, 0.9)'; }, { passive: false });
+                jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playInput.justJumped = true; jumpBufferFrames = 8; jumpBtn.style.background = 'rgba(46, 204, 113, 0.9)'; }, { passive: false });
                 jumpBtn.addEventListener('touchend', (e) => { e.preventDefault(); jumpBtn.style.background = 'rgba(46, 204, 113, 0.6)'; }, { passive: false });
 
                 const onLookMove = (touch) => {
@@ -4335,15 +4335,12 @@ const dom = edRenderer.domElement;
                         const snapScale = parseFloat(document.getElementById('snap-scale').value) || 1;
                         const snapRot = parseFloat(document.getElementById('snap-rot').value) || 15;
                         
-                        dragStartTransforms.forEach(t => {
-                            // Calculate Local Axis perfectly matching the object's rotation
-                            const localAxisVec = new THREE.Vector3();
-                            localAxisVec[axis] = 1;
-                            localAxisVec.applyQuaternion(t.startQuat).normalize();
-                            
-                            // Align the vector to the specific handle the user grabbed (+ or -)
-                            const handleAxisVec = localAxisVec.clone().multiplyScalar(dir);
+                        const gizmoAxisVec = new THREE.Vector3();
+                        gizmoAxisVec[axis] = 1;
+                        gizmoAxisVec.applyQuaternion(customGizmo.quaternion).normalize();
+                        const handleAxisVec = gizmoAxisVec.clone().multiplyScalar(dir);
 
+                        dragStartTransforms.forEach(t => {
                             if (activeGizmoPart.action === 'translate') {
                                 let dragDist = delta.dot(handleAxisVec);
                                 dragDist = Math.round(dragDist / snapMove) * snapMove;
@@ -7159,6 +7156,8 @@ playerObj = {
         let equippedToolIndex = -1;
         let playInput = { justClicked: false, justJumped: false, justInteract: false };
         let playAimNdc = { x: 0, y: 0 };
+        let jumpBufferFrames = 0;
+        let coyoteFrames = 0;
 
         const keys = { w: false, a: false, s: false, d: false, q: false, e: false, space: false };
 
@@ -7225,7 +7224,10 @@ if (e.code === 'Space') {
                 if (document.getElementById('view-play').classList.contains('active') || document.getElementById('view-create').classList.contains('active')) {
                     e.preventDefault(); // Stop the page from scrolling down!
                 }
-                if (!keys.space) playInput.justJumped = true; // FIX: Only trigger jump once per press!
+                if (!keys.space) {
+                    playInput.justJumped = true; // FIX: Only trigger jump once per press!
+                    jumpBufferFrames = 8;
+                }
                 keys.space = true;
             }
         
@@ -8405,6 +8407,8 @@ const updateChatBubbles = () => {
 
     const updatePhysics3D = () => {
             if (playerObj.seatCooldown > 0) playerObj.seatCooldown--;
+            if (jumpBufferFrames > 0) jumpBufferFrames--;
+            if (coyoteFrames > 0) coyoteFrames--;
             updateDynamicObjectPhysics();
 
             // --- ADVANCED VEHICLE & AIRCRAFT PHYSICS ---
@@ -8690,7 +8694,7 @@ const updateChatBubbles = () => {
                 else playerObj.vy = 0; // Stick to the ladder
                 
                 // JUMPING OFF LADDERS
-                if (playInput.justJumped || keys.space) {
+                if (playInput.justJumped || jumpBufferFrames > 0) {
                     playerObj.vy = playerObj.jump * 0.8; // Give a slight vertical boost
                     
                     // Push player backward based on camera so they detach from the rungs
@@ -8700,6 +8704,7 @@ const updateChatBubbles = () => {
                     playerObj.vz -= camForward.z * 0.8;
                     
                     playInput.justJumped = false; // Consume the input!
+                    jumpBufferFrames = 0;
                 }
             } 
             else { 
@@ -8729,6 +8734,7 @@ const updateChatBubbles = () => {
                             const impact = -playerObj.vy;
                             playerObj.y = exactHeight + 0.001; 
                             playerObj.grounded = true; // PROVEN GROUNDED
+                            coyoteFrames = 6;
                             playerObj.vy = 0; 
                             if (impact > 2.8) damagePlayer((impact - 2.8) * 10);
                             if (slopeDiff > 0.1) { playerObj.vx *= 0.6; playerObj.vz *= 0.6; } 
@@ -8744,6 +8750,7 @@ const updateChatBubbles = () => {
                     const impact = -playerObj.vy;
                     playerObj.y = hit.max.y + 0.001; 
                     playerObj.grounded = true; // PROVEN GROUNDED
+                    coyoteFrames = 6;
                     playerObj.vy = 0; 
                     if (impact > 3.2) damagePlayer((impact - 3.2) * 8);
                 } else if (playerObj.vy > 0) { 
@@ -8753,9 +8760,12 @@ const updateChatBubbles = () => {
             }
 
             // --- STANDARD JUMP EXECUTION ---
-            if ((keys.space || playInput.justJumped) && playerObj.grounded) {
+            const wantsJump = playInput.justJumped || jumpBufferFrames > 0;
+            if (wantsJump && (playerObj.grounded || coyoteFrames > 0)) {
                 playerObj.vy = playerObj.jump; 
                 playerObj.grounded = false; 
+                coyoteFrames = 0;
+                jumpBufferFrames = 0;
                 currentSessionJumps++; 
                 playInput.justJumped = false; // Consume the jump input!
             }
