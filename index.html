@@ -2840,11 +2840,13 @@ else if (viewId === 'groups') {
                 if (document.getElementById('view-landing').classList.contains('active')) {
                     navigate('dashboard');
                 }
+                startNotificationsPolling();
                 
             } catch (e) {
                 console.error("Session restore failed. Reason:", e);
                 localStorage.removeItem('ps_token');
                 updateNav();
+                stopNotificationsPolling();
                 navigate('landing'); // Safely return to the landing page on error
             }
         };
@@ -2855,6 +2857,7 @@ else if (viewId === 'groups') {
                 const data = await apiCall('/signup', 'POST', { username: user, password: pass });
                 localStorage.setItem('ps_token', data.token);
                 currentUser = data;
+                startNotificationsPolling();
                 updateNav(); navigate('dashboard');
             } catch (e) { }
         };
@@ -2914,6 +2917,7 @@ else if (viewId === 'groups') {
                     processWarnings(data.pendingWarnings);
                 }
                 
+                startNotificationsPolling();
                 updateNav(); 
                 navigate('dashboard');
                 
@@ -2933,6 +2937,7 @@ else if (viewId === 'groups') {
                 try { await apiCall('/logout', 'POST'); } catch (e) {}
                 localStorage.removeItem('ps_token');
                 currentUser = null; updateNav(); navigate('landing');
+                stopNotificationsPolling();
                 updateModPanelNav();
             }
         };
@@ -10589,6 +10594,31 @@ const isModeratorAccount = () => {
 
 
 let notifications = [];
+let notifIntervalId = null;
+
+const stopNotificationsPolling = () => {
+    if (notifIntervalId) {
+        clearInterval(notifIntervalId);
+        notifIntervalId = null;
+    }
+    window.notifInterval = null;
+    const countEl = document.getElementById("notif-count");
+    if (countEl) countEl.style.display = "none";
+};
+
+const startNotificationsPolling = () => {
+    stopNotificationsPolling();
+    if (!currentUser || !localStorage.getItem('ps_token')) return;
+    loadNotifications();
+    notifIntervalId = setInterval(() => {
+        if (!currentUser || !localStorage.getItem('ps_token')) {
+            stopNotificationsPolling();
+            return;
+        }
+        loadNotifications();
+    }, 3000);
+    window.notifInterval = notifIntervalId;
+};
 
 document.getElementById("notif-icon").onclick = () => {
     const panel = document.getElementById("notif-panel");
@@ -10596,21 +10626,16 @@ document.getElementById("notif-icon").onclick = () => {
 };
 
 async function loadNotifications() {
+    const token = localStorage.getItem('ps_token');
+    if (!token || !currentUser) return;
     try {
         const res = await fetch("/api/notifications", {
-            headers: { authorization: localStorage.ps_token }
+            headers: { authorization: token }
         });
 
-        // 🔴 HANDLE AUTH FAILURE
         if (res.status === 401) {
-            console.warn("Session expired");
-
-            // stop spam loop
-            clearInterval(window.notifInterval);
-
-            document.getElementById("notif-count").style.display = "none";
-
-            return; // 🚫 STOP HERE
+            stopNotificationsPolling();
+            return;
         }
 
         const data = await res.json();
@@ -10674,9 +10699,11 @@ function joinGameFromNotif(gameId) {
     document.getElementById("notif-panel").style.display = "none";
 }
 async function clearNotifications() {
+    const token = localStorage.getItem('ps_token');
+    if (!token || !currentUser) return;
     await fetch("/api/notifications/clear", {
         method: "POST",
-        headers: { authorization: localStorage.ps_token }
+        headers: { authorization: token }
     });
     loadNotifications();
 }
@@ -10761,9 +10788,7 @@ async function sendInvite() {
     }
 }
 
-// 🔁 AUTO REFRESH (REAL-TIME FEEL)
-setInterval(loadNotifications, 3000); // every 3 seconds
-// loadNotifications();
+// Notification polling is started only after an authenticated session is restored.
 
 function updateModPanelNav() {
     const btn = document.getElementById('nav-mod-panel');
