@@ -2530,10 +2530,15 @@ app.post('/api/games/:id/updates', requireAuth, (req, res) => {
     }
 
     if (!canEdit) return res.status(403).json({ error: 'Not authorized to post updates.' });
-    if (!req.body.text || req.body.text.trim().length === 0) return res.status(400).json({ error: 'Update text cannot be empty.' });
+    if (!req.body.title || req.body.title.trim().length === 0) return res.status(400).json({ error: 'Update title cannot be empty.' });
+    if (!req.body.text || req.body.text.trim().length === 0) return res.status(400).json({ error: 'Update description cannot be empty.' });
 
     if (!game.updates) game.updates = [];
-    game.updates.unshift({ text: req.body.text.trim().substring(0, 200), timestamp: Date.now() });
+    game.updates.unshift({
+        title: req.body.title.trim().substring(0, 80),
+        text: req.body.text.trim().substring(0, 400),
+        timestamp: Date.now()
+    });
     
     saveDB();
     res.json({ success: true, updates: game.updates });
@@ -2980,7 +2985,7 @@ app.post('/api/games/:id/chat', requireAuth, (req, res) => {
 
 app.post('/api/games/:id/play-sync', requireAuth, (req, res) => {
     const gameId = req.params.id;
-    const { x, y, z, rotY, sceneId, color, bodyColors } = req.body;
+    const { x, y, z, rotY, sceneId, color, bodyColors, isDead, deadAt } = req.body;
     const user = db.users.find(u => u.id === req.userId);
 
 if (!activePlayers[gameId]) activePlayers[gameId] = {};
@@ -2998,6 +3003,8 @@ activePlayers[gameId][req.userId] = {
     color: color || user.color || '#e74c3c', 
     equipped: user.equipped,
     bodyColors: bodyColors || null,
+    isDead: !!isDead,
+    deadAt: deadAt || null,
     equippedShirtImage: shirtItem ? shirtItem.designImage : null,
     equippedPantsImage: pantsItem ? pantsItem.designImage : null,
     timestamp: Date.now(),
