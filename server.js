@@ -2791,53 +2791,58 @@ app.post('/api/games/:id/collaborators', requireAuth, (req, res) => {
 });
 
 app.post('/api/games/:id/sync', requireAuth, (req, res) => {
-    const game = db.games.find(g => g.id === req.params.id);
-    if (!game) return res.status(404).json({ error: 'Game not found.' });
-    
-    let canEdit = game.authorId === req.userId || game.collaborators.includes(req.userId);
-    if (game.groupId) {
-        const group = db.groups.find(gr => gr.id === game.groupId);
-        const perms = getGroupMemberPerms(group, req.userId);
-        if (perms && perms.editGames) canEdit = true;
-    }
+    try {
+        const game = db.games.find(g => g.id === req.params.id);
+        if (!game) return res.status(404).json({ error: 'Game not found.' });
+        
+        let canEdit = game.authorId === req.userId || game.collaborators.includes(req.userId);
+        if (game.groupId) {
+            const group = db.groups.find(gr => gr.id === game.groupId);
+            const perms = getGroupMemberPerms(group, req.userId);
+            if (perms && perms.editGames) canEdit = true;
+        }
 
-    if (!canEdit) return res.status(403).json({ error: 'Not authorized.' });
+        if (!canEdit) return res.status(403).json({ error: 'Not authorized.' });
 
-    const { gameData, genre, lastLocalEditTime, cursor } = req.body;
-    if (!activeEditors[game.id]) activeEditors[game.id] = {};
-    
-    // Store their timestamp AND their 3D cursor position
-    activeEditors[game.id][req.userId] = {
-        timestamp: Date.now(),
-        cursor: cursor || null
-    };
+        const { gameData, genre, lastLocalEditTime, cursor } = req.body || {};
+        if (!activeEditors[game.id]) activeEditors[game.id] = {};
+        
+        // Store their timestamp AND their 3D cursor position
+        activeEditors[game.id][req.userId] = {
+            timestamp: Date.now(),
+            cursor: cursor || null
+        };
 
-    const activeUsernames = [];
-    const activeEditorsData = []; // Holds the 3D data of other players
-    
-    for (let uId in activeEditors[game.id]) {
-        if (Date.now() - activeEditors[game.id][uId].timestamp < 4000) {
-            const u = db.users.find(usr => usr.id === uId);
-            if (u) {
-                activeUsernames.push(u.username);
-                // Send cursor data to everyone EXCEPT the user requesting it
-                if (uId !== req.userId && activeEditors[game.id][uId].cursor) {
-                    activeEditorsData.push({ username: u.username, cursor: activeEditors[game.id][uId].cursor });
+        const activeUsernames = [];
+        const activeEditorsData = []; // Holds the 3D data of other players
+        
+        for (let uId in activeEditors[game.id]) {
+            if (Date.now() - activeEditors[game.id][uId].timestamp < 4000) {
+                const u = db.users.find(usr => usr.id === uId);
+                if (u) {
+                    activeUsernames.push(u.username);
+                    // Send cursor data to everyone EXCEPT the user requesting it
+                    if (uId !== req.userId && activeEditors[game.id][uId].cursor) {
+                        activeEditorsData.push({ username: u.username, cursor: activeEditors[game.id][uId].cursor });
+                    }
                 }
-            }
-        } else delete activeEditors[game.id][uId];
-    }
+            } else delete activeEditors[game.id][uId];
+        }
 
-    let appliedUpdate = false;
-    if (gameData && lastLocalEditTime > game.lastEditTime) {
-        game.gameData = sanitizeGameData(gameData);
-        if (genre) game.genre = genre;
-        game.lastEditTime = lastLocalEditTime;
-        saveDB(); appliedUpdate = true;
-    }
+        let appliedUpdate = false;
+        if (gameData && Number.isFinite(lastLocalEditTime) && lastLocalEditTime > game.lastEditTime) {
+            game.gameData = sanitizeGameData(gameData);
+            if (genre) game.genre = genre;
+            game.lastEditTime = lastLocalEditTime;
+            saveDB(); appliedUpdate = true;
+        }
 
-    // Return the new activeEditorsData array
-    res.json({ gameData: game.gameData, genre: game.genre, lastEditTime: game.lastEditTime, activeEditors: activeUsernames, activeEditorsData, acceptedLocalUpdate: appliedUpdate });
+        // Return the new activeEditorsData array
+        res.json({ gameData: game.gameData, genre: game.genre, lastEditTime: game.lastEditTime, activeEditors: activeUsernames, activeEditorsData, acceptedLocalUpdate: appliedUpdate });
+    } catch (error) {
+        console.error('Team sync error:', error);
+        res.status(500).json({ error: 'Team sync temporarily unavailable. Please retry.' });
+    }
 });
 
 app.post("/api/invite", requireAuth, (req, res) => {

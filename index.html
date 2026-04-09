@@ -2397,8 +2397,28 @@ async function safeFetch(url, options = {}) {
             if (body) config.body = JSON.stringify(body);
             try {
                 const res = await fetch(API_BASE + endpoint, config);
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Server Error');
+                const raw = await res.text();
+                const contentType = (res.headers.get('content-type') || '').toLowerCase();
+                let data = {};
+
+                if (raw) {
+                    if (contentType.includes('application/json') || /^[\s\n\r\t]*[\[{]/.test(raw)) {
+                        try {
+                            data = JSON.parse(raw);
+                        } catch (parseError) {
+                            data = { error: `Server returned invalid JSON (HTTP ${res.status})` };
+                        }
+                    } else {
+                        data = { error: raw.slice(0, 200).trim() || `HTTP ${res.status}` };
+                    }
+                }
+
+                if (!res.ok) {
+                    const fallbackMsg = res.status >= 500
+                        ? `Server temporarily unavailable (HTTP ${res.status}). Please try again.`
+                        : `Request failed (HTTP ${res.status})`;
+                    throw new Error(data.error || fallbackMsg);
+                }
                 
                 // Keep frontend coins up to date easily via responses that affect them
 if (data.coins !== undefined && currentUser && !data.groupCoins) {
@@ -7381,6 +7401,11 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     const status = document.getElementById('autosave-status');
                     if (status && lastLocalEditTime > 0) { status.innerText = 'Autosaved'; setTimeout(() => status.innerText = '', 1000); }
                 } catch(e) {
+                    const status = document.getElementById('autosave-status');
+                    if (status) {
+                        status.innerText = 'Sync reconnecting...';
+                        setTimeout(() => { if (status.innerText === 'Sync reconnecting...') status.innerText = ''; }, 1800);
+                    }
                     teamSyncCooldownUntil = Date.now() + 2000; // prevent 502 spam storms
                 } finally {
                     teamSyncInFlight = false;
