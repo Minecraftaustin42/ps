@@ -1797,6 +1797,18 @@
                                 <label><strong>Text Size:</strong></label>
                                 <input id="prop-fsize" type="number" min="8" max="160" value="40" class="form-control" onchange="updateSelectedProperties()">
                             </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Text Color:</strong></label>
+                                <input id="prop-ftext-color" type="color" class="form-control" value="#ffffff" onchange="updateSelectedProperties()">
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Background Color:</strong></label>
+                                <input id="prop-fbg-color" type="color" class="form-control" value="#000000" onchange="updateSelectedProperties()">
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Background Transparency:</strong> <span id="prop-fbg-transparency-label">1</span></label>
+                                <input id="prop-fbg-transparency" type="range" min="0" max="1" step="0.05" value="1" class="form-control" oninput="document.getElementById('prop-fbg-transparency-label').innerText=this.value; updateSelectedProperties()">
+                            </div>
                         </div>
                         <div id="smart-props-section" style="display:none; margin-top:10px; background:#f6fbff; border:1px solid #d7e7f5; border-radius:4px; padding:8px;">
                             <h5 style="margin:0 0 8px 0; color:#2c3e50;">Smart Object Logic</h5>
@@ -2415,8 +2427,8 @@ if (data.coins !== undefined && currentUser && !data.groupCoins) {
                     <h3 style="text-align:left;">${g.title}</h3>
                     <p style="font-size:11px; text-align:left;">By <a href="javascript:void(0)" onclick="if('${g.groupId}' && '${g.groupId}' !== 'undefined' && '${g.groupId}' !== 'null') { loadGroupDetail('${g.groupId}'); } else { loadProfile('${g.authorName}'); navigate('profile'); }" style="color:#3498db;">${g.authorName}</a></p>
                     <div class="game-stats">
-                        <span class="plays">${g.plays || 0}</span>
-                        <span>${g.likes || 0}</span>
+                        <span class="plays">Plays: ${g.plays || 0}</span>
+                        <span>Likes: ${g.likes || 0}</span>
                     </div>
                     <div class="game-actions">
                         <button class="btn btn-success btn-sm" onclick="loadGame('${g.id}')">Play</button>
@@ -6111,12 +6123,19 @@ let currentTransformSpace = 'local';
         };
         window.addSmartObject = addSmartObject;
 
-        const createFloatingTextTexture = (text, color, fontFamily, fontSize) => {
+        const createFloatingTextTexture = (text, color, fontFamily, fontSize, bgColor = '#000000', bgTransparency = 1) => {
             const canvas = document.createElement('canvas');
             canvas.width = 1024;
             canvas.height = 256;
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const bgAlpha = Math.max(0, Math.min(1, 1 - (parseFloat(bgTransparency) || 0)));
+            if (bgAlpha > 0.001) {
+                ctx.fillStyle = bgColor || '#000000';
+                ctx.globalAlpha = bgAlpha;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.globalAlpha = 1;
+            }
             ctx.font = `700 ${Math.max(8, Math.min(160, fontSize || 40))}px ${fontFamily || 'Arial'}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -6140,7 +6159,14 @@ let currentTransformSpace = 'local';
                 mesh.userData.floatingTextSprite = sprite;
             }
             if (sprite.material.map) sprite.material.map.dispose();
-            sprite.material.map = createFloatingTextTexture(objData.text || 'Text', objData.color || '#ffffff', objData.fontFamily || 'Arial', objData.textSize || 40);
+            sprite.material.map = createFloatingTextTexture(
+                objData.text || 'Text',
+                objData.textColor || objData.color || '#ffffff',
+                objData.fontFamily || 'Arial',
+                objData.textSize || 40,
+                objData.backgroundColor || '#000000',
+                typeof objData.backgroundTransparency === 'number' ? objData.backgroundTransparency : 1
+            );
             sprite.material.needsUpdate = true;
             const sx = Math.max(1, objData.scale?.x || 4);
             const sy = Math.max(0.6, (objData.textSize || 40) / 40);
@@ -6160,9 +6186,23 @@ const dir = new THREE.Vector3();
 
             let newId = crypto.randomUUID();
             if (type === 'spawn') {
-                if (!edData.spawn) edData.spawn = { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, scale: {x:4, y:1, z:4} };
-                else { edData.spawn.x = spawnPos.x; edData.spawn.y = spawnPos.y; edData.spawn.z = spawnPos.z; }
-                newId = 'spawn';
+                if (!edData.spawn) {
+                    edData.spawn = { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, scale: {x:4, y:1, z:4} };
+                    newId = 'spawn';
+                } else {
+                    edData.objects.push({
+                        id: newId,
+                        name: `Spawn ${((edData.objects || []).filter(o => o.type === 'spawn').length + 2)}`,
+                        type: 'spawn',
+                        position: { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z },
+                        rotation: { x: 0, y: 0, z: 0 },
+                        scale: { x: 4, y: 1, z: 4 },
+                        color: '#f1c40f',
+                        material: 'Plastic',
+                        isAnchored: true,
+                        canCollide: true
+                    });
+                }
             } else {
                 edData.objects.push({
                     id: newId, name: type.charAt(0).toUpperCase() + type.slice(1), type: type,
@@ -6174,6 +6214,9 @@ const dir = new THREE.Vector3();
                     created.name = 'Floating Text';
                     created.scale = { x: 6, y: 2, z: 0.5 };
                     created.color = '#ffffff';
+                    created.textColor = '#ffffff';
+                    created.backgroundColor = '#000000';
+                    created.backgroundTransparency = 1;
                     created.material = 'Neon';
                     created.text = 'Sample Text';
                     created.fontFamily = 'Arial';
@@ -6437,6 +6480,11 @@ document.addEventListener('keydown', (e) => {
                             document.getElementById('prop-ftext').value = objData.text || 'Sample Text';
                             document.getElementById('prop-ffont').value = objData.fontFamily || 'Arial';
                             document.getElementById('prop-fsize').value = objData.textSize || 40;
+                            document.getElementById('prop-ftext-color').value = objData.textColor || objData.color || '#ffffff';
+                            document.getElementById('prop-fbg-color').value = objData.backgroundColor || '#000000';
+                            const bgT = typeof objData.backgroundTransparency === 'number' ? objData.backgroundTransparency : 1;
+                            document.getElementById('prop-fbg-transparency').value = bgT;
+                            document.getElementById('prop-fbg-transparency-label').innerText = String(bgT);
                         } else {
                             fTextSection.style.display = 'none';
                         }
@@ -6485,6 +6533,9 @@ document.addEventListener('keydown', (e) => {
             const floatingTextValue = (document.getElementById('prop-ftext') || {}).value || 'Text';
             const floatingFont = (document.getElementById('prop-ffont') || {}).value || 'Arial';
             const floatingSize = Math.max(8, Math.min(160, parseInt((document.getElementById('prop-fsize') || {}).value, 10) || 40));
+            const floatingTextColor = (document.getElementById('prop-ftext-color') || {}).value || '#ffffff';
+            const floatingBgColor = (document.getElementById('prop-fbg-color') || {}).value || '#000000';
+            const floatingBgTransparency = Math.max(0, Math.min(1, parseFloat((document.getElementById('prop-fbg-transparency') || {}).value) || 1));
 
             // Apply to all selected blocks for fast multi-editing!
             selectedObjects.forEach(mesh => {
@@ -6499,6 +6550,9 @@ document.addEventListener('keydown', (e) => {
                         objData.text = floatingTextValue;
                         objData.fontFamily = floatingFont;
                         objData.textSize = floatingSize;
+                        objData.textColor = floatingTextColor;
+                        objData.backgroundColor = floatingBgColor;
+                        objData.backgroundTransparency = floatingBgTransparency;
                     }
                     
                     // Live-update the 3D graphics!
@@ -7841,9 +7895,13 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
             applyPlayGraphicsSettings(activeLevel.settings);
             window.EnvironmentEngine.generateClouds(playScene, '#ffffff');
             
-            playerObj.x = activeLevel.spawn ? activeLevel.spawn.x : 0; 
-            playerObj.y = activeLevel.spawn ? activeLevel.spawn.y + 3 : 10;
-            playerObj.z = activeLevel.spawn ? activeLevel.spawn.z : 0;
+            const spawnChoices = [];
+            if (activeLevel.spawn) spawnChoices.push({ x: activeLevel.spawn.x, y: activeLevel.spawn.y, z: activeLevel.spawn.z });
+            (activeLevel.objects || []).forEach(o => { if (o.type === 'spawn' && o.position) spawnChoices.push({ x: o.position.x, y: o.position.y, z: o.position.z }); });
+            const chosenSpawn = spawnChoices.length ? spawnChoices[Math.floor(Math.random() * spawnChoices.length)] : { x: 0, y: 7, z: 0 };
+            playerObj.x = chosenSpawn.x || 0; 
+            playerObj.y = (chosenSpawn.y || 7) + 3;
+            playerObj.z = chosenSpawn.z || 0;
             playerObj.vx = 0; playerObj.vy = 0; playerObj.vz = 0; playerObj.rotY = 0;
             playerObj.speed = 0.2;
 playerObj.jump = 4.8;
@@ -7907,6 +7965,50 @@ animatePlay();
             const safeNum = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
             const linkedData = (activeLevel.objects || []).find(o => o.id === (mesh?.userData?.id || null)) || null;
             const findObjectData = (targetMesh) => (activeLevel.objects || []).find(o => o.id === (targetMesh?.userData?.id || null)) || null;
+            const buildGeometryByType = (type = 'block') => {
+                const t = String(type || 'block').toLowerCase();
+                if (t === 'sphere') return new THREE.SphereGeometry(0.5, 24, 24);
+                if (t === 'cylinder') return new THREE.CylinderGeometry(0.5, 0.5, 1, 24);
+                if (t === 'cone') return new THREE.ConeGeometry(0.5, 1, 24);
+                if (t === 'triangle') return new THREE.CylinderGeometry(0.5, 0.5, 1, 3);
+                if (t === 'floatingtext') return new THREE.BoxGeometry(1, 1, 0.2);
+                return new THREE.BoxGeometry(1, 1, 1);
+            };
+            const applyRuntimeProperties = (target, props = {}) => {
+                if (!target || !props) return target;
+                if (props.position) target.position.set(safeNum(props.position.x, target.position.x), safeNum(props.position.y, target.position.y), safeNum(props.position.z, target.position.z));
+                if (props.rotation) target.rotation.set(safeNum(props.rotation.x, target.rotation.x), safeNum(props.rotation.y, target.rotation.y), safeNum(props.rotation.z, target.rotation.z));
+                if (props.scale) target.scale.set(Math.max(0.05, safeNum(props.scale.x, target.scale.x)), Math.max(0.05, safeNum(props.scale.y, target.scale.y)), Math.max(0.05, safeNum(props.scale.z, target.scale.z)));
+                if (props.color && target.material?.color) target.material.color.set(String(props.color));
+                if (typeof props.transparency === 'number' && target.material) {
+                    const t = Math.max(0, Math.min(1, safeNum(props.transparency, 0)));
+                    target.material.transparent = t > 0;
+                    target.material.opacity = Math.max(0.02, 1 - t);
+                }
+                if (typeof props.canCollide !== 'undefined') target.userData.noCollide = !props.canCollide;
+                if (typeof props.isAnchored !== 'undefined') target.userData.isAnchored = !!props.isAnchored;
+                const data = findObjectData(target);
+                if (data) {
+                    if (props.position) data.position = { x: target.position.x, y: target.position.y, z: target.position.z };
+                    if (props.rotation) data.rotation = { x: target.rotation.x, y: target.rotation.y, z: target.rotation.z };
+                    if (props.scale) data.scale = { x: target.scale.x, y: target.scale.y, z: target.scale.z };
+                    if (props.color) data.color = String(props.color);
+                    if (props.material) data.material = String(props.material);
+                    if (typeof props.transparency === 'number') data.transparency = Math.max(0, Math.min(1, props.transparency));
+                    if (typeof props.canCollide !== 'undefined') data.canCollide = !!props.canCollide;
+                    if (typeof props.isAnchored !== 'undefined') data.isAnchored = !!props.isAnchored;
+                    if (data.type === 'floatingText') {
+                        if (typeof props.text === 'string') data.text = props.text.slice(0, 120);
+                        if (typeof props.fontFamily === 'string') data.fontFamily = props.fontFamily;
+                        if (typeof props.textSize !== 'undefined') data.textSize = Math.max(8, Math.min(160, safeNum(props.textSize, data.textSize || 40)));
+                        if (typeof props.textColor === 'string') data.textColor = props.textColor;
+                        if (typeof props.backgroundColor === 'string') data.backgroundColor = props.backgroundColor;
+                        if (typeof props.backgroundTransparency !== 'undefined') data.backgroundTransparency = Math.max(0, Math.min(1, safeNum(props.backgroundTransparency, 1)));
+                        applyFloatingTextVisual(target, data);
+                    }
+                }
+                return target;
+            };
             return {
                 mesh,
                 event: eventName,
@@ -7997,6 +8099,21 @@ animatePlay();
                         playerObj.blasterLifetime = preset.lifetime;
                         playerObj.blasterColor = preset.color;
                         return preset;
+                    },
+                    setAiming: (cfg = {}) => {
+                        playerObj.aimConfig = {
+                            adsZoom: Math.max(20, Math.min(90, safeNum(cfg.adsZoom, playerObj.aimConfig?.adsZoom || 50))),
+                            recoil: Math.max(0, Math.min(5, safeNum(cfg.recoil, playerObj.aimConfig?.recoil || 0.2))),
+                            assist: Math.max(0, Math.min(1, safeNum(cfg.assist, playerObj.aimConfig?.assist || 0))),
+                            sensitivity: Math.max(0.1, Math.min(5, safeNum(cfg.sensitivity, playerObj.aimConfig?.sensitivity || 1)))
+                        };
+                        return { ...playerObj.aimConfig };
+                    },
+                    createSystem: (factory) => {
+                        if (typeof factory !== 'function') return null;
+                        window.smartRuntime = window.smartRuntime || {};
+                        window.smartRuntime.customGunSystem = factory;
+                        return true;
                     }
                 },
                 playerApi: {
@@ -8015,14 +8132,66 @@ animatePlay();
                         playMeshes.forEach((m, idx) => fn(m, idx, findObjectData(m)));
                     },
                     spawnPart: (cfg = {}) => {
-                        const geo = cfg.type === 'sphere' ? new THREE.SphereGeometry(0.5, 18, 18) : (cfg.type === 'cylinder' ? new THREE.CylinderGeometry(0.5,0.5,1,18) : new THREE.BoxGeometry(1,1,1));
+                        const type = String(cfg.type || 'block');
+                        const geo = buildGeometryByType(type);
                         const mat = getMaterialForType(cfg.material || 'Plastic', cfg.color || '#3498db');
                         const part = new THREE.Mesh(geo, mat);
-                        part.position.set(cfg.x || mesh.position.x, cfg.y || mesh.position.y, cfg.z || mesh.position.z);
-                        part.userData = { id: crypto.randomUUID(), type: cfg.type || 'block', isTool: false, noCollide: !!cfg.noCollide };
+                        part.position.set(safeNum(cfg.x, mesh.position.x), safeNum(cfg.y, mesh.position.y), safeNum(cfg.z, mesh.position.z));
+                        part.rotation.set(safeNum(cfg.rx, 0), safeNum(cfg.ry, 0), safeNum(cfg.rz, 0));
+                        part.scale.set(Math.max(0.05, safeNum(cfg.sx, 1)), Math.max(0.05, safeNum(cfg.sy, 1)), Math.max(0.05, safeNum(cfg.sz, 1)));
+                        part.userData = { id: crypto.randomUUID(), type: type, isTool: false, noCollide: !!cfg.noCollide, isAnchored: cfg.isAnchored !== false };
                         playScene.add(part);
                         playMeshes.push(part);
+                        if (activeLevel?.objects) {
+                            const runtimeObj = {
+                                id: part.userData.id,
+                                name: String(cfg.name || type).slice(0, 48),
+                                type,
+                                position: { x: part.position.x, y: part.position.y, z: part.position.z },
+                                rotation: { x: part.rotation.x, y: part.rotation.y, z: part.rotation.z },
+                                scale: { x: part.scale.x, y: part.scale.y, z: part.scale.z },
+                                color: String(cfg.color || '#3498db'),
+                                material: String(cfg.material || 'Plastic'),
+                                transparency: Math.max(0, Math.min(1, safeNum(cfg.transparency, 0))),
+                                canCollide: cfg.canCollide !== false,
+                                isAnchored: cfg.isAnchored !== false
+                            };
+                            if (type === 'floatingText') {
+                                runtimeObj.text = String(cfg.text || 'Text').slice(0, 120);
+                                runtimeObj.fontFamily = String(cfg.fontFamily || 'Arial');
+                                runtimeObj.textSize = Math.max(8, Math.min(160, safeNum(cfg.textSize, 40)));
+                                runtimeObj.textColor = String(cfg.textColor || cfg.color || '#ffffff');
+                                runtimeObj.backgroundColor = String(cfg.backgroundColor || '#000000');
+                                runtimeObj.backgroundTransparency = Math.max(0, Math.min(1, safeNum(cfg.backgroundTransparency, 1)));
+                                applyFloatingTextVisual(part, runtimeObj);
+                            }
+                            activeLevel.objects.push(runtimeObj);
+                            applyRuntimeProperties(part, cfg);
+                        }
                         return part;
+                    },
+                    setProperties: (target, props = {}) => applyRuntimeProperties(target, props),
+                    setTransform: (target, position = null, rotation = null, scale = null) => applyRuntimeProperties(target, { position, rotation, scale }),
+                    getProperties: (target) => {
+                        const data = findObjectData(target) || {};
+                        return {
+                            id: target?.userData?.id || null,
+                            type: target?.userData?.type || data.type || 'block',
+                            position: target ? { x: target.position.x, y: target.position.y, z: target.position.z } : null,
+                            rotation: target ? { x: target.rotation.x, y: target.rotation.y, z: target.rotation.z } : null,
+                            scale: target ? { x: target.scale.x, y: target.scale.y, z: target.scale.z } : null,
+                            color: target?.material?.color ? `#${target.material.color.getHexString()}` : (data.color || '#3498db'),
+                            material: data.material || 'Plastic',
+                            transparency: data.transparency || 0,
+                            canCollide: data.canCollide !== false,
+                            isAnchored: data.isAnchored !== false,
+                            text: data.text || '',
+                            fontFamily: data.fontFamily || 'Arial',
+                            textSize: data.textSize || 40,
+                            textColor: data.textColor || data.color || '#ffffff',
+                            backgroundColor: data.backgroundColor || '#000000',
+                            backgroundTransparency: typeof data.backgroundTransparency === 'number' ? data.backgroundTransparency : 1
+                        };
                     },
                     destroy: (target) => {
                         if (!target) return;
@@ -8033,6 +8202,51 @@ animatePlay();
                     getGravity: () => safeNum(activeLevel?.settings?.gravity, 0.08),
                     setGravity: (value = 0.08) => { if (activeLevel?.settings) activeLevel.settings.gravity = Math.max(0, Math.min(5, safeNum(value, 0.08))); },
                     setSkyColor: (hex = '#87CEEB') => { if (activeLevel?.settings) activeLevel.settings.skyColor = String(hex); if (playScene) playScene.background = new THREE.Color(String(hex)); }
+                },
+                floatingText: {
+                    create: (cfg = {}) => {
+                        const part = (() => {
+                            const geo = buildGeometryByType('floatingText');
+                            const mat = getMaterialForType(cfg.material || 'Neon', cfg.color || '#ffffff');
+                            const obj = new THREE.Mesh(geo, mat);
+                            obj.userData = { id: crypto.randomUUID(), type: 'floatingText', isTool: false, noCollide: !!cfg.noCollide };
+                            playScene.add(obj);
+                            playMeshes.push(obj);
+                            if (activeLevel?.objects) {
+                                activeLevel.objects.push({
+                                    id: obj.userData.id,
+                                    name: String(cfg.name || 'Floating Text').slice(0, 48),
+                                    type: 'floatingText',
+                                    position: { x: 0, y: 2, z: 0 },
+                                    rotation: { x: 0, y: 0, z: 0 },
+                                    scale: { x: 6, y: 2, z: 0.5 },
+                                    color: '#ffffff',
+                                    material: 'Neon',
+                                    text: 'Text',
+                                    fontFamily: 'Arial',
+                                    textSize: 40,
+                                    textColor: '#ffffff',
+                                    backgroundColor: '#000000',
+                                    backgroundTransparency: 1
+                                });
+                            }
+                            return obj;
+                        })();
+                        applyRuntimeProperties(part, cfg);
+                        return part;
+                    },
+                    set: (target, cfg = {}) => applyRuntimeProperties(target, cfg),
+                    get: (target) => {
+                        const data = findObjectData(target) || {};
+                        return {
+                            text: data.text || '',
+                            fontFamily: data.fontFamily || 'Arial',
+                            textSize: data.textSize || 40,
+                            textColor: data.textColor || '#ffffff',
+                            backgroundColor: data.backgroundColor || '#000000',
+                            backgroundTransparency: typeof data.backgroundTransparency === 'number' ? data.backgroundTransparency : 1
+                        };
+                    }
                 },
                 createObject: (cfg = {}) => {
                     if (!activeLevel || !Array.isArray(activeLevel.objects)) return null;
