@@ -166,7 +166,7 @@
         
         .play-layout { display: flex; gap: 20px; align-items: flex-start; justify-content: center; text-align: left; flex-wrap: wrap; }
         .play-game-card { padding: 15px; width: 100%; max-width: 850px; box-sizing: border-box; margin-bottom: 0; }
-        .play-sidebar { width: 100%; max-width: 250px; padding: 15px; margin-bottom: 0; height: 480px; overflow-y: auto; }
+        .play-sidebar { width: 100%; max-width: 340px; padding: 15px; margin-bottom: 0; max-height: 360px; overflow-y: auto; }
 
         /* Forums UI */
         .forum-cat { padding: 15px; border: 1px solid #eee; border-radius: 4px; margin-bottom: 10px; cursor: pointer; transition: background 0.2s; display: flex; justify-content: space-between; align-items: center; }
@@ -1489,7 +1489,6 @@
                             <label style="font-size:12px;">Move <input type="number" id="snap-move" value="1" style="width:48px; padding:2px;"></label>
                             <label style="font-size:12px;">Rot <input type="number" id="snap-rot" value="15" style="width:48px; padding:2px;"></label>
                             <label style="font-size:12px;">Scale <input type="number" id="snap-scale" value="1" style="width:48px; padding:2px;"></label>
-                            <button class="tool-btn btn-danger" onclick="promptClearEditor()">Clear World</button>
                         </div>
                     </div>
                 </div>
@@ -1947,11 +1946,12 @@
                     <h3 style="margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px; color: #2c3e50;">Update Log</h3>
                     
                     <div id="post-update-section" style="display:none; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #ccc;">
-                        <input type="text" id="update-text" class="form-control" placeholder="What's new?">
+                        <input type="text" id="update-title" class="form-control mb-10" maxlength="80" placeholder="Update title (e.g. v1.2.0 Patch Notes)">
+                        <textarea id="update-text" class="form-control" maxlength="400" placeholder="Describe what changed..." style="min-height:70px; resize:vertical;"></textarea>
                         <button class="btn btn-success btn-sm mt-10" style="width:100%;" onclick="postGameUpdate()">Post Update</button>
                     </div>
 
-                    <div id="play-updates-list"></div>
+                    <div id="play-updates-list" style="max-height:280px; overflow-y:auto; padding-right:4px;"></div>
                 </div>
             </div>
         </div>
@@ -2478,6 +2478,13 @@ if (data.coins !== undefined && currentUser && !data.groupCoins) {
 
         window.loadLibrary = loadLibrary;
         window.loadDashboardGames = loadDashboardGames;
+        window.playRandomGame = async () => {
+            try {
+                const random = await apiCall('/games/random', 'GET');
+                if (!random || !random.id) return showModal('No Games', 'No playable games found right now.');
+                loadGame(random.id);
+            } catch (e) {}
+        };
 
 
 const toggleMultiSelect = () => {
@@ -2782,6 +2789,7 @@ checkDailyReward(); // <-- ADDED HERE
 
         // Interval cleanup references
         let grpWallSyncInterval = null;
+        let dashboardFriendsInterval = null;
         const promptStudioAutosaveRecovery = () => {
             if (autosaveRecoveryPrompted || currentEditGameId) return;
             autosaveRecoveryPrompted = true;
@@ -2816,6 +2824,10 @@ checkDailyReward(); // <-- ADDED HERE
             document.getElementById('view-' + viewId).classList.add('active');
             
             resetGlobalInteractionStates();
+            if (dashboardFriendsInterval && viewId !== 'dashboard') {
+                clearInterval(dashboardFriendsInterval);
+                dashboardFriendsInterval = null;
+            }
 
             if (viewId !== 'play') stopGameLoop();
             if (viewId !== 'create') stopTeamSync(); 
@@ -2828,6 +2840,9 @@ checkDailyReward(); // <-- ADDED HERE
 loadSponsoredAssetsDashboard(); // Add this line!
                 loadDashboardGames();
                 loadDashboardFriends();
+                if (!dashboardFriendsInterval) dashboardFriendsInterval = setInterval(() => {
+                    if (document.getElementById('view-dashboard').classList.contains('active')) loadDashboardFriends();
+                }, 2500);
                 loadCreatorChallenges();
             } else if (viewId === 'library') {
                 loadLibrary();
@@ -5834,10 +5849,13 @@ let currentTransformSpace = 'local';
             const list = document.getElementById('play-updates-list');
             list.innerHTML = (!updates || updates.length === 0) ? '<p style="color:#777; font-size:12px;">No updates posted yet.</p>' : '';
             (updates || []).forEach(u => {
+                const safeTitle = u.title || 'Update';
+                const safeDesc = u.text || u.description || '';
                 list.innerHTML += `
-                    <div style="border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:10px;">
+                    <div style="border:1px solid #e5e9f0; border-radius:8px; padding:10px; margin-bottom:10px; background:#fafcff;">
                         <div style="font-size:11px; color:#7f8c8d; margin-bottom:4px;">${new Date(u.timestamp).toLocaleString()}</div>
-                        <div style="font-size:13px; color:#333;">${u.text}</div>
+                        <div style="font-size:13px; color:#1f3b55; font-weight:700; margin-bottom:4px;">${safeTitle}</div>
+                        <div style="font-size:13px; color:#333; white-space:pre-wrap;">${safeDesc}</div>
                     </div>
                 `;
             });
@@ -5845,10 +5863,14 @@ let currentTransformSpace = 'local';
 
         const postGameUpdate = async () => {
             if (!currentPlayGameId) return;
+            const title = (document.getElementById('update-title') || {}).value ? document.getElementById('update-title').value.trim() : '';
             const text = document.getElementById('update-text').value.trim();
-            if (!text) return showModal('Error', 'Update text cannot be empty.');
+            if (!title) return showModal('Error', 'Update title cannot be empty.');
+            if (!text) return showModal('Error', 'Update description cannot be empty.');
             try {
-                const res = await apiCall(`/games/${currentPlayGameId}/updates`, 'POST', { text });
+                const res = await apiCall(`/games/${currentPlayGameId}/updates`, 'POST', { title, text });
+                const titleEl = document.getElementById('update-title');
+                if (titleEl) titleEl.value = '';
                 document.getElementById('update-text').value = '';
                 renderUpdatesList(res.updates);
             } catch(e) {}
@@ -5957,8 +5979,8 @@ let currentTransformSpace = 'local';
             return newData;
         };
 
-        const recordEdit = (pushToHistory = true) => {
-            lastLocalEditTime = Date.now();
+        const recordEdit = (pushToHistory = true, bumpSyncTime = true) => {
+            if (bumpSyncTime) lastLocalEditTime = Date.now();
             if (pushToHistory) {
                 if (historyIndex < historyStack.length - 1) historyStack = historyStack.slice(0, historyIndex + 1);
                 historyStack.push(JSON.parse(JSON.stringify(edData)));
@@ -5970,22 +5992,16 @@ let currentTransformSpace = 'local';
         };
 
         const undo = () => {
-            if (currentEditGameId && teamCollaboratorsOnline > 0) {
-                return showModal('Team Create Undo', 'Undo is temporarily disabled during active team sessions to avoid reverting teammates\' changes.');
-            }
             if (historyIndex > 0) {
                 historyIndex--; edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
-                buildEditorScene(); recordEdit(false);
+                buildEditorScene(); recordEdit(false, !(currentEditGameId && teamCollaboratorsOnline > 0));
             }
         };
 
         const redo = () => {
-            if (currentEditGameId && teamCollaboratorsOnline > 0) {
-                return showModal('Team Create Redo', 'Redo is temporarily disabled during active team sessions to avoid overriding teammates\' progress.');
-            }
             if (historyIndex < historyStack.length - 1) {
                 historyIndex++; edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
-                buildEditorScene(); recordEdit(false);
+                buildEditorScene(); recordEdit(false, !(currentEditGameId && teamCollaboratorsOnline > 0));
             }
         };
 
@@ -6936,9 +6952,9 @@ if (item.type === 'button' && item.onClickEvent) {
                 partMesh.position.copy(pos);
                 partMesh.quaternion.copy(quat);
                 const vel = new THREE.Vector3(
-                    (Math.random() - 0.5) * 0.45 + playerObj.vx * 0.15,
-                    0.12 + Math.random() * 0.22,
-                    (Math.random() - 0.5) * 0.45 + playerObj.vz * 0.15
+                    (Math.random() - 0.5) * 0.08 + playerObj.vx * 0.06,
+                    0.01 + Math.random() * 0.04,
+                    (Math.random() - 0.5) * 0.08 + playerObj.vz * 0.06
                 );
                 deathPieces.push({ mesh: partMesh, velocity: vel, life: 80 + Math.floor(Math.random() * 40) });
             };
@@ -6968,11 +6984,47 @@ if (item.type === 'button' && item.onClickEvent) {
             });
         };
 
+        const spawnRemoteDeathPieces = (sourceMesh, userId, deadAt) => {
+            if (!playScene || !sourceMesh) return;
+            const chunks = [];
+            sourceMesh.traverse((child) => { if (child.isMesh && child.geometry) chunks.push(child); });
+            chunks.forEach((child) => {
+                child.updateMatrixWorld(true);
+                const pos = new THREE.Vector3();
+                const quat = new THREE.Quaternion();
+                child.getWorldPosition(pos);
+                child.getWorldQuaternion(quat);
+                const ghost = new THREE.Mesh(child.geometry.clone(), child.material.clone());
+                ghost.position.copy(pos);
+                ghost.quaternion.copy(quat);
+                const vel = new THREE.Vector3((Math.random() - 0.5) * 0.05, 0.01 + Math.random() * 0.03, (Math.random() - 0.5) * 0.05);
+                remoteDeathPieces.push({ mesh: ghost, velocity: vel, life: 90, owner: userId, deadAt });
+                playScene.add(ghost);
+            });
+        };
+
+        const updateRemoteDeathPieces = () => {
+            if (!remoteDeathPieces.length) return;
+            const gravity = (activeLevel?.settings?.gravity || 0.08) * 0.05;
+            remoteDeathPieces = remoteDeathPieces.filter((piece) => {
+                piece.velocity.y -= gravity;
+                piece.mesh.position.add(piece.velocity);
+                piece.mesh.rotation.x += piece.velocity.x * 0.2;
+                piece.mesh.rotation.z += piece.velocity.z * 0.2;
+                piece.life--;
+                if (piece.life <= 0 || piece.mesh.position.y < -200) {
+                    playScene.remove(piece.mesh);
+                    return false;
+                }
+                return true;
+            });
+        };
+
         const triggerCharacterDeath = () => {
             if (isDeathAnimating) return;
             isDeathAnimating = true;
+            playerObj.deadAt = Date.now();
             spawnDeathPieces();
-            showModal('Character Reset', 'You were reset. Respawning...');
             setTimeout(() => {
                 deathPieces.forEach(p => { if (playScene) playScene.remove(p.mesh); });
                 deathPieces = [];
@@ -7358,6 +7410,7 @@ playerObj = {
         let isTestingLocal = false;
         let isDeathAnimating = false;
         let deathPieces = [];
+        let remoteDeathPieces = [];
 
         // Tool System Variables
         let playerInventory = [];
@@ -7728,10 +7781,15 @@ const startGame = () => {
             currentSessionJumps = 0; 
             currentSessionFalls = 0;
             isDeathAnimating = false;
+            playerObj.deadAt = null;
             if (deathPieces.length && playScene) {
                 deathPieces.forEach(p => playScene.remove(p.mesh));
             }
             deathPieces = [];
+            if (remoteDeathPieces.length && playScene) {
+                remoteDeathPieces.forEach(p => playScene.remove(p.mesh));
+            }
+            remoteDeathPieces = [];
 
             window.playLeaderboard = {};
 
@@ -8167,7 +8225,9 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
                     rotY: playerObj.rotY,
                     sceneId: 'main',
                     color: currentUser.color || '#e74c3c',
-                    bodyColors: currentUser.bodyColors || null
+                    bodyColors: currentUser.bodyColors || null,
+                    isDead: !!isDeathAnimating,
+                    deadAt: playerObj.deadAt || null
                 });
 
             if (serverLeaderboardOpen) {
@@ -8192,7 +8252,8 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
                         otherPlayerMeshes[o.userId] = {
                             mesh,
                             username: o.username,
-                            equipped: o.equipped || null
+                            equipped: o.equipped || null,
+                            lastDeadAt: 0
                         };
                     } else if (otherPlayerMeshes[o.userId].equipped !== (o.equipped || null)) {
                         const oldMesh = otherPlayerMeshes[o.userId].mesh;
@@ -8209,6 +8270,15 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
                     const pm = otherPlayerMeshes[o.userId].mesh;
                 pm.position.set(o.x, o.y + 3, o.z);
                 pm.rotation.y = o.rotY || 0;
+                if (o.isDead) {
+                    if (o.deadAt && otherPlayerMeshes[o.userId].lastDeadAt !== o.deadAt) {
+                        otherPlayerMeshes[o.userId].lastDeadAt = o.deadAt;
+                        spawnRemoteDeathPieces(pm, o.userId, o.deadAt);
+                    }
+                    pm.visible = false;
+                } else {
+                    pm.visible = true;
+                }
 
                 // Chat bubble sync
                 if (o.activeChatBubble && (Date.now() - o.activeChatBubble.timestamp) < 7000) {
@@ -9159,6 +9229,7 @@ const animatePlay = () => {
                 }
                 updatePhysics3D();
                 updateDeathPieces();
+                updateRemoteDeathPieces();
                 updateSmartObjectBehaviors();
                 triggerContextualInteract();
                 updatePlayerHealthHUD();
