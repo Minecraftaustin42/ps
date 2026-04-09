@@ -1767,6 +1767,14 @@
                             <option value="Grass">Grass</option>
                             <option value="Sand">Sand / Dirt</option>
                             <option value="Slate">Slate / Stone</option>
+                            <option value="Metal">Metal</option>
+                            <option value="Glass">Glass</option>
+                            <option value="Marble">Marble</option>
+                            <option value="CarbonFiber">Carbon Fiber</option>
+                            <option value="Obsidian">Obsidian</option>
+                            <option value="Ice">Ice</option>
+                            <option value="Hologram">Hologram</option>
+                            <option value="LavaRock">Lava Rock</option>
                         </select>
                         <div id="floating-text-props" style="display:none; margin-top:10px; background:#fff7ec; border:1px solid #f2d2a7; border-radius:4px; padding:8px;">
                             <h5 style="margin:0 0 8px 0; color:#8a5a18;">Floating Text</h5>
@@ -2301,6 +2309,65 @@ async function safeFetch(url, options = {}) {
                     ctx.fillStyle = Math.random() > 0.5 ? `rgba(0,0,0,${Math.random()*0.15})` : `rgba(255,255,255,${Math.random()*0.15})`;
                     ctx.fillRect(Math.random() * 512, Math.random() * 512, 1.5, 1.5);
                 }
+            } else if (type === 'Metal') {
+                ctx.fillStyle = '#aeb8c2';
+                ctx.fillRect(0, 0, 512, 512);
+                for (let i = 0; i < 4500; i++) {
+                    const y = Math.random() * 512;
+                    ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.14})`;
+                    ctx.fillRect(0, y, 512, Math.random() * 1.5 + 0.5);
+                }
+                for (let i = 0; i < 10000; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)';
+                    ctx.fillRect(Math.random() * 512, Math.random() * 512, 1, 1);
+                }
+            } else if (type === 'Marble') {
+                ctx.fillStyle = '#dcdde1';
+                ctx.fillRect(0, 0, 512, 512);
+                for (let i = 0; i < 700; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(Math.random() * 512, -20);
+                    ctx.bezierCurveTo(Math.random() * 512, 160, Math.random() * 512, 340, Math.random() * 512, 540);
+                    ctx.strokeStyle = Math.random() > 0.5 ? 'rgba(90,96,116,0.16)' : 'rgba(130,136,158,0.12)';
+                    ctx.lineWidth = Math.random() * 2 + 0.7;
+                    ctx.stroke();
+                }
+            } else if (type === 'CarbonFiber') {
+                ctx.fillStyle = '#1f252d';
+                ctx.fillRect(0, 0, 512, 512);
+                const step = 16;
+                for (let y = 0; y < 512; y += step) {
+                    for (let x = 0; x < 512; x += step) {
+                        const light = ((x / step + y / step) % 2 === 0) ? 42 : 30;
+                        ctx.fillStyle = `rgb(${light},${light + 5},${light + 9})`;
+                        ctx.fillRect(x, y, step, step);
+                        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+                        ctx.fillRect(x + 2, y + 2, step / 2, step / 2);
+                    }
+                }
+            } else if (type === 'Obsidian') {
+                ctx.fillStyle = '#171327';
+                ctx.fillRect(0, 0, 512, 512);
+                for (let i = 0; i < 1200; i++) {
+                    const x = Math.random() * 512, y = Math.random() * 512, r = Math.random() * 25 + 4;
+                    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+                    grad.addColorStop(0, 'rgba(132,107,191,0.2)');
+                    grad.addColorStop(1, 'rgba(20,16,34,0)');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+                }
+            } else if (type === 'LavaRock') {
+                ctx.fillStyle = '#26170f';
+                ctx.fillRect(0, 0, 512, 512);
+                for (let i = 0; i < 900; i++) {
+                    ctx.beginPath();
+                    const x = Math.random() * 512, y = Math.random() * 512;
+                    ctx.moveTo(x, y);
+                    for (let j = 0; j < 7; j++) ctx.lineTo(x + (Math.random() - 0.5) * 28, y + (Math.random() - 0.5) * 28);
+                    ctx.closePath();
+                    ctx.fillStyle = Math.random() > 0.65 ? 'rgba(255,108,51,0.35)' : 'rgba(0,0,0,0.35)';
+                    ctx.fill();
+                }
             }
 
             const tex = new THREE.CanvasTexture(canvas);
@@ -2318,6 +2385,9 @@ async function safeFetch(url, options = {}) {
 
             // Neon stays basic so it "glows" and ignores shadows
             if (matType === 'Neon') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex) });
+            if (matType === 'Hologram') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#66e5ff'), transparent: true, opacity: 0.45, wireframe: true });
+            if (matType === 'Glass') return new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.02, metalness: 0.0, transparent: true, opacity: 0.35, transmission: 0.85, thickness: 0.6 });
+            if (matType === 'Ice') return new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.08, metalness: 0.0, transparent: true, opacity: 0.6, transmission: 0.5, thickness: 0.9 });
 
             // Smooth Plastic gets no texture, but is highly reflective
             if (matType === 'SmoothPlastic') return new THREE.MeshStandardMaterial({ 
@@ -2326,7 +2396,7 @@ async function safeFetch(url, options = {}) {
                 metalness: 0.1 
             });
 
-            const validTypes = ['Plastic', 'Wood', 'Grass', 'Slate', 'Sand'];
+            const validTypes = ['Plastic', 'Wood', 'Grass', 'Slate', 'Sand', 'Metal', 'Marble', 'CarbonFiber', 'Obsidian', 'LavaRock'];
             const safeType = validTypes.includes(matType) ? matType : 'Plastic';
             const tex = generateRealisticTexture(safeType);
 
@@ -2355,6 +2425,26 @@ async function safeFetch(url, options = {}) {
                 matRoughness = 0.9; 
                 matMetalness = 0.0; 
                 matBumpScale = 0.5; 
+            } else if (safeType === 'Metal') {
+                matRoughness = 0.18;
+                matMetalness = 0.95;
+                matBumpScale = 0.08;
+            } else if (safeType === 'Marble') {
+                matRoughness = 0.35;
+                matMetalness = 0.05;
+                matBumpScale = 0.22;
+            } else if (safeType === 'CarbonFiber') {
+                matRoughness = 0.45;
+                matMetalness = 0.4;
+                matBumpScale = 0.18;
+            } else if (safeType === 'Obsidian') {
+                matRoughness = 0.12;
+                matMetalness = 0.3;
+                matBumpScale = 0.09;
+            } else if (safeType === 'LavaRock') {
+                matRoughness = 0.92;
+                matMetalness = 0.0;
+                matBumpScale = 1.0;
             }
 
             // Return the upgraded PBR Material
@@ -5854,6 +5944,8 @@ const studioMobileState = { initialized: false, moveActive: false, moveX: 0, mov
         let historyStack = [];
         let historyIndex = -1;
         let teamCollaboratorsOnline = 0;
+        let localContributionObjectIds = new Set();
+        let localLockedObjectUntil = {};
 
 let currentEditMode = 'translate';
 let currentTransformSpace = 'local';
@@ -6013,6 +6105,14 @@ let currentTransformSpace = 'local';
 
         const recordEdit = (pushToHistory = true, bumpSyncTime = true) => {
             if (bumpSyncTime) lastLocalEditTime = Date.now();
+            const now = Date.now();
+            const selectedIds = selectedObjects
+                .filter(m => m && m.userData && !m.userData.isSpawn && m.userData.id)
+                .map(m => m.userData.id);
+            selectedIds.forEach(id => {
+                localContributionObjectIds.add(id);
+                localLockedObjectUntil[id] = now + 2200;
+            });
             if (pushToHistory) {
                 if (historyIndex < historyStack.length - 1) historyStack = historyStack.slice(0, historyIndex + 1);
                 historyStack.push(JSON.parse(JSON.stringify(edData)));
@@ -6023,16 +6123,64 @@ let currentTransformSpace = 'local';
             }
         };
 
+        const mergeRemoteTeamData = (remoteGameData) => {
+            if (!remoteGameData || !Array.isArray(remoteGameData.objects)) return;
+            const now = Date.now();
+            const localById = new Map((edData.objects || []).map(o => [o.id, o]));
+            const mergedObjects = [];
+
+            (remoteGameData.objects || []).forEach(rObj => {
+                const lockUntil = localLockedObjectUntil[rObj.id] || 0;
+                if (lockUntil > now && localById.has(rObj.id)) mergedObjects.push(localById.get(rObj.id));
+                else mergedObjects.push(rObj);
+            });
+
+            localById.forEach((lObj, id) => {
+                const lockUntil = localLockedObjectUntil[id] || 0;
+                if (lockUntil > now && !(remoteGameData.objects || []).some(ro => ro.id === id)) {
+                    mergedObjects.push(lObj);
+                }
+            });
+
+            edData = {
+                ...remoteGameData,
+                objects: mergedObjects
+            };
+        };
+
+        const applyLocalOnlyHistoryState = (targetState) => {
+            if (!targetState || !Array.isArray(targetState.objects)) return;
+            const targetById = new Map((targetState.objects || []).map(o => [o.id, o]));
+            const nextById = new Map((edData.objects || []).map(o => [o.id, o]));
+
+            localContributionObjectIds.forEach(id => {
+                if (targetById.has(id)) nextById.set(id, JSON.parse(JSON.stringify(targetById.get(id))));
+                else nextById.delete(id);
+            });
+
+            edData = { ...edData, objects: Array.from(nextById.values()) };
+        };
+
         const undo = () => {
             if (historyIndex > 0) {
-                historyIndex--; edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
+                historyIndex--;
+                if (currentEditGameId && teamCollaboratorsOnline > 0) {
+                    applyLocalOnlyHistoryState(historyStack[historyIndex]);
+                } else {
+                    edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
+                }
                 buildEditorScene(); recordEdit(false, !(currentEditGameId && teamCollaboratorsOnline > 0));
             }
         };
 
         const redo = () => {
             if (historyIndex < historyStack.length - 1) {
-                historyIndex++; edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
+                historyIndex++;
+                if (currentEditGameId && teamCollaboratorsOnline > 0) {
+                    applyLocalOnlyHistoryState(historyStack[historyIndex]);
+                } else {
+                    edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
+                }
                 buildEditorScene(); recordEdit(false, !(currentEditGameId && teamCollaboratorsOnline > 0));
             }
         };
@@ -6048,6 +6196,8 @@ let currentTransformSpace = 'local';
                 edData = migrateLevelDataTo3D(game.gameData || {});
                 lastLocalEditTime = game.lastEditTime || Date.now();
                 historyStack = []; historyIndex = -1;
+                localContributionObjectIds = new Set();
+                localLockedObjectUntil = {};
                 navigate('create'); 
             } catch (e) {}
         };
@@ -7394,7 +7544,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     const collabCursor = { x: edCamera.position.x, y: edCamera.position.y, z: edCamera.position.z };
                     const res = await apiCall(`/games/${currentEditGameId}/sync`, 'POST', { gameData: edData, genre: document.getElementById('editor-genre').value, lastLocalEditTime: lastLocalEditTime, cursor: collabCursor });
                     if (!res.acceptedLocalUpdate && res.lastEditTime > lastLocalEditTime) {
-                        edData = res.gameData; lastLocalEditTime = res.lastEditTime; buildEditorScene();
+                        mergeRemoteTeamData(res.gameData); lastLocalEditTime = res.lastEditTime; buildEditorScene();
                     }
                     renderCollaboratorCursors((res.activeEditorsData || res.cursors || res.teamCursors || res.collaborators || []).filter(c => c && c.username && c.username !== currentUser.username));
                     teamCollaboratorsOnline = (res.activeEditorsData || []).filter(c => c && c.username && c.username !== currentUser.username).length;
