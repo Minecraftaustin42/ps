@@ -1778,6 +1778,9 @@
                             <option value="Ice">Ice</option>
                             <option value="Hologram">Hologram</option>
                             <option value="LavaRock">Lava Rock</option>
+                            <option value="Concrete">Concrete</option>
+                            <option value="Asphalt">Asphalt</option>
+                            <option value="Brick">Brick</option>
                         </select>
                         <div id="floating-text-props" style="display:none; margin-top:10px; background:#fff7ec; border:1px solid #f2d2a7; border-radius:4px; padding:8px;">
                             <h5 style="margin:0 0 8px 0; color:#8a5a18;">Floating Text</h5>
@@ -2371,6 +2374,42 @@ async function safeFetch(url, options = {}) {
                     ctx.fillStyle = Math.random() > 0.65 ? 'rgba(255,108,51,0.35)' : 'rgba(0,0,0,0.35)';
                     ctx.fill();
                 }
+            } else if (type === 'Concrete') {
+                ctx.fillStyle = '#c8ced3';
+                ctx.fillRect(0, 0, 512, 512);
+                for (let i = 0; i < 22000; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)';
+                    const s = Math.random() * 1.8 + 0.5;
+                    ctx.fillRect(Math.random() * 512, Math.random() * 512, s, s);
+                }
+            } else if (type === 'Asphalt') {
+                ctx.fillStyle = '#2f353d';
+                ctx.fillRect(0, 0, 512, 512);
+                for (let i = 0; i < 24000; i++) {
+                    ctx.fillStyle = Math.random() > 0.7 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.12)';
+                    const s = Math.random() * 1.5 + 0.3;
+                    ctx.fillRect(Math.random() * 512, Math.random() * 512, s, s);
+                }
+                for (let i = 0; i < 1200; i++) {
+                    ctx.strokeStyle = 'rgba(255,255,255,0.02)';
+                    ctx.beginPath();
+                    ctx.moveTo(Math.random() * 512, Math.random() * 512);
+                    ctx.lineTo(Math.random() * 512, Math.random() * 512);
+                    ctx.stroke();
+                }
+            } else if (type === 'Brick') {
+                ctx.fillStyle = '#8d4f45';
+                ctx.fillRect(0, 0, 512, 512);
+                const bw = 64, bh = 24;
+                for (let y = 0; y < 512; y += bh) {
+                    for (let x = 0; x < 512; x += bw) {
+                        const ox = ((y / bh) % 2) ? bw * 0.5 : 0;
+                        ctx.fillStyle = Math.random() > 0.5 ? '#944f44' : '#7f4339';
+                        ctx.fillRect((x + ox) % 512, y, bw - 2, bh - 2);
+                    }
+                }
+                ctx.fillStyle = 'rgba(220,220,220,0.55)';
+                for (let y = 0; y < 512; y += bh) ctx.fillRect(0, y, 512, 2);
             }
 
             const tex = new THREE.CanvasTexture(canvas);
@@ -2399,7 +2438,7 @@ async function safeFetch(url, options = {}) {
                 metalness: 0.1 
             });
 
-            const validTypes = ['Plastic', 'Wood', 'Grass', 'Slate', 'Sand', 'Metal', 'Marble', 'CarbonFiber', 'Obsidian', 'LavaRock'];
+            const validTypes = ['Plastic', 'Wood', 'Grass', 'Slate', 'Sand', 'Metal', 'Marble', 'CarbonFiber', 'Obsidian', 'LavaRock', 'Concrete', 'Asphalt', 'Brick'];
             const safeType = validTypes.includes(matType) ? matType : 'Plastic';
             const tex = generateRealisticTexture(safeType);
 
@@ -2448,6 +2487,18 @@ async function safeFetch(url, options = {}) {
                 matRoughness = 0.92;
                 matMetalness = 0.0;
                 matBumpScale = 1.0;
+            } else if (safeType === 'Concrete') {
+                matRoughness = 0.93;
+                matMetalness = 0.02;
+                matBumpScale = 0.28;
+            } else if (safeType === 'Asphalt') {
+                matRoughness = 0.95;
+                matMetalness = 0.01;
+                matBumpScale = 0.22;
+            } else if (safeType === 'Brick') {
+                matRoughness = 0.88;
+                matMetalness = 0.02;
+                matBumpScale = 0.35;
             }
 
             // Return the upgraded PBR Material
@@ -8011,10 +8062,13 @@ const applyPlayGraphicsSettings = (settings = {}) => {
             playRenderer.shadowMap.enabled = quality === 'high' || quality === 'ultra';
             playRenderer.shadowMap.type = quality === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
             if (playDirectionalLight) {
-                playDirectionalLight.intensity = Math.max(0.2, settings.sunIntensity || 1.1);
+                playDirectionalLight.intensity = Math.max(0.3, settings.sunIntensity || 1.25);
                 playDirectionalLight.castShadow = playRenderer.shadowMap.enabled;
                 playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 2048 : 1024, quality === 'ultra' ? 2048 : 1024);
+                playDirectionalLight.shadow.bias = -0.00035;
+                playDirectionalLight.shadow.normalBias = 0.015;
             }
+            if (playAmbientLight) playAmbientLight.intensity = Math.max(0.45, settings.brightness || 0.65);
         };
 
 const startGame = () => {
@@ -8047,16 +8101,16 @@ const startGame = () => {
                 playScene = new THREE.Scene(); 
                 playCamera = new THREE.PerspectiveCamera( 50, 16/9, 1, 2000 );
                 
-                const ambLight = new THREE.AmbientLight( 0xffffff, 1.0 );
+                const ambLight = new THREE.AmbientLight( 0xf8fbff, 0.62 );
                 ambLight.isAmbientLight = true;
                 playAmbientLight = ambLight;
                 playScene.add( ambLight );
                 
-                const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
+                const hemiLight = new THREE.HemisphereLight(0xdfeeff, 0x5e666f, 0.45);
                 playScene.add(hemiLight);
                 
-                const dirLight = new THREE.DirectionalLight( 0xffffff, 0.9 );
-                dirLight.position.set( 1, 1, 0.5 ).normalize();
+                const dirLight = new THREE.DirectionalLight( 0xfff8ee, 1.2 );
+                dirLight.position.set( 42, 56, 26 );
                 playDirectionalLight = dirLight;
                 playScene.add( dirLight );
 
@@ -8514,6 +8568,8 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         childMesh.position.set(cData.position.x, cData.position.y, cData.position.z);
                         childMesh.rotation.set(cData.rotation.x, cData.rotation.y, cData.rotation.z);
                         childMesh.scale.set(cData.scale.x, cData.scale.y, cData.scale.z);
+                        childMesh.castShadow = true;
+                        childMesh.receiveShadow = true;
                         childMesh.userData = { type: cData.type };
                         group.add(childMesh);
                         playMeshes.push(childMesh); // Push children to playMeshes so seats can be detected!
@@ -8543,6 +8599,8 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+                    mesh.castShadow = objData.type !== 'floatingText';
+                    mesh.receiveShadow = true;
 mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: (objData.noCollide || objData.canCollide === false), isAnchored: objData.isAnchored !== false, smart: objData.smart || null, smartState: {} };
                     if (objData.type === 'floatingText') applyFloatingTextVisual(mesh, objData);
                     
@@ -8573,6 +8631,7 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
                     bumpMap: terrainTex,
                     bumpScale: 0.8
                 }));
+                playTerrain.receiveShadow = true;
                 playScene.add(playTerrain); window.playTerrainMesh = playTerrain; 
             }
 
@@ -10497,17 +10556,17 @@ const groupAsAircraft = () => {
         const generateStarterHouse = (plotX, plotZ, theme, username) => {
             const objs = [];
             const bx = plotX * 50; const bz = plotZ * 50; 
-            const wallColor = theme === 'Greenridge' ? '#d4b895' : '#e67e22'; 
+            const wallColor = theme === 'Greenridge' ? '#c9cfd4' : '#b56a5d'; 
             const roofColor = theme === 'Greenridge' ? '#c0392b' : '#d35400'; 
             
             // House Foundation (SLATE) & Walls (PLASTIC)
             objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx, y:0.5, z:bz}, rotation:{x:0,y:0,z:0}, scale:{x:20, y:1, z:20}, color: '#7f8c8d', material: 'Slate' });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx-9.5, y:6, z:bz}, rotation:{x:0,y:0,z:0}, scale:{x:1, y:10, z:20}, color: wallColor });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+9.5, y:6, z:bz}, rotation:{x:0,y:0,z:0}, scale:{x:1, y:10, z:20}, color: wallColor });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx, y:6, z:bz-9.5}, rotation:{x:0,y:0,z:0}, scale:{x:18, y:10, z:1}, color: wallColor });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx-6, y:6, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:10, z:1}, color: wallColor });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+6, y:6, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:10, z:1}, color: wallColor });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx, y:9.5, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:3, z:1}, color: wallColor }); 
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx-9.5, y:6, z:bz}, rotation:{x:0,y:0,z:0}, scale:{x:1, y:10, z:20}, color: wallColor, material: 'Brick' });
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+9.5, y:6, z:bz}, rotation:{x:0,y:0,z:0}, scale:{x:1, y:10, z:20}, color: wallColor, material: 'Brick' });
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx, y:6, z:bz-9.5}, rotation:{x:0,y:0,z:0}, scale:{x:18, y:10, z:1}, color: wallColor, material: 'Brick' });
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx-6, y:6, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:10, z:1}, color: wallColor, material: 'Brick' });
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+6, y:6, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:10, z:1}, color: wallColor, material: 'Brick' });
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx, y:9.5, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:3, z:1}, color: wallColor, material: 'Concrete' }); 
             objs.push({ id: crypto.randomUUID(), type: 'wedge', position: {x:bx, y:13.5, z:bz}, rotation:{x:0,y:Math.PI/2,z:0}, scale:{x:22, y:5, z:22}, color: roofColor });
             
             // Yard Decor (Tree with WOOD trunk and GRASS leaves)
@@ -10515,7 +10574,7 @@ const groupAsAircraft = () => {
             objs.push({ id: crypto.randomUUID(), type: 'sphere', position: {x:bx-15, y:9, z:bz+15}, rotation:{x:0,y:0,z:0}, scale:{x:8, y:8, z:8}, color: '#2ecc71', material: 'Grass' });
 
             //   INWARD DRIVEWAY (SLATE)
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+13, y:0.05, z:bz+7.5}, rotation:{x:0,y:0,z:0}, scale:{x:10, y:0.1, z:25}, color: '#95a5a6', material: 'Slate' });
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+13, y:0.05, z:bz+7.5}, rotation:{x:0,y:0,z:0}, scale:{x:10, y:0.1, z:25}, color: '#6f777f', material: 'Concrete' });
 
             //   MAILBOX MODEL (WOOD Post)
             objs.push({ id: crypto.randomUUID(), type: 'cylinder', position: {x:bx-12, y:1, z:bz+19}, rotation:{x:0,y:0,z:0}, scale:{x:0.3, y:2, z:0.3}, color: '#8B4513', material: 'Wood' });
@@ -10537,10 +10596,10 @@ const groupAsAircraft = () => {
                     const roadNS = gx % 2 === 0;
 
                     if (roadEW || roadNS) {
-                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-1.95, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:200, y:3.8, z:200}, color: '#3a434d', material: 'Slate' });
+                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-1.95, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:200, y:3.8, z:200}, color: '#2f343a', material: 'Asphalt' });
                         objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-0.05, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:18, y:0.1, z:2}, color: '#f1c40f', material: 'Neon', noCollide: true });
                     } else {
-                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-1.95, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:200, y:3.8, z:200}, color: '#67717a', material: 'Concrete' });
+                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-1.95, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:200, y:3.8, z:200}, color: '#9fa8b1', material: 'Concrete' });
                     }
                 }
             }
