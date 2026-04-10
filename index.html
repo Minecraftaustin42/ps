@@ -9,6 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js"></script>
     <style>
         /* 2016 Nostalgic CSS / Flat Design Era */
         @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Audiowide&display=swap');
@@ -1643,10 +1644,6 @@
                         <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Gravity:</label>
                             <input type="number" id="ws-gravity" class="form-control" value="0.08" step="0.01" onchange="updateWorldSettings()">
-                        </div>
-                        <div class="form-group">
-                            <label style="font-size:12px; font-weight:bold;">Step Height (auto climb):</label>
-                            <input type="number" id="ws-step-height" class="form-control" value="1.1" step="0.1" min="0" max="5" onchange="updateWorldSettings()">
                         </div>
                       <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Sky Color:</label>
@@ -5918,8 +5915,9 @@ Keep playing together for more daily rewards.`, 'Aww!');
         // FULL 3D ENGINE INTEGRATION - FREEFORM STUDIO & PHYSICS
         // =========================================================================
         
+const DEFAULT_STEP_HEIGHT = 1.0;
 let edData = { 
-            settings: { gravity: 0.08, stepHeight: 1.1, skyColor: '#5b88a5', brightness: 0.65 }, // FIX: Sculpt City Defaults!
+            settings: { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.65 }, // FIX: Sculpt City Defaults!
             spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, 
             objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], 
             uiLayout: [],
@@ -6080,7 +6078,7 @@ let currentTransformSpace = 'local';
         // Auto-convert old grid games into the new freeform format
        // Auto-convert old grid games into the new freeform format
         const migrateLevelDataTo3D = (levelData) => {
-            let newData = { settings: { gravity: 0.08, stepHeight: 1.1, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
+            let newData = { settings: { gravity: 0.08, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
             if (levelData.settings) newData.settings = levelData.settings;
             if (levelData.objects) { 
                 (levelData.objects || []).forEach(ensureSmartLogicDefaults);
@@ -6895,7 +6893,7 @@ document.addEventListener('keydown', (e) => {
             
             isEditingSettings = true; renderExplorer();
             
-if(!edData.settings) edData.settings = { gravity: 0.08, stepHeight: 1.1, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
+if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
             if (typeof edData.settings.sunIntensity === 'undefined') edData.settings.sunIntensity = 1.1;
             if (typeof edData.settings.fogDistance === 'undefined') edData.settings.fogDistance = 1600;
             if (typeof edData.settings.graphicsQuality === 'undefined') edData.settings.graphicsQuality = 'medium';
@@ -6915,7 +6913,6 @@ if(!edData.settings) edData.settings = { gravity: 0.08, stepHeight: 1.1, skyColo
 
         const updateWorldSettings = () => {
             edData.settings.gravity = parseFloat(document.getElementById('ws-gravity').value) || 0.08;
-            edData.settings.stepHeight = parseFloat(document.getElementById('ws-step-height').value) || 1.1;
             edData.settings.skyColor = document.getElementById('ws-skycolor').value;
             edData.settings.brightness = parseFloat(document.getElementById('ws-brightness').value) || 1.0;
             edData.settings.sunIntensity = parseFloat(document.getElementById('ws-sun-intensity').value) || 1.1;
@@ -7326,7 +7323,7 @@ const promptClearEditor = () => {
         // --- Editor Core Engine ---
      const clearEditor = () => {
             currentEditGameId = null; 
-            edData = { settings: { gravity: 0.08, stepHeight: 1.1, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
+            edData = { settings: { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
@@ -7640,6 +7637,9 @@ playerObj = {
         let isDeathAnimating = false;
         let deathPieces = [];
         let remoteDeathPieces = [];
+        let physicsWorld = null;
+        let physicsBodies = [];
+        let meshToBody = new Map();
 
         // Tool System Variables
         let playerInventory = [];
@@ -8063,8 +8063,8 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
 
             stopGameLoop(); setupMobileControls();
             
-            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.08, stepHeight: 1.1, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
-            if (typeof activeLevel.settings.stepHeight === 'undefined') activeLevel.settings.stepHeight = 1.1;
+            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.08, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
+            
             playScene.background = new THREE.Color(activeLevel.settings.skyColor);
             playScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = activeLevel.settings.brightness; });
             applyPlayGraphicsSettings(activeLevel.settings);
@@ -8585,13 +8585,14 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
             playScene.updateMatrixWorld(true);
             
             // Advance Colliders: Include Box AND Mesh reference to ignore self-collisions for vehicles
-            playColliders = playMeshes.filter(m => !m.userData.isTool && !m.userData.noCollide && m.userData.type !== 'seat' && m.userData.type !== 'aircraftSeat' && m.userData.type !== 'vehicle' && m.userData.type !== 'aircraft' && !['wedge', 'triangle', 'ladder'].includes(m.userData.type)).map(m => {
+            playColliders = playMeshes.filter(m => !m.userData.isTool && !m.userData.noCollide && m.userData.type !== 'seat' && m.userData.type !== 'aircraftSeat' && m.userData.type !== 'vehicle' && m.userData.type !== 'aircraft').map(m => {
                 m.updateMatrixWorld(true); return { box: new THREE.Box3().setFromObject(m), mesh: m };
             });
 
             window.playLadders = playMeshes.filter(m => m.userData.type === 'ladder').map(m => { m.updateMatrixWorld(true); return new THREE.Box3().setFromObject(m); });
             window.playSlopes = playMeshes.filter(m => ['wedge', 'triangle'].includes(m.userData.type));
             window.playSlopes.forEach(m => { if (m.material) m.material.side = THREE.DoubleSide; });
+            rebuildCannonWorld();
 
             playerMesh = createPlayerMesh(currentUser ? currentUser.color : '#e74c3c', currentUser ? currentUser.equipped : null, currentUser ? currentUser.bodyColors : null, currentUser ? { shirtImage: currentUser.equippedShirtImage || null, pantsImage: currentUser.equippedPantsImage || null } : null);
             playerMesh.scale.set(0.5, 0.5, 0.5); playScene.add(playerMesh); renderPlayToolbar();
@@ -8967,7 +8968,8 @@ const updateChatBubbles = () => {
                     playMeshes.push(vehicle); playMeshes.push(seat);
                     mesh.userData.smartState.spawnedVehicle = vehicle;
                     playScene.updateMatrixWorld(true);
-                    playColliders = playMeshes.filter(m => !m.userData?.isTool && !m.userData?.noCollide && m.userData?.type !== 'seat' && m.userData?.type !== 'aircraftSeat' && m.userData?.type !== 'vehicle' && m.userData?.type !== 'aircraft' && !['wedge', 'triangle', 'ladder'].includes(m.userData?.type)).map(m => { m.updateMatrixWorld(true); return { box: new THREE.Box3().setFromObject(m), mesh: m }; });
+                    playColliders = playMeshes.filter(m => !m.userData?.isTool && !m.userData?.noCollide && m.userData?.type !== 'seat' && m.userData?.type !== 'aircraftSeat' && m.userData?.type !== 'vehicle' && m.userData?.type !== 'aircraft').map(m => { m.updateMatrixWorld(true); return { box: new THREE.Box3().setFromObject(m), mesh: m }; });
+                    rebuildCannonWorld();
                 }
             } else if (smart.kind === 'door') {
                 const autoOpen = dist < (smart.range || 4);
@@ -9059,45 +9061,77 @@ const updateChatBubbles = () => {
             }
         };
 
+        const toTriMesh = (mesh) => {
+            if (!mesh?.geometry || !window.CANNON) return null;
+            const geo = mesh.geometry.clone();
+            const pos = geo.attributes && geo.attributes.position ? geo.attributes.position.array : null;
+            if (!pos) return null;
+            const vertices = Array.from(pos);
+            const indices = geo.index ? Array.from(geo.index.array) : Array.from({ length: vertices.length / 3 }, (_, i) => i);
+            return new CANNON.Trimesh(vertices, indices);
+        };
+
+        const getCannonShapeForMesh = (mesh) => {
+            if (!mesh || !window.CANNON) return null;
+            const type = mesh.userData?.type || 'block';
+            const s = mesh.scale || { x: 1, y: 1, z: 1 };
+            if (type === 'sphere') return new CANNON.Sphere(Math.max(0.15, Math.max(s.x, s.y, s.z) * 0.5));
+            if (type === 'cylinder') return new CANNON.Cylinder(Math.max(0.1, s.x * 0.5), Math.max(0.1, s.z * 0.5), Math.max(0.1, s.y), 12);
+            if (type === 'wedge' || type === 'triangle') return toTriMesh(mesh);
+            return new CANNON.Box(new CANNON.Vec3(Math.max(0.05, s.x * 0.5), Math.max(0.05, s.y * 0.5), Math.max(0.05, s.z * 0.5)));
+        };
+
+        const rebuildCannonWorld = () => {
+            if (!window.CANNON || !playScene) return;
+            physicsWorld = new CANNON.World();
+            physicsWorld.gravity.set(0, -(activeLevel?.settings?.gravity || 0.08) * 60, 0);
+            physicsWorld.broadphase = new CANNON.NaiveBroadphase();
+            physicsWorld.solver.iterations = 10;
+            physicsBodies = [];
+            meshToBody = new Map();
+
+            playMeshes.forEach(mesh => {
+                if (!mesh?.isMesh || mesh.userData?.isTool || mesh.userData?.noCollide) return;
+                if (['seat', 'aircraftSeat', 'vehicle', 'aircraft', 'floatingText'].includes(mesh.userData?.type)) return;
+                const shape = getCannonShapeForMesh(mesh);
+                if (!shape) return;
+                const dynamic = mesh.userData?.isAnchored === false;
+                const body = new CANNON.Body({
+                    mass: dynamic ? Math.max(0.2, (mesh.scale.x * mesh.scale.y * mesh.scale.z) * 0.2) : 0,
+                    shape
+                });
+                body.position.set(mesh.position.x, mesh.position.y, mesh.position.z);
+                body.quaternion.set(mesh.quaternion.x, mesh.quaternion.y, mesh.quaternion.z, mesh.quaternion.w);
+                body.linearDamping = dynamic ? 0.2 : 0.99;
+                body.angularDamping = dynamic ? 0.35 : 0.99;
+                physicsWorld.addBody(body);
+                physicsBodies.push(body);
+                meshToBody.set(mesh.id, body);
+                body.__meshRef = mesh;
+            });
+        };
+
         const updateDynamicObjectPhysics = () => {
-            if (!activeLevel || !playScene) return;
-            const gravityStrength = Math.max(0.02, (activeLevel.settings?.gravity || 0.08) * 0.06);
-            const playerPos = new THREE.Vector3(playerObj.x, playerObj.y + 2, playerObj.z);
-            const staticMeshes = playMeshes.filter(m => m?.isMesh && !m.userData?.isTool && !m.userData?.noCollide && m.userData?.isAnchored !== false);
-            const dynamicMeshes = playMeshes.filter(m => m?.isMesh && !m.userData?.isTool && !m.userData?.noCollide && m.userData?.isAnchored === false && !['seat', 'aircraftSeat'].includes(m.userData?.type));
+            if (!physicsWorld || !window.CANNON) return;
+            const dt = Math.max(1 / 120, Math.min(1 / 20, (window.playDeltaMs || 16.67) / 1000));
+            physicsWorld.step(1 / 60, dt, 2);
 
-            dynamicMeshes.forEach(mesh => {
-                if (!mesh.userData.physicsVel) mesh.userData.physicsVel = new THREE.Vector3(0, 0, 0);
-                const vel = mesh.userData.physicsVel;
-                vel.y -= gravityStrength;
-                vel.multiplyScalar(0.992);
+            const playerVec = new CANNON.Vec3(playerObj.x, playerObj.y + 2.2, playerObj.z);
+            const playerVel = new CANNON.Vec3(playerObj.vx * 14, 0, playerObj.vz * 14);
 
-                const pushDir = mesh.position.clone().sub(playerPos);
-                pushDir.y = 0;
-                const dist = pushDir.length();
-                if (dist > 0 && dist < 3.2) {
-                    pushDir.normalize();
-                    vel.x += pushDir.x * 0.03;
-                    vel.z += pushDir.z * 0.03;
-                }
-
-                mesh.position.add(vel);
-
-                const halfY = new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3()).y / 2;
-                if (mesh.position.y < -120) {
-                    mesh.position.y = 30;
-                    vel.set(0, 0, 0);
-                }
-
-                const ray = new THREE.Raycaster(new THREE.Vector3(mesh.position.x, mesh.position.y + 2, mesh.position.z), new THREE.Vector3(0, -1, 0), 0, 6);
-                const hits = ray.intersectObjects(staticMeshes, true);
-                if (hits.length > 0 && vel.y <= 0) {
-                    const floorY = hits[0].point.y + halfY + 0.03;
-                    if (mesh.position.y < floorY + 0.3) {
-                        mesh.position.y = floorY;
-                        vel.y = 0;
+            physicsBodies.forEach(body => {
+                const mesh = body.__meshRef;
+                if (!mesh) return;
+                if (body.mass > 0) {
+                    const dx = body.position.x - playerVec.x;
+                    const dz = body.position.z - playerVec.z;
+                    const d2 = dx * dx + dz * dz;
+                    if (d2 < 9) {
+                        body.applyImpulse(new CANNON.Vec3(playerVel.x * 0.9, 0, playerVel.z * 0.9), body.position);
                     }
                 }
+                mesh.position.set(body.position.x, body.position.y, body.position.z);
+                mesh.quaternion.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
             });
         };
 
@@ -9353,7 +9387,7 @@ const updateChatBubbles = () => {
                 playerObj.rotY = Math.atan2(moveDir.x, moveDir.z); 
             }
 
-            const maxStepHeight = Math.max(0, Math.min(5, parseFloat(activeLevel?.settings?.stepHeight ?? 1.1) || 1.1));
+            const maxStepHeight = DEFAULT_STEP_HEIGHT;
             const tryStepUp = () => {
                 if (maxStepHeight <= 0) return false;
                 const stepInc = 0.15;
@@ -9612,7 +9646,8 @@ const animatePlay = () => {
                     playScene.updateMatrixWorld(true);
                     
                     // FIX: Filter out noCollide blocks during live physics updates too!
-                    playColliders = playMeshes.filter(m => !m.userData.isTool && !m.userData.noCollide && m.userData.type !== 'seat' && m.userData.type !== 'aircraftSeat' && m.userData.type !== 'vehicle' && m.userData.type !== 'aircraft' && !['wedge', 'triangle', 'ladder'].includes(m.userData.type)).map(m => { m.updateMatrixWorld(true); return { box: new THREE.Box3().setFromObject(m), mesh: m }; });
+                    playColliders = playMeshes.filter(m => !m.userData.isTool && !m.userData.noCollide && m.userData.type !== 'seat' && m.userData.type !== 'aircraftSeat' && m.userData.type !== 'vehicle' && m.userData.type !== 'aircraft').map(m => { m.updateMatrixWorld(true); return { box: new THREE.Box3().setFromObject(m), mesh: m }; });
+                    rebuildCannonWorld();
                     
                     if (window.playLadders) { window.playLadders = playMeshes.filter(m => m.userData.type === 'ladder').map(m => { m.updateMatrixWorld(true); return new THREE.Box3().setFromObject(m); }); }
                 }
@@ -10491,7 +10526,6 @@ const groupAsAircraft = () => {
             activeLevel = {
                 settings: {
                     gravity: 0.08,
-                    stepHeight: 1.1,
                     skyColor: isIndustrial ? '#71808f' : (isGrass ? '#5b88a5' : '#a37b45'),
                     brightness: isIndustrial ? 0.6 : 0.65
                 },
