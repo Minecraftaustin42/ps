@@ -9,6 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js"></script>
     <style>
         /* 2016 Nostalgic CSS / Flat Design Era */
         @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Audiowide&display=swap');
@@ -166,7 +167,7 @@
         
         .play-layout { display: flex; gap: 20px; align-items: flex-start; justify-content: center; text-align: left; flex-wrap: wrap; }
         .play-game-card { padding: 15px; width: 100%; max-width: 850px; box-sizing: border-box; margin-bottom: 0; }
-        .play-sidebar { width: 100%; max-width: 250px; padding: 15px; margin-bottom: 0; height: 480px; overflow-y: auto; }
+        .play-sidebar { width: 100%; max-width: 340px; padding: 15px; margin-bottom: 0; max-height: 360px; overflow-y: auto; }
 
         /* Forums UI */
         .forum-cat { padding: 15px; border: 1px solid #eee; border-radius: 4px; margin-bottom: 10px; cursor: pointer; transition: background 0.2s; display: flex; justify-content: space-between; align-items: center; }
@@ -1451,6 +1452,9 @@
                             <button class="tool-btn" onclick="addPart('cone')">Cone</button>
                             <button class="tool-btn" onclick="addPart('triangle')">Triangle</button>
                             <button class="tool-btn" onclick="addPart('wedge')">Wedge</button>
+                            <button class="tool-btn" onclick="addPart('halfCylinder')">Half Cylinder</button>
+                            <button class="tool-btn" onclick="addPart('hollowCylinder')">Hollow Cylinder</button>
+                            <button class="tool-btn" onclick="addPart('halfSphere')">Half Sphere</button>
                             <button class="tool-btn" onclick="addPart('ladder')">Ladder</button>
                             <button class="tool-btn" onclick="addPart('floatingText')">Floating Text</button>
                             <button class="tool-btn" style="color:#f39c12;font-weight:bold;" onclick="addPart('spawn')">Spawn</button>
@@ -1475,6 +1479,7 @@
                             <button class="tool-btn active" id="mode-translate" onclick="setTransformMode('translate')">Move</button>
                             <button class="tool-btn" id="mode-rotate" onclick="setTransformMode('rotate')">Rotate</button>
                             <button class="tool-btn" id="mode-scale" onclick="setTransformMode('scale')">Scale</button>
+                            <button class="tool-btn" id="btn-transform-space" onclick="toggleTransformSpace()">Space: Local</button>
                             <button class="tool-btn" id="btn-multi-select" onclick="toggleMultiSelect()">Multi-Select: OFF</button>
                             <button class="tool-btn btn-info" onclick="duplicateSelectedParts()">Duplicate</button>
                             <button class="btn btn-sm btn-danger" onclick="deleteSelectedParts()">Delete</button>
@@ -1488,7 +1493,6 @@
                             <label style="font-size:12px;">Move <input type="number" id="snap-move" value="1" style="width:48px; padding:2px;"></label>
                             <label style="font-size:12px;">Rot <input type="number" id="snap-rot" value="15" style="width:48px; padding:2px;"></label>
                             <label style="font-size:12px;">Scale <input type="number" id="snap-scale" value="1" style="width:48px; padding:2px;"></label>
-                            <button class="tool-btn btn-danger" onclick="promptClearEditor()">Clear World</button>
                         </div>
                     </div>
                 </div>
@@ -1504,6 +1508,9 @@
     <option value="cone">Cone</option>
     <option value="triangle">Triangle</option>
     <option value="wedge">Wedge</option>
+    <option value="halfCylinder">Half Cylinder</option>
+    <option value="hollowCylinder">Hollow Cylinder</option>
+    <option value="halfSphere">Half Sphere</option>
     <option value="ladder">Ladder</option>
     <option value="spawn">Spawn</option>
     <option value="seat">Seat</option>
@@ -1642,7 +1649,7 @@
                         <h4 style="margin-top:0; color:#2c3e50; border-bottom: 1px solid #ccc; padding-bottom: 5px;">World Settings</h4>
                         <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Gravity:</label>
-                            <input type="number" id="ws-gravity" class="form-control" value="0.35" step="0.05" onchange="updateWorldSettings()">
+                            <input type="number" id="ws-gravity" class="form-control" value="0.08" step="0.01" onchange="updateWorldSettings()">
                         </div>
                       <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Sky Color:</label>
@@ -1676,13 +1683,16 @@
                     </div>
 
                     <div id="studio-mobile-controls">
+                        <div id="studio-look-zone" style="position:absolute; top:0; right:0; width:52%; height:76%; pointer-events:auto; touch-action:none;"></div>
                         <div style="display:flex; justify-content:space-between; align-items:flex-end; padding:0 10px; gap:8px;">
                             <div id="studio-joystick-base">
                                 <div id="studio-joystick-stick"></div>
                             </div>
                             <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
-                                <div class="studio-mobile-pill" id="studio-landscape-pill">Best in landscape mode 📱↔️ <button onclick="closeStudioLandscapeHint()" style="margin-left:6px; background:transparent; color:#fff; border:none; font-weight:700; pointer-events:auto;">✕</button></div>
+                                <div class="studio-mobile-pill" id="studio-landscape-pill">Move: left stick • Look: right side <button onclick="closeStudioLandscapeHint()" style="margin-left:6px; background:transparent; color:#fff; border:none; font-weight:700; pointer-events:auto;">✕</button></div>
                                 <div style="display:flex; gap:6px; pointer-events:auto;">
+                                    <button class="studio-mobile-btn" id="studio-fly-up">Up</button>
+                                    <button class="studio-mobile-btn" id="studio-fly-down">Down</button>
                                     <button class="studio-mobile-btn" onclick="setTransformMode('select')">Select</button>
                                     <button class="studio-mobile-btn" onclick="setTransformMode('translate')">Move</button>
                                     <button class="studio-mobile-btn" onclick="setTransformMode('rotate')">Rotate</button>
@@ -1760,6 +1770,17 @@
                             <option value="Grass">Grass</option>
                             <option value="Sand">Sand / Dirt</option>
                             <option value="Slate">Slate / Stone</option>
+                            <option value="Metal">Metal</option>
+                            <option value="Glass">Glass</option>
+                            <option value="Marble">Marble</option>
+                            <option value="CarbonFiber">Carbon Fiber</option>
+                            <option value="Obsidian">Obsidian</option>
+                            <option value="Ice">Ice</option>
+                            <option value="Hologram">Hologram</option>
+                            <option value="LavaRock">Lava Rock</option>
+                            <option value="Concrete">Concrete</option>
+                            <option value="Asphalt">Asphalt</option>
+                            <option value="Brick">Brick</option>
                         </select>
                         <div id="floating-text-props" style="display:none; margin-top:10px; background:#fff7ec; border:1px solid #f2d2a7; border-radius:4px; padding:8px;">
                             <h5 style="margin:0 0 8px 0; color:#8a5a18;">Floating Text</h5>
@@ -1769,11 +1790,38 @@
                             </div>
                             <div class="form-group mb-10">
                                 <label><strong>Font:</strong></label>
-                                <input id="prop-ffont" class="form-control" value="Arial" onchange="updateSelectedProperties()">
+                                <select id="prop-ffont" class="form-control" onchange="updateSelectedProperties()">
+                                    <option value="Arial">Arial</option>
+                                    <option value="Verdana">Verdana</option>
+                                    <option value="Tahoma">Tahoma</option>
+                                    <option value="Trebuchet MS">Trebuchet MS</option>
+                                    <option value="Georgia">Georgia</option>
+                                    <option value="Times New Roman">Times New Roman</option>
+                                    <option value="Garamond">Garamond</option>
+                                    <option value="Palatino Linotype">Palatino Linotype</option>
+                                    <option value="Courier New">Courier New</option>
+                                    <option value="Lucida Console">Lucida Console</option>
+                                    <option value="Impact">Impact</option>
+                                    <option value="Comic Sans MS">Comic Sans MS</option>
+                                    <option value="Open Sans">Open Sans</option>
+                                    <option value="Audiowide">Audiowide</option>
+                                </select>
                             </div>
                             <div class="form-group mb-10">
                                 <label><strong>Text Size:</strong></label>
                                 <input id="prop-fsize" type="number" min="8" max="160" value="40" class="form-control" onchange="updateSelectedProperties()">
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Text Color:</strong></label>
+                                <input id="prop-ftext-color" type="color" class="form-control" value="#ffffff" onchange="updateSelectedProperties()">
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Background Color:</strong></label>
+                                <input id="prop-fbg-color" type="color" class="form-control" value="#000000" onchange="updateSelectedProperties()">
+                            </div>
+                            <div class="form-group mb-10">
+                                <label><strong>Background Transparency:</strong> <span id="prop-fbg-transparency-label">1</span></label>
+                                <input id="prop-fbg-transparency" type="range" min="0" max="1" step="0.05" value="1" class="form-control" oninput="document.getElementById('prop-fbg-transparency-label').innerText=this.value; updateSelectedProperties()">
                             </div>
                         </div>
                         <div id="smart-props-section" style="display:none; margin-top:10px; background:#f6fbff; border:1px solid #d7e7f5; border-radius:4px; padding:8px;">
@@ -1835,6 +1883,7 @@
     Invite Friend
 </button>
                             <button id="btn-save-game" class="btn btn-sm btn-info" onclick="toggleBookmarkFromPlay()">Save</button>
+                            <button class="btn btn-sm btn-warning" onclick="resetCharacter()">Reset Character</button>
                             <button class="btn btn-sm" id="btn-exit-game" onclick="navigate('library')">Exit Game</button>
                         </div>
                     </div>
@@ -1914,7 +1963,7 @@
                             </div>
                         </div>
 
-                        <div class="overlay-instruction" id="play-instruction">WASD to move, SPACE to jump. Click & drag to rotate camera! Scroll to zoom into First-Person.</div>
+                        <div class="overlay-instruction" id="play-instruction"></div>
                     </div>
                 </div>
 
@@ -1923,11 +1972,12 @@
                     <h3 style="margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 10px; color: #2c3e50;">Update Log</h3>
                     
                     <div id="post-update-section" style="display:none; margin-bottom: 15px; padding-bottom: 15px; border-bottom: 1px dashed #ccc;">
-                        <input type="text" id="update-text" class="form-control" placeholder="What's new?">
+                        <input type="text" id="update-title" class="form-control mb-10" maxlength="80" placeholder="Update title (e.g. v1.2.0 Patch Notes)">
+                        <textarea id="update-text" class="form-control" maxlength="400" placeholder="Describe what changed..." style="min-height:70px; resize:vertical;"></textarea>
                         <button class="btn btn-success btn-sm mt-10" style="width:100%;" onclick="postGameUpdate()">Post Update</button>
                     </div>
 
-                    <div id="play-updates-list"></div>
+                    <div id="play-updates-list" style="max-height:280px; overflow-y:auto; padding-right:4px;"></div>
                 </div>
             </div>
         </div>
@@ -2265,6 +2315,101 @@ async function safeFetch(url, options = {}) {
                     ctx.fillStyle = Math.random() > 0.5 ? `rgba(0,0,0,${Math.random()*0.15})` : `rgba(255,255,255,${Math.random()*0.15})`;
                     ctx.fillRect(Math.random() * 512, Math.random() * 512, 1.5, 1.5);
                 }
+            } else if (type === 'Metal') {
+                ctx.fillStyle = '#aeb8c2';
+                ctx.fillRect(0, 0, 512, 512);
+                for (let i = 0; i < 4500; i++) {
+                    const y = Math.random() * 512;
+                    ctx.fillStyle = `rgba(255,255,255,${Math.random() * 0.14})`;
+                    ctx.fillRect(0, y, 512, Math.random() * 1.5 + 0.5);
+                }
+                for (let i = 0; i < 10000; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.12)';
+                    ctx.fillRect(Math.random() * 512, Math.random() * 512, 1, 1);
+                }
+            } else if (type === 'Marble') {
+                ctx.fillStyle = '#dcdde1';
+                ctx.fillRect(0, 0, 512, 512);
+                for (let i = 0; i < 700; i++) {
+                    ctx.beginPath();
+                    ctx.moveTo(Math.random() * 512, -20);
+                    ctx.bezierCurveTo(Math.random() * 512, 160, Math.random() * 512, 340, Math.random() * 512, 540);
+                    ctx.strokeStyle = Math.random() > 0.5 ? 'rgba(90,96,116,0.16)' : 'rgba(130,136,158,0.12)';
+                    ctx.lineWidth = Math.random() * 2 + 0.7;
+                    ctx.stroke();
+                }
+            } else if (type === 'CarbonFiber') {
+                ctx.fillStyle = '#1f252d';
+                ctx.fillRect(0, 0, 512, 512);
+                const step = 16;
+                for (let y = 0; y < 512; y += step) {
+                    for (let x = 0; x < 512; x += step) {
+                        const light = ((x / step + y / step) % 2 === 0) ? 42 : 30;
+                        ctx.fillStyle = `rgb(${light},${light + 5},${light + 9})`;
+                        ctx.fillRect(x, y, step, step);
+                        ctx.fillStyle = 'rgba(255,255,255,0.05)';
+                        ctx.fillRect(x + 2, y + 2, step / 2, step / 2);
+                    }
+                }
+            } else if (type === 'Obsidian') {
+                ctx.fillStyle = '#171327';
+                ctx.fillRect(0, 0, 512, 512);
+                for (let i = 0; i < 1200; i++) {
+                    const x = Math.random() * 512, y = Math.random() * 512, r = Math.random() * 25 + 4;
+                    const grad = ctx.createRadialGradient(x, y, 0, x, y, r);
+                    grad.addColorStop(0, 'rgba(132,107,191,0.2)');
+                    grad.addColorStop(1, 'rgba(20,16,34,0)');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+                }
+            } else if (type === 'LavaRock') {
+                ctx.fillStyle = '#26170f';
+                ctx.fillRect(0, 0, 512, 512);
+                for (let i = 0; i < 900; i++) {
+                    ctx.beginPath();
+                    const x = Math.random() * 512, y = Math.random() * 512;
+                    ctx.moveTo(x, y);
+                    for (let j = 0; j < 7; j++) ctx.lineTo(x + (Math.random() - 0.5) * 28, y + (Math.random() - 0.5) * 28);
+                    ctx.closePath();
+                    ctx.fillStyle = Math.random() > 0.65 ? 'rgba(255,108,51,0.35)' : 'rgba(0,0,0,0.35)';
+                    ctx.fill();
+                }
+            } else if (type === 'Concrete') {
+                ctx.fillStyle = '#c8ced3';
+                ctx.fillRect(0, 0, 512, 512);
+                for (let i = 0; i < 22000; i++) {
+                    ctx.fillStyle = Math.random() > 0.5 ? 'rgba(0,0,0,0.08)' : 'rgba(255,255,255,0.08)';
+                    const s = Math.random() * 1.8 + 0.5;
+                    ctx.fillRect(Math.random() * 512, Math.random() * 512, s, s);
+                }
+            } else if (type === 'Asphalt') {
+                ctx.fillStyle = '#2f353d';
+                ctx.fillRect(0, 0, 512, 512);
+                for (let i = 0; i < 24000; i++) {
+                    ctx.fillStyle = Math.random() > 0.7 ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.12)';
+                    const s = Math.random() * 1.5 + 0.3;
+                    ctx.fillRect(Math.random() * 512, Math.random() * 512, s, s);
+                }
+                for (let i = 0; i < 1200; i++) {
+                    ctx.strokeStyle = 'rgba(255,255,255,0.02)';
+                    ctx.beginPath();
+                    ctx.moveTo(Math.random() * 512, Math.random() * 512);
+                    ctx.lineTo(Math.random() * 512, Math.random() * 512);
+                    ctx.stroke();
+                }
+            } else if (type === 'Brick') {
+                ctx.fillStyle = '#8d4f45';
+                ctx.fillRect(0, 0, 512, 512);
+                const bw = 64, bh = 24;
+                for (let y = 0; y < 512; y += bh) {
+                    for (let x = 0; x < 512; x += bw) {
+                        const ox = ((y / bh) % 2) ? bw * 0.5 : 0;
+                        ctx.fillStyle = Math.random() > 0.5 ? '#944f44' : '#7f4339';
+                        ctx.fillRect((x + ox) % 512, y, bw - 2, bh - 2);
+                    }
+                }
+                ctx.fillStyle = 'rgba(220,220,220,0.55)';
+                for (let y = 0; y < 512; y += bh) ctx.fillRect(0, y, 512, 2);
             }
 
             const tex = new THREE.CanvasTexture(canvas);
@@ -2282,6 +2427,9 @@ async function safeFetch(url, options = {}) {
 
             // Neon stays basic so it "glows" and ignores shadows
             if (matType === 'Neon') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex) });
+            if (matType === 'Hologram') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#66e5ff'), transparent: true, opacity: 0.45, wireframe: true });
+            if (matType === 'Glass') return new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.02, metalness: 0.0, transparent: true, opacity: 0.35, transmission: 0.85, thickness: 0.6 });
+            if (matType === 'Ice') return new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.08, metalness: 0.0, transparent: true, opacity: 0.6, transmission: 0.5, thickness: 0.9 });
 
             // Smooth Plastic gets no texture, but is highly reflective
             if (matType === 'SmoothPlastic') return new THREE.MeshStandardMaterial({ 
@@ -2290,7 +2438,7 @@ async function safeFetch(url, options = {}) {
                 metalness: 0.1 
             });
 
-            const validTypes = ['Plastic', 'Wood', 'Grass', 'Slate', 'Sand'];
+            const validTypes = ['Plastic', 'Wood', 'Grass', 'Slate', 'Sand', 'Metal', 'Marble', 'CarbonFiber', 'Obsidian', 'LavaRock', 'Concrete', 'Asphalt', 'Brick'];
             const safeType = validTypes.includes(matType) ? matType : 'Plastic';
             const tex = generateRealisticTexture(safeType);
 
@@ -2319,6 +2467,38 @@ async function safeFetch(url, options = {}) {
                 matRoughness = 0.9; 
                 matMetalness = 0.0; 
                 matBumpScale = 0.5; 
+            } else if (safeType === 'Metal') {
+                matRoughness = 0.18;
+                matMetalness = 0.95;
+                matBumpScale = 0.08;
+            } else if (safeType === 'Marble') {
+                matRoughness = 0.35;
+                matMetalness = 0.05;
+                matBumpScale = 0.22;
+            } else if (safeType === 'CarbonFiber') {
+                matRoughness = 0.45;
+                matMetalness = 0.4;
+                matBumpScale = 0.18;
+            } else if (safeType === 'Obsidian') {
+                matRoughness = 0.12;
+                matMetalness = 0.3;
+                matBumpScale = 0.09;
+            } else if (safeType === 'LavaRock') {
+                matRoughness = 0.92;
+                matMetalness = 0.0;
+                matBumpScale = 1.0;
+            } else if (safeType === 'Concrete') {
+                matRoughness = 0.93;
+                matMetalness = 0.02;
+                matBumpScale = 0.28;
+            } else if (safeType === 'Asphalt') {
+                matRoughness = 0.95;
+                matMetalness = 0.01;
+                matBumpScale = 0.22;
+            } else if (safeType === 'Brick') {
+                matRoughness = 0.88;
+                matMetalness = 0.02;
+                matBumpScale = 0.35;
             }
 
             // Return the upgraded PBR Material
@@ -2361,8 +2541,28 @@ async function safeFetch(url, options = {}) {
             if (body) config.body = JSON.stringify(body);
             try {
                 const res = await fetch(API_BASE + endpoint, config);
-                const data = await res.json();
-                if (!res.ok) throw new Error(data.error || 'Server Error');
+                const raw = await res.text();
+                const contentType = (res.headers.get('content-type') || '').toLowerCase();
+                let data = {};
+
+                if (raw) {
+                    if (contentType.includes('application/json') || /^[\s\n\r\t]*[\[{]/.test(raw)) {
+                        try {
+                            data = JSON.parse(raw);
+                        } catch (parseError) {
+                            data = { error: `Server returned invalid JSON (HTTP ${res.status})` };
+                        }
+                    } else {
+                        data = { error: raw.slice(0, 200).trim() || `HTTP ${res.status}` };
+                    }
+                }
+
+                if (!res.ok) {
+                    const fallbackMsg = res.status >= 500
+                        ? `Server temporarily unavailable (HTTP ${res.status}). Please try again.`
+                        : `Request failed (HTTP ${res.status})`;
+                    throw new Error(data.error || fallbackMsg);
+                }
                 
                 // Keep frontend coins up to date easily via responses that affect them
 if (data.coins !== undefined && currentUser && !data.groupCoins) {
@@ -2391,8 +2591,8 @@ if (data.coins !== undefined && currentUser && !data.groupCoins) {
                     <h3 style="text-align:left;">${g.title}</h3>
                     <p style="font-size:11px; text-align:left;">By <a href="javascript:void(0)" onclick="if('${g.groupId}' && '${g.groupId}' !== 'undefined' && '${g.groupId}' !== 'null') { loadGroupDetail('${g.groupId}'); } else { loadProfile('${g.authorName}'); navigate('profile'); }" style="color:#3498db;">${g.authorName}</a></p>
                     <div class="game-stats">
-                        <span class="plays">${g.plays || 0}</span>
-                        <span>${g.likes || 0}</span>
+                        <span class="plays">Plays: ${g.plays || 0}</span>
+                        <span>Likes: ${g.likes || 0}</span>
                     </div>
                     <div class="game-actions">
                         <button class="btn btn-success btn-sm" onclick="loadGame('${g.id}')">Play</button>
@@ -2406,6 +2606,61 @@ if (data.coins !== undefined && currentUser && !data.groupCoins) {
             `;
         };
 
+
+        const renderGameGrid = (containerId, games = [], showEdit = false, emptyText = 'No games found yet.') => {
+            const grid = document.getElementById(containerId);
+            if (!grid) return;
+            if (!games || games.length === 0) {
+                grid.innerHTML = `<p style="color:#777;">${emptyText}</p>`;
+                return;
+            }
+            grid.innerHTML = games.map(g => renderGameCard(g, showEdit)).join('');
+        };
+
+        const loadLibrary = async () => {
+            const qEl = document.getElementById('game-search');
+            const genreEl = document.getElementById('genre-filter');
+            const q = qEl ? qEl.value.trim() : '';
+            const genre = genreEl ? genreEl.value : 'All';
+            const params = new URLSearchParams();
+            if (q) params.set('q', q);
+            if (genre && genre !== 'All') params.set('genre', genre);
+            const endpoint = `/games${params.toString() ? `?${params.toString()}` : ''}`;
+            const games = await apiCall(endpoint, 'GET');
+            renderGameGrid('games-grid', games, false, 'No games match your search.');
+        };
+
+        const loadDashboardGames = async () => {
+            const [fresh, trending, liked, myGames, me] = await Promise.all([
+                apiCall('/games/fresh', 'GET'),
+                apiCall('/games/trending', 'GET'),
+                apiCall('/games/most-liked', 'GET'),
+                apiCall('/my-games', 'GET'),
+                apiCall('/me', 'GET')
+            ]);
+
+            const bookmarked = me && Array.isArray(me.bookmarkedGames) ? me.bookmarkedGames : [];
+            const recentlyPlayed = me && Array.isArray(me.recentlyPlayed)
+                ? [...me.recentlyPlayed].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
+                : [];
+
+            renderGameGrid('saved-games-grid', bookmarked, false, 'Save games to see them here.');
+            renderGameGrid('fresh-games-grid', fresh || [], false, 'No fresh games yet.');
+            renderGameGrid('trending-games-grid', trending || [], false, 'No trending games yet.');
+            renderGameGrid('most-liked-games-grid', liked || [], false, 'No liked games yet.');
+            renderGameGrid('recent-games-grid', recentlyPlayed, false, 'Play a game and it will show up here.');
+            renderGameGrid('editable-games-grid', myGames || [], true, 'You have no editable games yet.');
+        };
+
+        window.loadLibrary = loadLibrary;
+        window.loadDashboardGames = loadDashboardGames;
+        window.playRandomGame = async () => {
+            try {
+                const random = await apiCall('/games/random', 'GET');
+                if (!random || !random.id) return showModal('No Games', 'No playable games found right now.');
+                loadGame(random.id);
+            } catch (e) {}
+        };
 
 
 const toggleMultiSelect = () => {
@@ -2577,7 +2832,7 @@ const toggleMultiSelect = () => {
                     keys.d = false;
                 };
 
-                jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playInput.justJumped = true; jumpBtn.style.background = 'rgba(46, 204, 113, 0.9)'; }, { passive: false });
+                jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playInput.justJumped = true; jumpBufferFrames = 8; jumpBtn.style.background = 'rgba(46, 204, 113, 0.9)'; }, { passive: false });
                 jumpBtn.addEventListener('touchend', (e) => { e.preventDefault(); jumpBtn.style.background = 'rgba(46, 204, 113, 0.6)'; }, { passive: false });
 
                 const onLookMove = (touch) => {
@@ -2710,6 +2965,7 @@ checkDailyReward(); // <-- ADDED HERE
 
         // Interval cleanup references
         let grpWallSyncInterval = null;
+        let dashboardFriendsInterval = null;
         const promptStudioAutosaveRecovery = () => {
             if (autosaveRecoveryPrompted || currentEditGameId) return;
             autosaveRecoveryPrompted = true;
@@ -2725,11 +2981,12 @@ checkDailyReward(); // <-- ADDED HERE
                 `We found an autosave from ${stamp}. Recover it now?`,
                 'Recover',
                 () => {
-                    edData = saved.edData;
+                    edData = migrateLevelDataTo3D(saved.edData);
                     if (saved.genre) document.getElementById('editor-genre').value = saved.genre;
                     if (saved.title) document.getElementById('editor-title').value = saved.title;
                     historyStack = []; historyIndex = -1;
                     buildEditorScene();
+                    renderExplorer();
                     recordEdit(true);
                     showModal('Recovered', 'Studio autosave restored.');
                 },
@@ -2743,6 +3000,10 @@ checkDailyReward(); // <-- ADDED HERE
             document.getElementById('view-' + viewId).classList.add('active');
             
             resetGlobalInteractionStates();
+            if (dashboardFriendsInterval && viewId !== 'dashboard') {
+                clearInterval(dashboardFriendsInterval);
+                dashboardFriendsInterval = null;
+            }
 
             if (viewId !== 'play') stopGameLoop();
             if (viewId !== 'create') stopTeamSync(); 
@@ -2755,6 +3016,9 @@ checkDailyReward(); // <-- ADDED HERE
 loadSponsoredAssetsDashboard(); // Add this line!
                 loadDashboardGames();
                 loadDashboardFriends();
+                if (!dashboardFriendsInterval) dashboardFriendsInterval = setInterval(() => {
+                    if (document.getElementById('view-dashboard').classList.contains('active')) loadDashboardFriends();
+                }, 2500);
                 loadCreatorChallenges();
             } else if (viewId === 'library') {
                 loadLibrary();
@@ -4119,13 +4383,16 @@ let customGizmo = null;
             if (!isTouch) return;
             const base = document.getElementById('studio-joystick-base');
             const stick = document.getElementById('studio-joystick-stick');
-            if (!base || !stick) return;
+            const lookZone = document.getElementById('studio-look-zone');
+            const flyUpBtn = document.getElementById('studio-fly-up');
+            const flyDownBtn = document.getElementById('studio-fly-down');
+            if (!base || !stick || !lookZone || !flyUpBtn || !flyDownBtn) return;
 
             studioMobileState.initialized = true;
             const resetStick = () => {
-                studioMobileState.active = false;
-                studioMobileState.x = 0;
-                studioMobileState.y = 0;
+                studioMobileState.moveActive = false;
+                studioMobileState.moveX = 0;
+                studioMobileState.moveY = 0;
                 stick.style.transform = 'translate(0px, 0px)';
             };
 
@@ -4141,9 +4408,9 @@ let customGizmo = null;
                     dx = (dx / dist) * radius;
                     dy = (dy / dist) * radius;
                 }
-                studioMobileState.active = true;
-                studioMobileState.x = dx / radius;
-                studioMobileState.y = dy / radius;
+                studioMobileState.moveActive = true;
+                studioMobileState.moveX = dx / radius;
+                studioMobileState.moveY = dy / radius;
                 stick.style.transform = `translate(${dx}px, ${dy}px)`;
             };
 
@@ -4159,6 +4426,46 @@ let customGizmo = null;
             }, { passive: false });
             base.addEventListener('touchend', (e) => { e.preventDefault(); resetStick(); }, { passive: false });
             base.addEventListener('touchcancel', (e) => { e.preventDefault(); resetStick(); }, { passive: false });
+
+            const endLookTouch = () => {
+                studioMobileState.lookTouchId = null;
+                studioMobileState.lookPrev = null;
+            };
+            lookZone.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const t = e.changedTouches[0];
+                if (!t || studioMobileState.lookTouchId !== null) return;
+                studioMobileState.lookTouchId = t.identifier;
+                studioMobileState.lookPrev = { x: t.clientX, y: t.clientY };
+            }, { passive: false });
+            lookZone.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const t = e.changedTouches[i];
+                    if (t.identifier !== studioMobileState.lookTouchId || !studioMobileState.lookPrev || !window.StudioCamera) continue;
+                    const dx = t.clientX - studioMobileState.lookPrev.x;
+                    const dy = t.clientY - studioMobileState.lookPrev.y;
+                    window.StudioCamera.yaw -= dx * 0.0055;
+                    window.StudioCamera.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, window.StudioCamera.pitch - dy * 0.0045));
+                    window.StudioCamera.updateCamera();
+                    studioMobileState.lookPrev = { x: t.clientX, y: t.clientY };
+                }
+            }, { passive: false });
+            lookZone.addEventListener('touchend', (e) => { e.preventDefault(); endLookTouch(); }, { passive: false });
+            lookZone.addEventListener('touchcancel', (e) => { e.preventDefault(); endLookTouch(); }, { passive: false });
+
+            const bindFlyButton = (btn, keyName, stateName) => {
+                const setState = (pressed) => {
+                    studioMobileState[stateName] = pressed;
+                    keys[keyName] = pressed;
+                    btn.style.background = pressed ? 'rgba(52,152,219,1)' : 'rgba(52,152,219,0.86)';
+                };
+                btn.addEventListener('touchstart', (e) => { e.preventDefault(); setState(true); }, { passive: false });
+                btn.addEventListener('touchend', (e) => { e.preventDefault(); setState(false); }, { passive: false });
+                btn.addEventListener('touchcancel', (e) => { e.preventDefault(); setState(false); }, { passive: false });
+            };
+            bindFlyButton(flyUpBtn, 'e', 'flyUp');
+            bindFlyButton(flyDownBtn, 'q', 'flyDown');
 
             if (localStorage.getItem('ps_hide_landscape_hint') === '1') {
                 const pill = document.getElementById('studio-landscape-pill');
@@ -4335,15 +4642,12 @@ const dom = edRenderer.domElement;
                         const snapScale = parseFloat(document.getElementById('snap-scale').value) || 1;
                         const snapRot = parseFloat(document.getElementById('snap-rot').value) || 15;
                         
-                        dragStartTransforms.forEach(t => {
-                            // Calculate Local Axis perfectly matching the object's rotation
-                            const localAxisVec = new THREE.Vector3();
-                            localAxisVec[axis] = 1;
-                            localAxisVec.applyQuaternion(t.startQuat).normalize();
-                            
-                            // Align the vector to the specific handle the user grabbed (+ or -)
-                            const handleAxisVec = localAxisVec.clone().multiplyScalar(dir);
+                        const gizmoAxisVec = new THREE.Vector3();
+                        gizmoAxisVec[axis] = 1;
+                        gizmoAxisVec.applyQuaternion(customGizmo.quaternion).normalize();
+                        const handleAxisVec = gizmoAxisVec.clone().multiplyScalar(dir);
 
+                        dragStartTransforms.forEach(t => {
                             if (activeGizmoPart.action === 'translate') {
                                 let dragDist = delta.dot(handleAxisVec);
                                 dragDist = Math.round(dragDist / snapMove) * snapMove;
@@ -4387,7 +4691,8 @@ const dom = edRenderer.domElement;
                         const primary = selectedObjects[selectedObjects.length - 1];
                         if (primary) { // FIX: Ensure primary exists before snapping!
                             customGizmo.position.copy(primary.position);
-                            customGizmo.quaternion.copy(primary.quaternion);
+                            const useLocal = currentEditMode === 'scale' || currentTransformSpace === 'local';
+                            customGizmo.quaternion.copy(useLocal ? primary.quaternion : new THREE.Quaternion());
                         }
                     }
                     return;
@@ -5667,8 +5972,9 @@ Keep playing together for more daily rewards.`, 'Aww!');
         // FULL 3D ENGINE INTEGRATION - FREEFORM STUDIO & PHYSICS
         // =========================================================================
         
+const DEFAULT_STEP_HEIGHT = 1.0;
 let edData = { 
-            settings: { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65 }, // FIX: Sculpt City Defaults!
+            settings: { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.65 }, // FIX: Sculpt City Defaults!
             spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, 
             objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], 
             uiLayout: [],
@@ -5682,7 +5988,7 @@ let edScene, edCamera, edRenderer, edControls; // Removed transformControl
 let edAmbientLight = null, edDirectionalLight = null;
 let playAmbientLight = null, playDirectionalLight = null;
 let autosaveRecoveryPrompted = false;
-const studioMobileState = { active: false, x: 0, y: 0, initialized: false };
+const studioMobileState = { initialized: false, moveActive: false, moveX: 0, moveY: 0, lookTouchId: null, lookPrev: null, flyUp: false, flyDown: false };
 
         let raycaster, mouse;
         let editorMeshes = []; 
@@ -5693,8 +5999,11 @@ const studioMobileState = { active: false, x: 0, y: 0, initialized: false };
         let historyStack = [];
         let historyIndex = -1;
         let teamCollaboratorsOnline = 0;
+        let localContributionObjectIds = new Set();
+        let localLockedObjectUntil = {};
 
 let currentEditMode = 'translate';
+let currentTransformSpace = 'local';
         let selectionBoxHelper = null;
         let isPhysicalDragging = false;
         let draggedMesh = null;
@@ -5719,10 +6028,13 @@ let currentEditMode = 'translate';
             const list = document.getElementById('play-updates-list');
             list.innerHTML = (!updates || updates.length === 0) ? '<p style="color:#777; font-size:12px;">No updates posted yet.</p>' : '';
             (updates || []).forEach(u => {
+                const safeTitle = u.title || 'Update';
+                const safeDesc = u.text || u.description || '';
                 list.innerHTML += `
-                    <div style="border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:10px;">
+                    <div style="border:1px solid #e5e9f0; border-radius:8px; padding:10px; margin-bottom:10px; background:#fafcff;">
                         <div style="font-size:11px; color:#7f8c8d; margin-bottom:4px;">${new Date(u.timestamp).toLocaleString()}</div>
-                        <div style="font-size:13px; color:#333;">${u.text}</div>
+                        <div style="font-size:13px; color:#1f3b55; font-weight:700; margin-bottom:4px;">${safeTitle}</div>
+                        <div style="font-size:13px; color:#333; white-space:pre-wrap;">${safeDesc}</div>
                     </div>
                 `;
             });
@@ -5730,10 +6042,14 @@ let currentEditMode = 'translate';
 
         const postGameUpdate = async () => {
             if (!currentPlayGameId) return;
+            const title = (document.getElementById('update-title') || {}).value ? document.getElementById('update-title').value.trim() : '';
             const text = document.getElementById('update-text').value.trim();
-            if (!text) return showModal('Error', 'Update text cannot be empty.');
+            if (!title) return showModal('Error', 'Update title cannot be empty.');
+            if (!text) return showModal('Error', 'Update description cannot be empty.');
             try {
-                const res = await apiCall(`/games/${currentPlayGameId}/updates`, 'POST', { text });
+                const res = await apiCall(`/games/${currentPlayGameId}/updates`, 'POST', { title, text });
+                const titleEl = document.getElementById('update-title');
+                if (titleEl) titleEl.value = '';
                 document.getElementById('update-text').value = '';
                 renderUpdatesList(res.updates);
             } catch(e) {}
@@ -5819,7 +6135,7 @@ let currentEditMode = 'translate';
         // Auto-convert old grid games into the new freeform format
        // Auto-convert old grid games into the new freeform format
         const migrateLevelDataTo3D = (levelData) => {
-            let newData = { settings: { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
+            let newData = { settings: { gravity: 0.08, skyColor: '#87CEEB', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
             if (levelData.settings) newData.settings = levelData.settings;
             if (levelData.objects) { 
                 (levelData.objects || []).forEach(ensureSmartLogicDefaults);
@@ -5842,8 +6158,16 @@ let currentEditMode = 'translate';
             return newData;
         };
 
-        const recordEdit = (pushToHistory = true) => {
-            lastLocalEditTime = Date.now();
+        const recordEdit = (pushToHistory = true, bumpSyncTime = true) => {
+            if (bumpSyncTime) lastLocalEditTime = Date.now();
+            const now = Date.now();
+            const selectedIds = selectedObjects
+                .filter(m => m && m.userData && !m.userData.isSpawn && m.userData.id)
+                .map(m => m.userData.id);
+            selectedIds.forEach(id => {
+                localContributionObjectIds.add(id);
+                localLockedObjectUntil[id] = now + 2200;
+            });
             if (pushToHistory) {
                 if (historyIndex < historyStack.length - 1) historyStack = historyStack.slice(0, historyIndex + 1);
                 historyStack.push(JSON.parse(JSON.stringify(edData)));
@@ -5854,23 +6178,65 @@ let currentEditMode = 'translate';
             }
         };
 
+        const mergeRemoteTeamData = (remoteGameData) => {
+            if (!remoteGameData || !Array.isArray(remoteGameData.objects)) return;
+            const now = Date.now();
+            const localById = new Map((edData.objects || []).map(o => [o.id, o]));
+            const mergedObjects = [];
+
+            (remoteGameData.objects || []).forEach(rObj => {
+                const lockUntil = localLockedObjectUntil[rObj.id] || 0;
+                if (lockUntil > now && localById.has(rObj.id)) mergedObjects.push(localById.get(rObj.id));
+                else mergedObjects.push(rObj);
+            });
+
+            localById.forEach((lObj, id) => {
+                const lockUntil = localLockedObjectUntil[id] || 0;
+                if (lockUntil > now && !(remoteGameData.objects || []).some(ro => ro.id === id)) {
+                    mergedObjects.push(lObj);
+                }
+            });
+
+            edData = {
+                ...remoteGameData,
+                objects: mergedObjects
+            };
+        };
+
+        const applyLocalOnlyHistoryState = (targetState) => {
+            if (!targetState || !Array.isArray(targetState.objects)) return;
+            const targetById = new Map((targetState.objects || []).map(o => [o.id, o]));
+            const nextById = new Map((edData.objects || []).map(o => [o.id, o]));
+
+            localContributionObjectIds.forEach(id => {
+                if (targetById.has(id)) nextById.set(id, JSON.parse(JSON.stringify(targetById.get(id))));
+                else nextById.delete(id);
+            });
+
+            edData = { ...edData, objects: Array.from(nextById.values()) };
+        };
+
         const undo = () => {
-            if (currentEditGameId && teamCollaboratorsOnline > 0) {
-                return showModal('Team Create Undo', 'Undo is temporarily disabled during active team sessions to avoid reverting teammates\' changes.');
-            }
             if (historyIndex > 0) {
-                historyIndex--; edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
-                buildEditorScene(); recordEdit(false);
+                historyIndex--;
+                if (currentEditGameId && teamCollaboratorsOnline > 0) {
+                    applyLocalOnlyHistoryState(historyStack[historyIndex]);
+                } else {
+                    edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
+                }
+                buildEditorScene(); recordEdit(false, !(currentEditGameId && teamCollaboratorsOnline > 0));
             }
         };
 
         const redo = () => {
-            if (currentEditGameId && teamCollaboratorsOnline > 0) {
-                return showModal('Team Create Redo', 'Redo is temporarily disabled during active team sessions to avoid overriding teammates\' progress.');
-            }
             if (historyIndex < historyStack.length - 1) {
-                historyIndex++; edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
-                buildEditorScene(); recordEdit(false);
+                historyIndex++;
+                if (currentEditGameId && teamCollaboratorsOnline > 0) {
+                    applyLocalOnlyHistoryState(historyStack[historyIndex]);
+                } else {
+                    edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
+                }
+                buildEditorScene(); recordEdit(false, !(currentEditGameId && teamCollaboratorsOnline > 0));
             }
         };
 
@@ -5885,6 +6251,8 @@ let currentEditMode = 'translate';
                 edData = migrateLevelDataTo3D(game.gameData || {});
                 lastLocalEditTime = game.lastEditTime || Date.now();
                 historyStack = []; historyIndex = -1;
+                localContributionObjectIds = new Set();
+                localLockedObjectUntil = {};
                 navigate('create'); 
             } catch (e) {}
         };
@@ -5980,12 +6348,19 @@ let currentEditMode = 'translate';
         };
         window.addSmartObject = addSmartObject;
 
-        const createFloatingTextTexture = (text, color, fontFamily, fontSize) => {
+        const createFloatingTextTexture = (text, color, fontFamily, fontSize, bgColor = '#000000', bgTransparency = 1) => {
             const canvas = document.createElement('canvas');
             canvas.width = 1024;
             canvas.height = 256;
             const ctx = canvas.getContext('2d');
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            const bgAlpha = Math.max(0, Math.min(1, 1 - (parseFloat(bgTransparency) || 0)));
+            if (bgAlpha > 0.001) {
+                ctx.fillStyle = bgColor || '#000000';
+                ctx.globalAlpha = bgAlpha;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.globalAlpha = 1;
+            }
             ctx.font = `700 ${Math.max(8, Math.min(160, fontSize || 40))}px ${fontFamily || 'Arial'}`;
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -6009,12 +6384,39 @@ let currentEditMode = 'translate';
                 mesh.userData.floatingTextSprite = sprite;
             }
             if (sprite.material.map) sprite.material.map.dispose();
-            sprite.material.map = createFloatingTextTexture(objData.text || 'Text', objData.color || '#ffffff', objData.fontFamily || 'Arial', objData.textSize || 40);
+            sprite.material.map = createFloatingTextTexture(
+                objData.text || 'Text',
+                objData.textColor || objData.color || '#ffffff',
+                objData.fontFamily || 'Arial',
+                objData.textSize || 40,
+                objData.backgroundColor || '#000000',
+                typeof objData.backgroundTransparency === 'number' ? objData.backgroundTransparency : 1
+            );
             sprite.material.needsUpdate = true;
             const sx = Math.max(1, objData.scale?.x || 4);
             const sy = Math.max(0.6, (objData.textSize || 40) / 40);
             const lenFactor = Math.max(0.9, Math.min(1.8, (String(objData.text || 'Text').length || 4) / 14));
             sprite.scale.set(sx * lenFactor, Math.max(1.8, sy * 2.1), 1);
+        };
+
+        const createPartGeometry = (type) => {
+            if (type === 'sphere') return new THREE.SphereGeometry(0.5, 32, 32);
+            if (type === 'cylinder') return new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
+            if (type === 'cone') return new THREE.ConeGeometry(0.5, 1, 32);
+            if (type === 'triangle') return new THREE.CylinderGeometry(0.5, 0.5, 1, 3);
+            if (type === 'halfCylinder') return new THREE.CylinderGeometry(0.5, 0.5, 1, 32, 1, false, 0, Math.PI);
+            if (type === 'hollowCylinder') return new THREE.CylinderGeometry(0.5, 0.5, 1, 32, 1, true);
+            if (type === 'halfSphere') return new THREE.SphereGeometry(0.5, 32, 16, 0, Math.PI * 2, 0, Math.PI * 0.5);
+            if (type === 'wedge') {
+                const shape = new THREE.Shape();
+                shape.moveTo(-0.5, -0.5); shape.lineTo(0.5, -0.5); shape.lineTo(0.5, 0.5); shape.lineTo(-0.5, -0.5);
+                const g = new THREE.ExtrudeGeometry(shape, { depth: 1, bevelEnabled: false });
+                g.center();
+                return g;
+            }
+            if (type === 'seat') return new THREE.BoxGeometry(1, 0.5, 1);
+            if (type === 'floatingText') return new THREE.BoxGeometry(1, 1, 0.2);
+            return new THREE.BoxGeometry(1, 1, 1);
         };
 
       const addPart = (type) => {
@@ -6029,9 +6431,23 @@ const dir = new THREE.Vector3();
 
             let newId = crypto.randomUUID();
             if (type === 'spawn') {
-                if (!edData.spawn) edData.spawn = { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, scale: {x:4, y:1, z:4} };
-                else { edData.spawn.x = spawnPos.x; edData.spawn.y = spawnPos.y; edData.spawn.z = spawnPos.z; }
-                newId = 'spawn';
+                if (!edData.spawn) {
+                    edData.spawn = { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z, scale: {x:4, y:1, z:4} };
+                    newId = 'spawn';
+                } else {
+                    edData.objects.push({
+                        id: newId,
+                        name: `Spawn ${((edData.objects || []).filter(o => o.type === 'spawn').length + 2)}`,
+                        type: 'spawn',
+                        position: { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z },
+                        rotation: { x: 0, y: 0, z: 0 },
+                        scale: { x: 4, y: 1, z: 4 },
+                        color: '#f1c40f',
+                        material: 'Plastic',
+                        isAnchored: true,
+                        canCollide: true
+                    });
+                }
             } else {
                 edData.objects.push({
                     id: newId, name: type.charAt(0).toUpperCase() + type.slice(1), type: type,
@@ -6043,6 +6459,9 @@ const dir = new THREE.Vector3();
                     created.name = 'Floating Text';
                     created.scale = { x: 6, y: 2, z: 0.5 };
                     created.color = '#ffffff';
+                    created.textColor = '#ffffff';
+                    created.backgroundColor = '#000000';
+                    created.backgroundTransparency = 1;
                     created.material = 'Neon';
                     created.text = 'Sample Text';
                     created.fontFamily = 'Arial';
@@ -6185,7 +6604,12 @@ const setTransformMode = (mode) => {
     } else {
         if (selectionBoxHelper) selectionBoxHelper.visible = false;
         if (customGizmo && selectedObjects.length > 0) {
+            const primary = selectedObjects[selectedObjects.length - 1];
             customGizmo.visible = true;
+            if (primary) {
+                const useLocal = mode === 'scale' || currentTransformSpace === 'local';
+                customGizmo.quaternion.copy(useLocal ? primary.quaternion : new THREE.Quaternion());
+            }
             // FIX: Beautifully simple traverse to hide/show handles!
             customGizmo.traverse(child => {
                 if (child.userData && child.userData.tool) {
@@ -6195,6 +6619,19 @@ const setTransformMode = (mode) => {
         }
     }
 };
+
+const updateTransformSpaceButton = () => {
+    const btn = document.getElementById('btn-transform-space');
+    if (btn) btn.innerText = `Space: ${currentTransformSpace === 'world' ? 'World' : 'Local'}`;
+};
+
+const toggleTransformSpace = () => {
+    currentTransformSpace = currentTransformSpace === 'local' ? 'world' : 'local';
+    updateTransformSpaceButton();
+    if (selectedObjects.length > 0) setTransformMode(currentEditMode);
+};
+window.toggleTransformSpace = toggleTransformSpace;
+setTimeout(updateTransformSpaceButton, 0);
 
 // ==========================================
 // STUDIO TOOL KEY SHORTCUTS
@@ -6254,7 +6691,8 @@ document.addEventListener('keydown', (e) => {
                     if (selectionBoxHelper) selectionBoxHelper.visible = false;
                     if (customGizmo) {
                         customGizmo.position.copy(primary.position);
-                        customGizmo.quaternion.copy(primary.quaternion); // ALIGN GIZMO TO OBJECT!
+                        const useLocal = currentEditMode === 'scale' || currentTransformSpace === 'local';
+                        customGizmo.quaternion.copy(useLocal ? primary.quaternion : new THREE.Quaternion());
                         setTransformMode(currentEditMode); // Refreshes visibility
                     }
                 }
@@ -6287,6 +6725,11 @@ document.addEventListener('keydown', (e) => {
                             document.getElementById('prop-ftext').value = objData.text || 'Sample Text';
                             document.getElementById('prop-ffont').value = objData.fontFamily || 'Arial';
                             document.getElementById('prop-fsize').value = objData.textSize || 40;
+                            document.getElementById('prop-ftext-color').value = objData.textColor || objData.color || '#ffffff';
+                            document.getElementById('prop-fbg-color').value = objData.backgroundColor || '#000000';
+                            const bgT = typeof objData.backgroundTransparency === 'number' ? objData.backgroundTransparency : 1;
+                            document.getElementById('prop-fbg-transparency').value = bgT;
+                            document.getElementById('prop-fbg-transparency-label').innerText = String(bgT);
                         } else {
                             fTextSection.style.display = 'none';
                         }
@@ -6335,6 +6778,9 @@ document.addEventListener('keydown', (e) => {
             const floatingTextValue = (document.getElementById('prop-ftext') || {}).value || 'Text';
             const floatingFont = (document.getElementById('prop-ffont') || {}).value || 'Arial';
             const floatingSize = Math.max(8, Math.min(160, parseInt((document.getElementById('prop-fsize') || {}).value, 10) || 40));
+            const floatingTextColor = (document.getElementById('prop-ftext-color') || {}).value || '#ffffff';
+            const floatingBgColor = (document.getElementById('prop-fbg-color') || {}).value || '#000000';
+            const floatingBgTransparency = Math.max(0, Math.min(1, parseFloat((document.getElementById('prop-fbg-transparency') || {}).value) || 1));
 
             // Apply to all selected blocks for fast multi-editing!
             selectedObjects.forEach(mesh => {
@@ -6349,6 +6795,9 @@ document.addEventListener('keydown', (e) => {
                         objData.text = floatingTextValue;
                         objData.fontFamily = floatingFont;
                         objData.textSize = floatingSize;
+                        objData.textColor = floatingTextColor;
+                        objData.backgroundColor = floatingBgColor;
+                        objData.backgroundTransparency = floatingBgTransparency;
                     }
                     
                     // Live-update the 3D graphics!
@@ -6521,30 +6970,33 @@ document.addEventListener('keydown', (e) => {
             
             isEditingSettings = true; renderExplorer();
             
-if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
+if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 };
             if (typeof edData.settings.sunIntensity === 'undefined') edData.settings.sunIntensity = 1.1;
             if (typeof edData.settings.fogDistance === 'undefined') edData.settings.fogDistance = 1600;
-            if (typeof edData.settings.graphicsQuality === 'undefined') edData.settings.graphicsQuality = 'medium';
+            if (typeof edData.settings.graphicsQuality === 'undefined') edData.settings.graphicsQuality = 'high';
             if (typeof edData.settings.exposure === 'undefined') edData.settings.exposure = 1.0;
-            document.getElementById('ws-gravity').value = edData.settings.gravity;
-            document.getElementById('ws-skycolor').value = edData.settings.skyColor;
-            document.getElementById('ws-brightness').value = edData.settings.brightness;
-            document.getElementById('ws-sun-intensity').value = edData.settings.sunIntensity;
-            document.getElementById('ws-fog-distance').value = edData.settings.fogDistance;
-            document.getElementById('ws-graphics-quality').value = edData.settings.graphicsQuality;
-            document.getElementById('ws-exposure').value = edData.settings.exposure;
-            document.getElementById('world-settings-panel').style.display = 'block';
+            const setValue = (id, value) => { const el = document.getElementById(id); if (el) el.value = value; };
+            setValue('ws-gravity', edData.settings.gravity);
+            setValue('ws-skycolor', edData.settings.skyColor);
+            setValue('ws-brightness', edData.settings.brightness);
+            setValue('ws-sun-intensity', edData.settings.sunIntensity);
+            setValue('ws-fog-distance', edData.settings.fogDistance);
+            setValue('ws-graphics-quality', edData.settings.graphicsQuality);
+            setValue('ws-exposure', edData.settings.exposure);
+            const panel = document.getElementById('world-settings-panel');
+            if (panel) panel.style.display = 'block';
         };
 
 
         const updateWorldSettings = () => {
-            edData.settings.gravity = parseFloat(document.getElementById('ws-gravity').value) || 0.35;
-            edData.settings.skyColor = document.getElementById('ws-skycolor').value;
-            edData.settings.brightness = parseFloat(document.getElementById('ws-brightness').value) || 1.0;
-            edData.settings.sunIntensity = parseFloat(document.getElementById('ws-sun-intensity').value) || 1.1;
-            edData.settings.fogDistance = parseFloat(document.getElementById('ws-fog-distance').value) || 1600;
-            edData.settings.graphicsQuality = document.getElementById('ws-graphics-quality').value || 'medium';
-            edData.settings.exposure = parseFloat(document.getElementById('ws-exposure').value) || 1.0;
+            const val = (id) => document.getElementById(id);
+            edData.settings.gravity = parseFloat((val('ws-gravity') || {}).value) || 0.08;
+            edData.settings.skyColor = ((val('ws-skycolor') || {}).value) || '#5b88a5';
+            edData.settings.brightness = parseFloat((val('ws-brightness') || {}).value) || 1.0;
+            edData.settings.sunIntensity = parseFloat((val('ws-sun-intensity') || {}).value) || 1.1;
+            edData.settings.fogDistance = parseFloat((val('ws-fog-distance') || {}).value) || 1600;
+            edData.settings.graphicsQuality = ((val('ws-graphics-quality') || {}).value) || 'high';
+            edData.settings.exposure = parseFloat((val('ws-exposure') || {}).value) || 1.0;
             applyWorldSettings(); recordEdit();
         };
 
@@ -6556,10 +7008,10 @@ if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', bri
                 const fogDistance = Math.max(200, edData.settings.fogDistance || 1600);
                 edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.2, fogDistance);
                 if (edRenderer) {
-                    const q = edData.settings.graphicsQuality || 'medium';
-                    const shadow = q === 'high' || q === 'ultra';
+                    const q = (edData.settings.graphicsQuality === 'ultra') ? 'ultra' : 'high';
+                    const shadow = true;
                     edRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-                    edRenderer.toneMappingExposure = Math.max(0.4, Math.min(2.5, edData.settings.exposure || 1));
+                    edRenderer.toneMappingExposure = Math.max(0.6, Math.min(2.8, (edData.settings.exposure || 1.08) + 0.08));
                     edRenderer.outputEncoding = THREE.sRGBEncoding;
                     edRenderer.physicallyCorrectLights = true;
                     edRenderer.shadowMap.enabled = shadow;
@@ -6567,6 +7019,8 @@ if(!edData.settings) edData.settings = { gravity: 0.35, skyColor: '#5b88a5', bri
                     if (edDirectionalLight) {
                         edDirectionalLight.castShadow = shadow;
                         edDirectionalLight.shadow.mapSize.set(q === 'ultra' ? 2048 : 1024, q === 'ultra' ? 2048 : 1024);
+                        edDirectionalLight.shadow.radius = 2.2;
+                        edDirectionalLight.shadow.bias = -0.00035;
                     }
                 }
             }
@@ -6776,7 +7230,7 @@ if (item.type === 'button' && item.onClickEvent) {
             const label = document.getElementById('player-health-label');
             if (fill) fill.style.width = `${pct}%`;
             if (label) label.innerText = `${Math.round(playerObj.health)} / ${maxHealth}`;
-            if (playerObj.health <= 0) startGame();
+            if (playerObj.health <= 0 && !isDeathAnimating) triggerCharacterDeath();
         };
 
         const damagePlayer = (amount) => {
@@ -6785,6 +7239,109 @@ if (item.type === 'button' && item.onClickEvent) {
             playerObj.health = Math.max(0, (playerObj.health || 100) - (parseFloat(amount) || 0));
             updatePlayerHealthHUD();
         };
+        
+        const spawnDeathPieces = () => {
+            if (!playScene || !playerMesh) return;
+            const toWorldPart = (partMesh) => {
+                partMesh.updateMatrixWorld(true);
+                const pos = new THREE.Vector3();
+                const quat = new THREE.Quaternion();
+                const scl = new THREE.Vector3();
+                partMesh.matrixWorld.decompose(pos, quat, scl);
+                const shard = new THREE.Mesh(partMesh.geometry.clone(), partMesh.material.clone());
+                shard.position.copy(pos);
+                shard.quaternion.copy(quat);
+                shard.scale.copy(scl);
+                playScene.add(shard);
+                const vel = new THREE.Vector3(
+                    (Math.random() - 0.5) * 0.12 + playerObj.vx * 0.1,
+                    0.03 + Math.random() * 0.06,
+                    (Math.random() - 0.5) * 0.12 + playerObj.vz * 0.1
+                );
+                deathPieces.push({ mesh: shard, velocity: vel, life: 55 + Math.floor(Math.random() * 25) });
+            };
+
+            const parts = [];
+            playerMesh.traverse((child) => {
+                if (child.isMesh && child.geometry) parts.push(child);
+            });
+            parts.forEach(toWorldPart);
+            playerMesh.visible = false;
+        };
+
+        const updateDeathPieces = () => {
+            if (!deathPieces.length) return;
+            const gravity = (activeLevel?.settings?.gravity || 0.08) * 0.05;
+            deathPieces = deathPieces.filter((piece) => {
+                piece.velocity.y -= gravity;
+                piece.mesh.position.add(piece.velocity);
+                piece.mesh.rotation.x += piece.velocity.x * 0.25;
+                piece.mesh.rotation.z += piece.velocity.z * 0.25;
+                piece.life--;
+                if (piece.life <= 0 || piece.mesh.position.y < -200) {
+                    playScene.remove(piece.mesh);
+                    return false;
+                }
+                return true;
+            });
+        };
+
+        const spawnRemoteDeathPieces = (sourceMesh, userId, deadAt) => {
+            if (!playScene || !sourceMesh) return;
+            const chunks = [];
+            sourceMesh.traverse((child) => { if (child.isMesh && child.geometry) chunks.push(child); });
+            chunks.forEach((child) => {
+                child.updateMatrixWorld(true);
+                const pos = new THREE.Vector3();
+                const quat = new THREE.Quaternion();
+                const scl = new THREE.Vector3();
+                child.matrixWorld.decompose(pos, quat, scl);
+                const ghost = new THREE.Mesh(child.geometry.clone(), child.material.clone());
+                ghost.position.copy(pos);
+                ghost.quaternion.copy(quat);
+                ghost.scale.copy(scl);
+                const vel = new THREE.Vector3((Math.random() - 0.5) * 0.05, 0.01 + Math.random() * 0.03, (Math.random() - 0.5) * 0.05);
+                remoteDeathPieces.push({ mesh: ghost, velocity: vel, life: 55, owner: userId, deadAt });
+                playScene.add(ghost);
+            });
+        };
+
+        const updateRemoteDeathPieces = () => {
+            if (!remoteDeathPieces.length) return;
+            const gravity = (activeLevel?.settings?.gravity || 0.08) * 0.05;
+            remoteDeathPieces = remoteDeathPieces.filter((piece) => {
+                piece.velocity.y -= gravity;
+                piece.mesh.position.add(piece.velocity);
+                piece.mesh.rotation.x += piece.velocity.x * 0.2;
+                piece.mesh.rotation.z += piece.velocity.z * 0.2;
+                piece.life--;
+                if (piece.life <= 0 || piece.mesh.position.y < -200) {
+                    playScene.remove(piece.mesh);
+                    return false;
+                }
+                return true;
+            });
+        };
+
+        const triggerCharacterDeath = () => {
+            if (isDeathAnimating) return;
+            isDeathAnimating = true;
+            playerObj.deadAt = Date.now();
+            spawnDeathPieces();
+            setTimeout(() => {
+                deathPieces.forEach(p => { if (playScene) playScene.remove(p.mesh); });
+                deathPieces = [];
+                isDeathAnimating = false;
+                startGame();
+            }, 900);
+        };
+
+        const resetCharacter = () => {
+            if (!isPlayActive || isDeathAnimating) return;
+            playerObj.health = 0;
+            updatePlayerHealthHUD();
+        };
+        window.resetCharacter = resetCharacter;
 
         const openScriptEditor = (id) => {
             const obj = edData.objects.find(o => o.id === id);
@@ -6848,7 +7405,7 @@ const promptClearEditor = () => {
         // --- Editor Core Engine ---
      const clearEditor = () => {
             currentEditGameId = null; 
-            edData = { settings: { gravity: 0.35, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
+            edData = { settings: { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
@@ -6873,13 +7430,8 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
 
                     (objData.children || []).forEach(cData => {
                         let geo, mat;
-                        if (cData.type === 'sphere') geo = new THREE.SphereGeometry(0.5, 32, 32);
-                        else if (cData.type === 'cylinder') geo = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
-                        else if (cData.type === 'cone') geo = new THREE.ConeGeometry(0.5, 1, 32);
-                        else if (cData.type === 'triangle') geo = new THREE.CylinderGeometry(0.5, 0.5, 1, 3);
-                        else if (cData.type === 'seat') geo = new THREE.BoxGeometry(1, 0.5, 1);
-else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
-                        else geo = new THREE.BoxGeometry(1, 1, 1);
+                        if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
+                        else geo = createPartGeometry(cData.type);
                         
                         mat = getMaterialForType(cData.material || 'Plastic', cData.color || '#3498db');
                         const mesh = new THREE.Mesh(geo, mat);
@@ -6893,18 +7445,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     let geo, mat;
                     let isLadder = objData.type === 'ladder';
 
-                    if (objData.type === 'sphere') geo = new THREE.SphereGeometry(0.5, 32, 32);
-                    else if (objData.type === 'cylinder') geo = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
-                    else if (objData.type === 'cone') geo = new THREE.ConeGeometry(0.5, 1, 32);
-                    else if (objData.type === 'triangle') geo = new THREE.CylinderGeometry(0.5, 0.5, 1, 3);
-                    else if (objData.type === 'wedge') {
-                        const shape = new THREE.Shape();
-                        shape.moveTo(-0.5, -0.5); shape.lineTo(0.5, -0.5); shape.lineTo(0.5, 0.5); shape.lineTo(-0.5, -0.5);
-                        geo = new THREE.ExtrudeGeometry(shape, { depth: 1, bevelEnabled: false }); geo.center();
-                    }
-                    else if (objData.type === 'seat') geo = new THREE.BoxGeometry(1, 0.5, 1);
-                    else if (objData.type === 'floatingText') geo = new THREE.BoxGeometry(1, 1, 0.2);
-                    else geo = new THREE.BoxGeometry(1, 1, 1);
+                    geo = createPartGeometry(objData.type);
                     
                     if (isLadder) mat = new THREE.MeshLambertMaterial({ color: objData.color, map: TextureManager.getLadder(), transparent: true });
                     else if (objData.type === 'floatingText') mat = new THREE.MeshLambertMaterial({ color: objData.color || '#ffffff', transparent: true, opacity: 0.05 });
@@ -7016,13 +7557,14 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         if (keys.q) edCamera.position.y -= moveSpeed;
                     }
 
-                    if (studioMobileState.active && window.StudioCamera) {
-                        window.StudioCamera.yaw -= studioMobileState.x * 0.045;
-                        window.StudioCamera.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, window.StudioCamera.pitch - studioMobileState.y * 0.02));
-                        window.StudioCamera.updateCamera();
-                        const forward = new THREE.Vector3();
-                        edCamera.getWorldDirection(forward); forward.y = 0; forward.normalize();
-                        edCamera.position.addScaledVector(forward, -studioMobileState.y * 0.55);
+                    if (studioMobileState.moveActive) {
+                        const mobileForward = new THREE.Vector3();
+                        edCamera.getWorldDirection(mobileForward);
+                        mobileForward.y = 0;
+                        if (mobileForward.lengthSq() > 0) mobileForward.normalize();
+                        const mobileRight = new THREE.Vector3().crossVectors(mobileForward, new THREE.Vector3(0,1,0)).normalize();
+                        edCamera.position.addScaledVector(mobileForward, -studioMobileState.moveY * 0.55);
+                        edCamera.position.addScaledVector(mobileRight, studioMobileState.moveX * 0.55);
                     }
                 }
 
@@ -7065,13 +7607,18 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     const collabCursor = { x: edCamera.position.x, y: edCamera.position.y, z: edCamera.position.z };
                     const res = await apiCall(`/games/${currentEditGameId}/sync`, 'POST', { gameData: edData, genre: document.getElementById('editor-genre').value, lastLocalEditTime: lastLocalEditTime, cursor: collabCursor });
                     if (!res.acceptedLocalUpdate && res.lastEditTime > lastLocalEditTime) {
-                        edData = res.gameData; lastLocalEditTime = res.lastEditTime; buildEditorScene();
+                        mergeRemoteTeamData(res.gameData); lastLocalEditTime = res.lastEditTime; buildEditorScene();
                     }
                     renderCollaboratorCursors((res.activeEditorsData || res.cursors || res.teamCursors || res.collaborators || []).filter(c => c && c.username && c.username !== currentUser.username));
                     teamCollaboratorsOnline = (res.activeEditorsData || []).filter(c => c && c.username && c.username !== currentUser.username).length;
                     const status = document.getElementById('autosave-status');
                     if (status && lastLocalEditTime > 0) { status.innerText = 'Autosaved'; setTimeout(() => status.innerText = '', 1000); }
                 } catch(e) {
+                    const status = document.getElementById('autosave-status');
+                    if (status) {
+                        status.innerText = 'Sync reconnecting...';
+                        setTimeout(() => { if (status.innerText === 'Sync reconnecting...') status.innerText = ''; }, 1800);
+                    }
                     teamSyncCooldownUntil = Date.now() + 2000; // prevent 502 spam storms
                 } finally {
                     teamSyncInFlight = false;
@@ -7138,7 +7685,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
 playerObj = {
         x: 0, y: 10, z: 0,
         vx: 0, vy: 0, vz: 0, rotY: 0,
-        speed: 0.2, jump: 3.8,
+        speed: 0.2, jump: 4.8,
         health: 100, // ADD THIS
         blasterDamage: 20, blasterSpeed: 2.5, blasterSpread: 0, blasterFireRate: 150, blasterLifetime: 100, blasterColor: '#ffff00', lastShotAt: 0,
         grounded: false, sitting: false, seatCooldown: 0
@@ -7153,12 +7700,20 @@ playerObj = {
         let playSyncInterval = null;
         let isPlayActive = false;
         let isTestingLocal = false;
+        let isDeathAnimating = false;
+        let deathPieces = [];
+        let remoteDeathPieces = [];
+        let physicsWorld = null;
+        let physicsBodies = [];
+        let meshToBody = new Map();
 
         // Tool System Variables
         let playerInventory = [];
         let equippedToolIndex = -1;
         let playInput = { justClicked: false, justJumped: false, justInteract: false };
         let playAimNdc = { x: 0, y: 0 };
+        let jumpBufferFrames = 0;
+        let coyoteFrames = 0;
 
         const keys = { w: false, a: false, s: false, d: false, q: false, e: false, space: false };
 
@@ -7225,7 +7780,10 @@ if (e.code === 'Space') {
                 if (document.getElementById('view-play').classList.contains('active') || document.getElementById('view-create').classList.contains('active')) {
                     e.preventDefault(); // Stop the page from scrolling down!
                 }
-                if (!keys.space) playInput.justJumped = true; // FIX: Only trigger jump once per press!
+                if (!keys.space) {
+                    playInput.justJumped = true; // FIX: Only trigger jump once per press!
+                    jumpBufferFrames = 8;
+                }
                 keys.space = true;
             }
         
@@ -7495,8 +8053,8 @@ const loadPsworld = (event) => {
 
 const applyPlayGraphicsSettings = (settings = {}) => {
             if (!playScene || !playRenderer) return;
-            const quality = settings.graphicsQuality || 'medium';
-            const exposure = Math.max(0.4, Math.min(2.5, settings.exposure || 1));
+            const quality = settings.graphicsQuality === 'ultra' ? 'ultra' : 'high';
+            const exposure = Math.max(0.6, Math.min(2.8, (settings.exposure || 1.08) + 0.08));
             const fogDistance = Math.max(200, settings.fogDistance || 1600);
 
             playScene.fog = new THREE.Fog(settings.skyColor || '#87CEEB', fogDistance * 0.25, fogDistance);
@@ -7504,19 +8062,33 @@ const applyPlayGraphicsSettings = (settings = {}) => {
             playRenderer.toneMappingExposure = exposure;
             playRenderer.outputEncoding = THREE.sRGBEncoding;
             playRenderer.physicallyCorrectLights = true;
-            playRenderer.shadowMap.enabled = quality === 'high' || quality === 'ultra';
+            playRenderer.shadowMap.enabled = true;
             playRenderer.shadowMap.type = quality === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
             if (playDirectionalLight) {
-                playDirectionalLight.intensity = Math.max(0.2, settings.sunIntensity || 1.1);
+                playDirectionalLight.intensity = Math.max(0.3, settings.sunIntensity || 1.25);
                 playDirectionalLight.castShadow = playRenderer.shadowMap.enabled;
                 playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 2048 : 1024, quality === 'ultra' ? 2048 : 1024);
+                playDirectionalLight.shadow.radius = 2.8;
+                playDirectionalLight.shadow.bias = -0.00035;
+                playDirectionalLight.shadow.normalBias = 0.015;
             }
+            if (playAmbientLight) playAmbientLight.intensity = Math.max(0.45, settings.brightness || 0.65);
         };
 
 const startGame = () => {
             currentSessionStartTime = Date.now(); 
             currentSessionJumps = 0; 
             currentSessionFalls = 0;
+            isDeathAnimating = false;
+            playerObj.deadAt = null;
+            if (deathPieces.length && playScene) {
+                deathPieces.forEach(p => playScene.remove(p.mesh));
+            }
+            deathPieces = [];
+            if (remoteDeathPieces.length && playScene) {
+                remoteDeathPieces.forEach(p => playScene.remove(p.mesh));
+            }
+            remoteDeathPieces = [];
 
             window.playLeaderboard = {};
 
@@ -7533,16 +8105,16 @@ const startGame = () => {
                 playScene = new THREE.Scene(); 
                 playCamera = new THREE.PerspectiveCamera( 50, 16/9, 1, 2000 );
                 
-                const ambLight = new THREE.AmbientLight( 0xffffff, 1.0 );
+                const ambLight = new THREE.AmbientLight( 0xf8fbff, 0.62 );
                 ambLight.isAmbientLight = true;
                 playAmbientLight = ambLight;
                 playScene.add( ambLight );
                 
-                const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
+                const hemiLight = new THREE.HemisphereLight(0xdfeeff, 0x5e666f, 0.45);
                 playScene.add(hemiLight);
                 
-                const dirLight = new THREE.DirectionalLight( 0xffffff, 0.9 );
-                dirLight.position.set( 1, 1, 0.5 ).normalize();
+                const dirLight = new THREE.DirectionalLight( 0xfff8ee, 1.2 );
+                dirLight.position.set( 42, 56, 26 );
                 playDirectionalLight = dirLight;
                 playScene.add( dirLight );
 
@@ -7561,18 +8133,23 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
 
             stopGameLoop(); setupMobileControls();
             
-            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.35, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
+            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.08, skyColor: '#87CEEB', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 };
+            
             playScene.background = new THREE.Color(activeLevel.settings.skyColor);
             playScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = activeLevel.settings.brightness; });
             applyPlayGraphicsSettings(activeLevel.settings);
             window.EnvironmentEngine.generateClouds(playScene, '#ffffff');
             
-            playerObj.x = activeLevel.spawn ? activeLevel.spawn.x : 0; 
-            playerObj.y = activeLevel.spawn ? activeLevel.spawn.y + 3 : 10;
-            playerObj.z = activeLevel.spawn ? activeLevel.spawn.z : 0;
+            const spawnChoices = [];
+            if (activeLevel.spawn) spawnChoices.push({ x: activeLevel.spawn.x, y: activeLevel.spawn.y, z: activeLevel.spawn.z });
+            (activeLevel.objects || []).forEach(o => { if (o.type === 'spawn' && o.position) spawnChoices.push({ x: o.position.x, y: o.position.y, z: o.position.z }); });
+            const chosenSpawn = spawnChoices.length ? spawnChoices[Math.floor(Math.random() * spawnChoices.length)] : { x: 0, y: 7, z: 0 };
+            playerObj.x = chosenSpawn.x || 0; 
+            playerObj.y = (chosenSpawn.y || 7) + 3;
+            playerObj.z = chosenSpawn.z || 0;
             playerObj.vx = 0; playerObj.vy = 0; playerObj.vz = 0; playerObj.rotY = 0;
             playerObj.speed = 0.2;
-playerObj.jump = 0.6;
+playerObj.jump = 4.8;
             playerObj.health = 100;
             playerObj.blasterDamage = 20; playerObj.blasterSpeed = 2.5; playerObj.blasterSpread = 0; playerObj.blasterFireRate = 150; playerObj.blasterLifetime = 100; playerObj.blasterColor = '#ffff00'; playerObj.lastShotAt = 0;
             playerObj.sitting = false;
@@ -7581,6 +8158,7 @@ playerObj.jump = 0.6;
             if (document.getElementById('play-speedometer')) document.getElementById('play-speedometer').style.display = 'none';
             
             buildPlayScene();
+            if (playerMesh) playerMesh.visible = true;
             uiRuntimeManager.build(activeLevel.uiLayout || []);
             updatePlayerHealthHUD();
 
@@ -7632,6 +8210,50 @@ animatePlay();
             const safeNum = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
             const linkedData = (activeLevel.objects || []).find(o => o.id === (mesh?.userData?.id || null)) || null;
             const findObjectData = (targetMesh) => (activeLevel.objects || []).find(o => o.id === (targetMesh?.userData?.id || null)) || null;
+            const buildGeometryByType = (type = 'block') => {
+                const t = String(type || 'block').toLowerCase();
+                if (t === 'sphere') return new THREE.SphereGeometry(0.5, 24, 24);
+                if (t === 'cylinder') return new THREE.CylinderGeometry(0.5, 0.5, 1, 24);
+                if (t === 'cone') return new THREE.ConeGeometry(0.5, 1, 24);
+                if (t === 'triangle') return new THREE.CylinderGeometry(0.5, 0.5, 1, 3);
+                if (t === 'floatingtext') return new THREE.BoxGeometry(1, 1, 0.2);
+                return new THREE.BoxGeometry(1, 1, 1);
+            };
+            const applyRuntimeProperties = (target, props = {}) => {
+                if (!target || !props) return target;
+                if (props.position) target.position.set(safeNum(props.position.x, target.position.x), safeNum(props.position.y, target.position.y), safeNum(props.position.z, target.position.z));
+                if (props.rotation) target.rotation.set(safeNum(props.rotation.x, target.rotation.x), safeNum(props.rotation.y, target.rotation.y), safeNum(props.rotation.z, target.rotation.z));
+                if (props.scale) target.scale.set(Math.max(0.05, safeNum(props.scale.x, target.scale.x)), Math.max(0.05, safeNum(props.scale.y, target.scale.y)), Math.max(0.05, safeNum(props.scale.z, target.scale.z)));
+                if (props.color && target.material?.color) target.material.color.set(String(props.color));
+                if (typeof props.transparency === 'number' && target.material) {
+                    const t = Math.max(0, Math.min(1, safeNum(props.transparency, 0)));
+                    target.material.transparent = t > 0;
+                    target.material.opacity = Math.max(0.02, 1 - t);
+                }
+                if (typeof props.canCollide !== 'undefined') target.userData.noCollide = !props.canCollide;
+                if (typeof props.isAnchored !== 'undefined') target.userData.isAnchored = !!props.isAnchored;
+                const data = findObjectData(target);
+                if (data) {
+                    if (props.position) data.position = { x: target.position.x, y: target.position.y, z: target.position.z };
+                    if (props.rotation) data.rotation = { x: target.rotation.x, y: target.rotation.y, z: target.rotation.z };
+                    if (props.scale) data.scale = { x: target.scale.x, y: target.scale.y, z: target.scale.z };
+                    if (props.color) data.color = String(props.color);
+                    if (props.material) data.material = String(props.material);
+                    if (typeof props.transparency === 'number') data.transparency = Math.max(0, Math.min(1, props.transparency));
+                    if (typeof props.canCollide !== 'undefined') data.canCollide = !!props.canCollide;
+                    if (typeof props.isAnchored !== 'undefined') data.isAnchored = !!props.isAnchored;
+                    if (data.type === 'floatingText') {
+                        if (typeof props.text === 'string') data.text = props.text.slice(0, 120);
+                        if (typeof props.fontFamily === 'string') data.fontFamily = props.fontFamily;
+                        if (typeof props.textSize !== 'undefined') data.textSize = Math.max(8, Math.min(160, safeNum(props.textSize, data.textSize || 40)));
+                        if (typeof props.textColor === 'string') data.textColor = props.textColor;
+                        if (typeof props.backgroundColor === 'string') data.backgroundColor = props.backgroundColor;
+                        if (typeof props.backgroundTransparency !== 'undefined') data.backgroundTransparency = Math.max(0, Math.min(1, safeNum(props.backgroundTransparency, 1)));
+                        applyFloatingTextVisual(target, data);
+                    }
+                }
+                return target;
+            };
             return {
                 mesh,
                 event: eventName,
@@ -7722,13 +8344,28 @@ animatePlay();
                         playerObj.blasterLifetime = preset.lifetime;
                         playerObj.blasterColor = preset.color;
                         return preset;
+                    },
+                    setAiming: (cfg = {}) => {
+                        playerObj.aimConfig = {
+                            adsZoom: Math.max(20, Math.min(90, safeNum(cfg.adsZoom, playerObj.aimConfig?.adsZoom || 50))),
+                            recoil: Math.max(0, Math.min(5, safeNum(cfg.recoil, playerObj.aimConfig?.recoil || 0.2))),
+                            assist: Math.max(0, Math.min(1, safeNum(cfg.assist, playerObj.aimConfig?.assist || 0))),
+                            sensitivity: Math.max(0.1, Math.min(5, safeNum(cfg.sensitivity, playerObj.aimConfig?.sensitivity || 1)))
+                        };
+                        return { ...playerObj.aimConfig };
+                    },
+                    createSystem: (factory) => {
+                        if (typeof factory !== 'function') return null;
+                        window.smartRuntime = window.smartRuntime || {};
+                        window.smartRuntime.customGunSystem = factory;
+                        return true;
                     }
                 },
                 playerApi: {
                     teleport: (x, y, z) => { playerObj.x = safeNum(x, playerObj.x); playerObj.y = safeNum(y, playerObj.y); playerObj.z = safeNum(z, playerObj.z); },
                     addHealth: (amount = 0) => { playerObj.health = Math.max(0, Math.min(100, (playerObj.health || 100) + safeNum(amount, 0))); },
                     setWalkSpeed: (speed = 0.2) => { playerObj.speed = Math.max(0.05, Math.min(2, safeNum(speed, 0.2))); },
-                    setJumpPower: (jump = 0.6) => { playerObj.jump = Math.max(0.1, Math.min(3, safeNum(jump, 0.6))); }
+                    setJumpPower: (jump = 4.8) => { playerObj.jump = Math.max(0.1, Math.min(12, safeNum(jump, 4.8))); }
                 },
                 world: {
                     objects: () => playMeshes,
@@ -7740,14 +8377,66 @@ animatePlay();
                         playMeshes.forEach((m, idx) => fn(m, idx, findObjectData(m)));
                     },
                     spawnPart: (cfg = {}) => {
-                        const geo = cfg.type === 'sphere' ? new THREE.SphereGeometry(0.5, 18, 18) : (cfg.type === 'cylinder' ? new THREE.CylinderGeometry(0.5,0.5,1,18) : new THREE.BoxGeometry(1,1,1));
+                        const type = String(cfg.type || 'block');
+                        const geo = buildGeometryByType(type);
                         const mat = getMaterialForType(cfg.material || 'Plastic', cfg.color || '#3498db');
                         const part = new THREE.Mesh(geo, mat);
-                        part.position.set(cfg.x || mesh.position.x, cfg.y || mesh.position.y, cfg.z || mesh.position.z);
-                        part.userData = { id: crypto.randomUUID(), type: cfg.type || 'block', isTool: false, noCollide: !!cfg.noCollide };
+                        part.position.set(safeNum(cfg.x, mesh.position.x), safeNum(cfg.y, mesh.position.y), safeNum(cfg.z, mesh.position.z));
+                        part.rotation.set(safeNum(cfg.rx, 0), safeNum(cfg.ry, 0), safeNum(cfg.rz, 0));
+                        part.scale.set(Math.max(0.05, safeNum(cfg.sx, 1)), Math.max(0.05, safeNum(cfg.sy, 1)), Math.max(0.05, safeNum(cfg.sz, 1)));
+                        part.userData = { id: crypto.randomUUID(), type: type, isTool: false, noCollide: !!cfg.noCollide, isAnchored: cfg.isAnchored !== false };
                         playScene.add(part);
                         playMeshes.push(part);
+                        if (activeLevel?.objects) {
+                            const runtimeObj = {
+                                id: part.userData.id,
+                                name: String(cfg.name || type).slice(0, 48),
+                                type,
+                                position: { x: part.position.x, y: part.position.y, z: part.position.z },
+                                rotation: { x: part.rotation.x, y: part.rotation.y, z: part.rotation.z },
+                                scale: { x: part.scale.x, y: part.scale.y, z: part.scale.z },
+                                color: String(cfg.color || '#3498db'),
+                                material: String(cfg.material || 'Plastic'),
+                                transparency: Math.max(0, Math.min(1, safeNum(cfg.transparency, 0))),
+                                canCollide: cfg.canCollide !== false,
+                                isAnchored: cfg.isAnchored !== false
+                            };
+                            if (type === 'floatingText') {
+                                runtimeObj.text = String(cfg.text || 'Text').slice(0, 120);
+                                runtimeObj.fontFamily = String(cfg.fontFamily || 'Arial');
+                                runtimeObj.textSize = Math.max(8, Math.min(160, safeNum(cfg.textSize, 40)));
+                                runtimeObj.textColor = String(cfg.textColor || cfg.color || '#ffffff');
+                                runtimeObj.backgroundColor = String(cfg.backgroundColor || '#000000');
+                                runtimeObj.backgroundTransparency = Math.max(0, Math.min(1, safeNum(cfg.backgroundTransparency, 1)));
+                                applyFloatingTextVisual(part, runtimeObj);
+                            }
+                            activeLevel.objects.push(runtimeObj);
+                            applyRuntimeProperties(part, cfg);
+                        }
                         return part;
+                    },
+                    setProperties: (target, props = {}) => applyRuntimeProperties(target, props),
+                    setTransform: (target, position = null, rotation = null, scale = null) => applyRuntimeProperties(target, { position, rotation, scale }),
+                    getProperties: (target) => {
+                        const data = findObjectData(target) || {};
+                        return {
+                            id: target?.userData?.id || null,
+                            type: target?.userData?.type || data.type || 'block',
+                            position: target ? { x: target.position.x, y: target.position.y, z: target.position.z } : null,
+                            rotation: target ? { x: target.rotation.x, y: target.rotation.y, z: target.rotation.z } : null,
+                            scale: target ? { x: target.scale.x, y: target.scale.y, z: target.scale.z } : null,
+                            color: target?.material?.color ? `#${target.material.color.getHexString()}` : (data.color || '#3498db'),
+                            material: data.material || 'Plastic',
+                            transparency: data.transparency || 0,
+                            canCollide: data.canCollide !== false,
+                            isAnchored: data.isAnchored !== false,
+                            text: data.text || '',
+                            fontFamily: data.fontFamily || 'Arial',
+                            textSize: data.textSize || 40,
+                            textColor: data.textColor || data.color || '#ffffff',
+                            backgroundColor: data.backgroundColor || '#000000',
+                            backgroundTransparency: typeof data.backgroundTransparency === 'number' ? data.backgroundTransparency : 1
+                        };
                     },
                     destroy: (target) => {
                         if (!target) return;
@@ -7755,9 +8444,54 @@ animatePlay();
                         playMeshes = playMeshes.filter(m => m !== target);
                     },
                     message: (msg, title = 'Script') => showModal(title, String(msg || '')),
-                    getGravity: () => safeNum(activeLevel?.settings?.gravity, 0.35),
-                    setGravity: (value = 0.35) => { if (activeLevel?.settings) activeLevel.settings.gravity = Math.max(0, Math.min(5, safeNum(value, 0.35))); },
+                    getGravity: () => safeNum(activeLevel?.settings?.gravity, 0.08),
+                    setGravity: (value = 0.08) => { if (activeLevel?.settings) activeLevel.settings.gravity = Math.max(0, Math.min(5, safeNum(value, 0.08))); },
                     setSkyColor: (hex = '#87CEEB') => { if (activeLevel?.settings) activeLevel.settings.skyColor = String(hex); if (playScene) playScene.background = new THREE.Color(String(hex)); }
+                },
+                floatingText: {
+                    create: (cfg = {}) => {
+                        const part = (() => {
+                            const geo = buildGeometryByType('floatingText');
+                            const mat = getMaterialForType(cfg.material || 'Neon', cfg.color || '#ffffff');
+                            const obj = new THREE.Mesh(geo, mat);
+                            obj.userData = { id: crypto.randomUUID(), type: 'floatingText', isTool: false, noCollide: !!cfg.noCollide };
+                            playScene.add(obj);
+                            playMeshes.push(obj);
+                            if (activeLevel?.objects) {
+                                activeLevel.objects.push({
+                                    id: obj.userData.id,
+                                    name: String(cfg.name || 'Floating Text').slice(0, 48),
+                                    type: 'floatingText',
+                                    position: { x: 0, y: 2, z: 0 },
+                                    rotation: { x: 0, y: 0, z: 0 },
+                                    scale: { x: 6, y: 2, z: 0.5 },
+                                    color: '#ffffff',
+                                    material: 'Neon',
+                                    text: 'Text',
+                                    fontFamily: 'Arial',
+                                    textSize: 40,
+                                    textColor: '#ffffff',
+                                    backgroundColor: '#000000',
+                                    backgroundTransparency: 1
+                                });
+                            }
+                            return obj;
+                        })();
+                        applyRuntimeProperties(part, cfg);
+                        return part;
+                    },
+                    set: (target, cfg = {}) => applyRuntimeProperties(target, cfg),
+                    get: (target) => {
+                        const data = findObjectData(target) || {};
+                        return {
+                            text: data.text || '',
+                            fontFamily: data.fontFamily || 'Arial',
+                            textSize: data.textSize || 40,
+                            textColor: data.textColor || '#ffffff',
+                            backgroundColor: data.backgroundColor || '#000000',
+                            backgroundTransparency: typeof data.backgroundTransparency === 'number' ? data.backgroundTransparency : 1
+                        };
+                    }
                 },
                 createObject: (cfg = {}) => {
                     if (!activeLevel || !Array.isArray(activeLevel.objects)) return null;
@@ -7838,6 +8572,8 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         childMesh.position.set(cData.position.x, cData.position.y, cData.position.z);
                         childMesh.rotation.set(cData.rotation.x, cData.rotation.y, cData.rotation.z);
                         childMesh.scale.set(cData.scale.x, cData.scale.y, cData.scale.z);
+                        childMesh.castShadow = true;
+                        childMesh.receiveShadow = true;
                         childMesh.userData = { type: cData.type };
                         group.add(childMesh);
                         playMeshes.push(childMesh); // Push children to playMeshes so seats can be detected!
@@ -7854,14 +8590,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                 } else {
                     let geo, mat; let isLadder = objData.type === 'ladder';
                     if (objData.type === 'tool') { geo = new THREE.BoxGeometry(0.4, 0.4, 1.2); if (!objData.color || objData.color === '#3498db') objData.color = '#9b59b6'; }
-                    else if (objData.type === 'sphere') geo = new THREE.SphereGeometry(0.5, 32, 32);
-                    else if (objData.type === 'cylinder') geo = new THREE.CylinderGeometry(0.5, 0.5, 1, 32);
-                    else if (objData.type === 'cone') geo = new THREE.ConeGeometry(0.5, 1, 32);
-                    else if (objData.type === 'triangle') geo = new THREE.CylinderGeometry(0.5, 0.5, 1, 3);
-                    else if (objData.type === 'seat') geo = new THREE.BoxGeometry(1, 0.5, 1);
-                    else if (objData.type === 'floatingText') geo = new THREE.BoxGeometry(1, 1, 0.2);
-                    else if (objData.type === 'wedge') { const shape = new THREE.Shape(); shape.moveTo(-0.5, -0.5); shape.lineTo(0.5, -0.5); shape.lineTo(0.5, 0.5); shape.lineTo(-0.5, -0.5); geo = new THREE.ExtrudeGeometry(shape, { depth: 1, bevelEnabled: false }); geo.center(); }
-                    else geo = new THREE.BoxGeometry(1, 1, 1);
+                    else geo = createPartGeometry(objData.type);
 
                     if (isLadder) mat = new THREE.MeshLambertMaterial({ color: objData.color, map: TextureManager.getLadder(), transparent: true });
                     else if (objData.type === 'floatingText') mat = new THREE.MeshLambertMaterial({ color: objData.color || '#ffffff', transparent: true, opacity: 0.01 });
@@ -7874,6 +8603,8 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+                    mesh.castShadow = objData.type !== 'floatingText';
+                    mesh.receiveShadow = true;
 mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: (objData.noCollide || objData.canCollide === false), isAnchored: objData.isAnchored !== false, smart: objData.smart || null, smartState: {} };
                     if (objData.type === 'floatingText') applyFloatingTextVisual(mesh, objData);
                     
@@ -7904,6 +8635,7 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
                     bumpMap: terrainTex,
                     bumpScale: 0.8
                 }));
+                playTerrain.receiveShadow = true;
                 playScene.add(playTerrain); window.playTerrainMesh = playTerrain; 
             }
 
@@ -7921,13 +8653,12 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
             playScene.updateMatrixWorld(true);
             
             // Advance Colliders: Include Box AND Mesh reference to ignore self-collisions for vehicles
-            playColliders = playMeshes.filter(m => !m.userData.isTool && !m.userData.noCollide && m.userData.type !== 'seat' && m.userData.type !== 'aircraftSeat' && m.userData.type !== 'vehicle' && m.userData.type !== 'aircraft' && !['wedge', 'triangle', 'ladder'].includes(m.userData.type)).map(m => {
-                m.updateMatrixWorld(true); return { box: new THREE.Box3().setFromObject(m), mesh: m };
-            });
+            refreshPlayColliders();
 
             window.playLadders = playMeshes.filter(m => m.userData.type === 'ladder').map(m => { m.updateMatrixWorld(true); return new THREE.Box3().setFromObject(m); });
             window.playSlopes = playMeshes.filter(m => ['wedge', 'triangle'].includes(m.userData.type));
             window.playSlopes.forEach(m => { if (m.material) m.material.side = THREE.DoubleSide; });
+            rebuildCannonWorld();
 
             playerMesh = createPlayerMesh(currentUser ? currentUser.color : '#e74c3c', currentUser ? currentUser.equipped : null, currentUser ? currentUser.bodyColors : null, currentUser ? { shirtImage: currentUser.equippedShirtImage || null, pantsImage: currentUser.equippedPantsImage || null } : null);
             playerMesh.scale.set(0.5, 0.5, 0.5); playScene.add(playerMesh); renderPlayToolbar();
@@ -7950,14 +8681,19 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
                     rotY: playerObj.rotY,
                     sceneId: 'main',
                     color: currentUser.color || '#e74c3c',
-                    bodyColors: currentUser.bodyColors || null
+                    bodyColors: currentUser.bodyColors || null,
+                    isDead: !!isDeathAnimating,
+                    deadAt: playerObj.deadAt || null,
+                    dynamicStates: collectDynamicPhysicsSnapshot()
                 });
+            applyRemoteDynamicStates((others && others.dynamicStates) || []);
+            const otherPlayers = (others && others.players) || [];
 
             if (serverLeaderboardOpen) {
                 fetchServerLeaderboardPlayers();
             }
 
-            const currentIds = others.map(o => o.userId);
+            const currentIds = otherPlayers.map(o => o.userId);
 
             for (let id in otherPlayerMeshes) {
                 if (!currentIds.includes(id)) {
@@ -7966,7 +8702,7 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
                 }
             }
 
-                others.forEach(o => {
+                otherPlayers.forEach(o => {
                     if (!otherPlayerMeshes[o.userId]) {
                         const mesh = createPlayerMesh(o.color, o.equipped, o.bodyColors || null, { shirtImage: o.equippedShirtImage || null, pantsImage: o.equippedPantsImage || null });
                         playScene.add(mesh);
@@ -7975,7 +8711,8 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
                         otherPlayerMeshes[o.userId] = {
                             mesh,
                             username: o.username,
-                            equipped: o.equipped || null
+                            equipped: o.equipped || null,
+                            lastDeadAt: 0
                         };
                     } else if (otherPlayerMeshes[o.userId].equipped !== (o.equipped || null)) {
                         const oldMesh = otherPlayerMeshes[o.userId].mesh;
@@ -7992,6 +8729,15 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
                     const pm = otherPlayerMeshes[o.userId].mesh;
                 pm.position.set(o.x, o.y + 3, o.z);
                 pm.rotation.y = o.rotY || 0;
+                if (o.isDead) {
+                    if (o.deadAt && otherPlayerMeshes[o.userId].lastDeadAt !== o.deadAt) {
+                        otherPlayerMeshes[o.userId].lastDeadAt = o.deadAt;
+                        spawnRemoteDeathPieces(pm, o.userId, o.deadAt);
+                    }
+                    pm.visible = false;
+                } else {
+                    pm.visible = true;
+                }
 
                 // Chat bubble sync
                 if (o.activeChatBubble && (Date.now() - o.activeChatBubble.timestamp) < 7000) {
@@ -8120,6 +8866,10 @@ const updateChatBubbles = () => {
             const nav = document.querySelector('.navbar');
             const container = document.querySelector('.container');
             const toolbars = document.querySelectorAll('#view-create .toolbar');
+            const explorer = document.getElementById('project-explorer');
+            const props = document.getElementById('properties-panel');
+            const editor3d = document.getElementById('editor-container-3d');
+            const output = document.getElementById('output-panel');
             
             isStudioFullscreen = !isStudioFullscreen;
             
@@ -8133,7 +8883,11 @@ const updateChatBubbles = () => {
                 // Dynamically calculate the remaining height
                 let tbHeight = 0;
                 toolbars.forEach(tb => tbHeight += tb.offsetHeight);
-                layout.style.height = `calc(100vh - ${tbHeight + 10}px)`; 
+                layout.style.height = `calc(100vh - ${tbHeight + 10}px)`;
+                if (explorer) explorer.style.display = '';
+                if (props) props.style.display = '';
+                if (editor3d) editor3d.style.marginRight = '250px';
+                if (output) output.style.width = 'calc(100% - 250px)';
             } else {
                 // Restore standard view
                 nav.style.display = 'flex';
@@ -8141,6 +8895,10 @@ const updateChatBubbles = () => {
                 container.style.padding = '10px';
                 container.style.maxWidth = '1000px';
                 layout.style.height = '500px';
+                if (explorer) explorer.style.display = '';
+                if (props) props.style.display = '';
+                if (editor3d) editor3d.style.marginRight = '250px';
+                if (output) output.style.width = 'calc(100% - 250px)';
             }
             
             // Force the 3D engine to recalculate the canvas size
@@ -8150,6 +8908,15 @@ const updateChatBubbles = () => {
 
 
 // Advanced Raycast Collision for Complex Shapes
+        const refreshPlayColliders = () => {
+            playColliders = playMeshes
+                .filter(m => m?.userData && !m.userData.isTool && !m.userData.noCollide && m.userData.type !== 'seat' && m.userData.type !== 'aircraftSeat' && m.userData.type !== 'vehicle' && m.userData.type !== 'aircraft')
+                .map(m => {
+                    m.updateMatrixWorld(true);
+                    return { box: new THREE.Box3().setFromObject(m), mesh: m };
+                });
+        };
+
         const checkWallCollision = (px, py, pz, excludeMesh = null) => {
             const playerBox = new THREE.Box3();
             // Tighten the collision radius to avoid corner snagging
@@ -8164,6 +8931,16 @@ const updateChatBubbles = () => {
 
                 if (playerBox.intersectsBox(collider.box)) {
                     const type = collider.mesh.userData.type || 'block';
+                    if (type === 'cylinder') {
+                        const center = new THREE.Vector3();
+                        const size = new THREE.Vector3();
+                        collider.box.getCenter(center);
+                        collider.box.getSize(size);
+                        const horizDist = Math.hypot(px - center.x, pz - center.z);
+                        const radius = Math.max(size.x, size.z) * 0.5 + 0.85;
+                        const verticalOverlap = (py + 5) > collider.box.min.y && py < collider.box.max.y;
+                        if (verticalOverlap && horizDist < radius) return true;
+                    }
                     
                     // FIX: If a block is rotated AT ALL, we MUST use complex shape collision!
                     const isRotated = collider.mesh.rotation.x !== 0 || collider.mesh.rotation.y !== 0 || collider.mesh.rotation.z !== 0;
@@ -8224,6 +9001,25 @@ const updateChatBubbles = () => {
             return null;
         };
 
+        const resolveSlopeLift = (px, py, pz) => {
+            if (!window.playSlopes || !window.playSlopes.length) return false;
+            const ray = new THREE.Raycaster(new THREE.Vector3(px, py + 6, pz), new THREE.Vector3(0, -1, 0), 0, 10);
+            let bestY = null;
+            window.playSlopes.forEach(slope => {
+                if (!slope || slope.userData?.noCollide) return;
+                const hits = ray.intersectObject(slope, true);
+                if (!hits.length) return;
+                const y = hits[0].point.y;
+                if (y >= py - 1.0 && y <= py + DEFAULT_STEP_HEIGHT + 1.4) bestY = bestY === null ? y : Math.max(bestY, y);
+            });
+            if (bestY === null) return false;
+            playerObj.y = bestY + 0.001;
+            playerObj.grounded = true;
+            coyoteFrames = 6;
+            if (playerObj.vy < 0) playerObj.vy = 0;
+            return true;
+        };
+
 
 
 
@@ -8269,7 +9065,8 @@ const updateChatBubbles = () => {
                     playMeshes.push(vehicle); playMeshes.push(seat);
                     mesh.userData.smartState.spawnedVehicle = vehicle;
                     playScene.updateMatrixWorld(true);
-                    playColliders = playMeshes.filter(m => !m.userData?.isTool && !m.userData?.noCollide && m.userData?.type !== 'seat' && m.userData?.type !== 'aircraftSeat' && m.userData?.type !== 'vehicle' && m.userData?.type !== 'aircraft' && !['wedge', 'triangle', 'ladder'].includes(m.userData?.type)).map(m => { m.updateMatrixWorld(true); return { box: new THREE.Box3().setFromObject(m), mesh: m }; });
+                    refreshPlayColliders();
+                    rebuildCannonWorld();
                 }
             } else if (smart.kind === 'door') {
                 const autoOpen = dist < (smart.range || 4);
@@ -8361,51 +9158,131 @@ const updateChatBubbles = () => {
             }
         };
 
+        const toTriMesh = (mesh) => {
+            if (!mesh?.geometry || !window.CANNON) return null;
+            const geo = mesh.geometry.clone();
+            const pos = geo.attributes && geo.attributes.position ? geo.attributes.position.array : null;
+            if (!pos) return null;
+            const vertices = Array.from(pos);
+            const indices = geo.index ? Array.from(geo.index.array) : Array.from({ length: vertices.length / 3 }, (_, i) => i);
+            return new CANNON.Trimesh(vertices, indices);
+        };
+
+        const getCannonShapeForMesh = (mesh) => {
+            if (!mesh || !window.CANNON) return null;
+            const type = mesh.userData?.type || 'block';
+            const s = mesh.scale || { x: 1, y: 1, z: 1 };
+            if (type === 'sphere') return new CANNON.Sphere(Math.max(0.15, Math.max(s.x, s.y, s.z) * 0.5));
+            if (['cylinder', 'halfCylinder', 'hollowCylinder'].includes(type)) return new CANNON.Cylinder(Math.max(0.1, s.x * 0.5), Math.max(0.1, s.z * 0.5), Math.max(0.1, s.y), 14);
+            if (type === 'halfSphere') return new CANNON.Sphere(Math.max(0.15, Math.max(s.x, s.y, s.z) * 0.5));
+            if (type === 'wedge' || type === 'triangle') return toTriMesh(mesh);
+            return new CANNON.Box(new CANNON.Vec3(Math.max(0.05, s.x * 0.5), Math.max(0.05, s.y * 0.5), Math.max(0.05, s.z * 0.5)));
+        };
+
+        const rebuildCannonWorld = () => {
+            if (!window.CANNON || !playScene) return;
+            physicsWorld = new CANNON.World();
+            physicsWorld.gravity.set(0, -(activeLevel?.settings?.gravity || 0.08) * 90, 0);
+            physicsWorld.broadphase = new CANNON.NaiveBroadphase();
+            physicsWorld.solver.iterations = 10;
+            physicsWorld.defaultContactMaterial.friction = 0.42;
+            physicsWorld.defaultContactMaterial.restitution = 0.02;
+            physicsBodies = [];
+            meshToBody = new Map();
+
+            playMeshes.forEach(mesh => {
+                if (!mesh?.isMesh || mesh.userData?.isTool || mesh.userData?.noCollide) return;
+                if (['seat', 'aircraftSeat', 'vehicle', 'aircraft', 'floatingText'].includes(mesh.userData?.type)) return;
+                const shape = getCannonShapeForMesh(mesh);
+                if (!shape) return;
+                const dynamic = mesh.userData?.isAnchored === false;
+                const body = new CANNON.Body({
+                    mass: dynamic ? Math.max(0.2, (mesh.scale.x * mesh.scale.y * mesh.scale.z) * 0.2) : 0,
+                    shape
+                });
+                body.position.set(mesh.position.x, mesh.position.y, mesh.position.z);
+                body.quaternion.set(mesh.quaternion.x, mesh.quaternion.y, mesh.quaternion.z, mesh.quaternion.w);
+                body.linearDamping = dynamic ? 0.12 : 0.99;
+                body.angularDamping = dynamic ? (mesh.userData?.type === 'sphere' ? 0.05 : 0.28) : 0.99;
+                body.allowSleep = false;
+                physicsWorld.addBody(body);
+                physicsBodies.push(body);
+                meshToBody.set(mesh.id, body);
+                body.__meshRef = mesh;
+            });
+        };
+
         const updateDynamicObjectPhysics = () => {
-            if (!activeLevel || !playScene) return;
-            const gravityStrength = Math.max(0.02, (activeLevel.settings?.gravity || 0.35) * 0.06);
-            const playerPos = new THREE.Vector3(playerObj.x, playerObj.y + 2, playerObj.z);
-            const staticMeshes = playMeshes.filter(m => m?.isMesh && !m.userData?.isTool && !m.userData?.noCollide && m.userData?.isAnchored !== false);
-            const dynamicMeshes = playMeshes.filter(m => m?.isMesh && !m.userData?.isTool && !m.userData?.noCollide && m.userData?.isAnchored === false && !['seat', 'aircraftSeat'].includes(m.userData?.type));
+            if (!physicsWorld || !window.CANNON) return;
+            const dt = Math.max(1 / 120, Math.min(1 / 20, (window.playDeltaMs || 16.67) / 1000));
+            physicsWorld.step(1 / 60, dt, 2);
 
-            dynamicMeshes.forEach(mesh => {
-                if (!mesh.userData.physicsVel) mesh.userData.physicsVel = new THREE.Vector3(0, 0, 0);
-                const vel = mesh.userData.physicsVel;
-                vel.y -= gravityStrength;
-                vel.multiplyScalar(0.992);
+            const playerVec = new CANNON.Vec3(playerObj.x, playerObj.y + 2.2, playerObj.z);
+            const playerVel = new CANNON.Vec3(playerObj.vx * 14, 0, playerObj.vz * 14);
 
-                const pushDir = mesh.position.clone().sub(playerPos);
-                pushDir.y = 0;
-                const dist = pushDir.length();
-                if (dist > 0 && dist < 3.2) {
-                    pushDir.normalize();
-                    vel.x += pushDir.x * 0.03;
-                    vel.z += pushDir.z * 0.03;
-                }
-
-                mesh.position.add(vel);
-
-                const halfY = new THREE.Box3().setFromObject(mesh).getSize(new THREE.Vector3()).y / 2;
-                if (mesh.position.y < -120) {
-                    mesh.position.y = 30;
-                    vel.set(0, 0, 0);
-                }
-
-                const ray = new THREE.Raycaster(new THREE.Vector3(mesh.position.x, mesh.position.y + 2, mesh.position.z), new THREE.Vector3(0, -1, 0), 0, 6);
-                const hits = ray.intersectObjects(staticMeshes, true);
-                if (hits.length > 0 && vel.y <= 0) {
-                    const floorY = hits[0].point.y + halfY + 0.03;
-                    if (mesh.position.y < floorY + 0.3) {
-                        mesh.position.y = floorY;
-                        vel.y = 0;
+            physicsBodies.forEach(body => {
+                const mesh = body.__meshRef;
+                if (!mesh) return;
+                if (body.mass > 0) {
+                    const dx = body.position.x - playerVec.x;
+                    const dz = body.position.z - playerVec.z;
+                    const dist = Math.sqrt(dx * dx + dz * dz);
+                    if (dist < 3.2) {
+                        const dirX = dist > 0.001 ? dx / dist : 0;
+                        const dirZ = dist > 0.001 ? dz / dist : 0;
+                        const playerSpeed = Math.sqrt((playerVel.x * playerVel.x) + (playerVel.z * playerVel.z));
+                        const basePush = (3.2 - dist) * 1.6 + playerSpeed * 0.25;
+                        body.applyImpulse(new CANNON.Vec3(dirX * basePush, 0, dirZ * basePush), body.position);
+                        if (mesh.userData?.type === 'sphere') {
+                            body.applyImpulse(new CANNON.Vec3(dirX * (basePush * 0.55), 0, dirZ * (basePush * 0.55)), new CANNON.Vec3(body.position.x, body.position.y + 0.28, body.position.z));
+                        }
                     }
+                }
+                mesh.position.set(body.position.x, body.position.y, body.position.z);
+                mesh.quaternion.set(body.quaternion.x, body.quaternion.y, body.quaternion.z, body.quaternion.w);
+            });
+        };
+
+        const collectDynamicPhysicsSnapshot = () => {
+            const states = [];
+            physicsBodies.forEach(body => {
+                const mesh = body.__meshRef;
+                if (!mesh || body.mass <= 0 || mesh.userData?.noCollide) return;
+                states.push({
+                    id: mesh.userData?.id,
+                    x: body.position.x, y: body.position.y, z: body.position.z,
+                    qx: body.quaternion.x, qy: body.quaternion.y, qz: body.quaternion.z, qw: body.quaternion.w,
+                    vx: body.velocity.x, vy: body.velocity.y, vz: body.velocity.z
+                });
+            });
+            return states.slice(0, 48);
+        };
+
+        const applyRemoteDynamicStates = (states) => {
+            if (!Array.isArray(states) || !states.length) return;
+            states.forEach(st => {
+                if (!st || !st.id) return;
+                const target = playMeshes.find(m => m?.userData?.id === st.id);
+                if (!target || target.userData?.noCollide || target.userData?.isAnchored !== false) return;
+                target.position.set(st.x, st.y, st.z);
+                target.quaternion.set(st.qx, st.qy, st.qz, st.qw);
+                const body = meshToBody.get(target.id);
+                if (body) {
+                    body.position.set(st.x, st.y, st.z);
+                    body.quaternion.set(st.qx, st.qy, st.qz, st.qw);
+                    body.velocity.set(st.vx || 0, st.vy || 0, st.vz || 0);
                 }
             });
         };
 
     const updatePhysics3D = () => {
+            const frameScale = Math.max(0.5, Math.min(2.0, (window.playDeltaMs || 16.67) / 16.67));
+            if (isDeathAnimating) return;
             if (playerObj.seatCooldown > 0) playerObj.seatCooldown--;
+            if (jumpBufferFrames > 0) jumpBufferFrames--;
+            if (coyoteFrames > 0) coyoteFrames--;
             updateDynamicObjectPhysics();
+            refreshPlayColliders();
 
             // --- ADVANCED VEHICLE & AIRCRAFT PHYSICS ---
             if (playerObj.sitting && playerObj.vehicleSeat) {
@@ -8514,7 +9391,7 @@ const updateChatBubbles = () => {
                     vehicle.userData.currentSpeed += (targetSpeed - vehicle.userData.currentSpeed) * 0.08; 
 
                     // Gravity
-                    vehicle.userData.vy = (vehicle.userData.vy || 0) - (activeLevel.settings ? activeLevel.settings.gravity : 0.35) * 0.15;
+                    vehicle.userData.vy = (vehicle.userData.vy || 0) - (activeLevel.settings ? activeLevel.settings.gravity : 0.08) * 0.15 * frameScale;
                     vehicle.position.y += vehicle.userData.vy;
 
                     vehicle.updateMatrixWorld(true);
@@ -8649,20 +9526,45 @@ const updateChatBubbles = () => {
                 playerObj.vx += moveDir.x * playerObj.speed; 
                 playerObj.vz += moveDir.z * playerObj.speed; 
                 playerObj.rotY = Math.atan2(moveDir.x, moveDir.z); 
+                resolveSlopeLift(playerObj.x, playerObj.y, playerObj.z);
             }
+
+            const maxStepHeight = DEFAULT_STEP_HEIGHT;
+            const tryStepUp = () => {
+                if (maxStepHeight <= 0) return false;
+                const stepInc = 0.15;
+                const baseY = playerObj.y;
+                for (let step = stepInc; step <= maxStepHeight + 0.001; step += stepInc) {
+                    const targetY = baseY + step;
+                    if (!checkWallCollision(playerObj.x, targetY, playerObj.z)) {
+                        const supportHit = checkCollision(playerObj.x, targetY - 0.22, playerObj.z);
+                        if (!supportHit) continue;
+                        const supportDelta = Math.abs((supportHit.max.y + 0.001) - targetY);
+                        if (supportDelta > 0.45) continue;
+                        playerObj.y = supportHit.max.y + 0.001;
+                        playerObj.grounded = false;
+                        return true;
+                    }
+                }
+                return false;
+            };
             
             // X-Axis Collision (Undo movement if hit)
             playerObj.x += playerObj.vx; 
             if (checkWallCollision(playerObj.x, playerObj.y, playerObj.z)) { 
-                playerObj.x -= playerObj.vx; 
-                playerObj.vx = 0; 
+                if (!resolveSlopeLift(playerObj.x, playerObj.y, playerObj.z) && !tryStepUp()) {
+                    playerObj.x -= playerObj.vx; 
+                    playerObj.vx = 0; 
+                }
             }
             
             // Z-Axis Collision (Undo movement if hit)
             playerObj.z += playerObj.vz; 
             if (checkWallCollision(playerObj.x, playerObj.y, playerObj.z)) { 
-                playerObj.z -= playerObj.vz; 
-                playerObj.vz = 0; 
+                if (!resolveSlopeLift(playerObj.x, playerObj.y, playerObj.z) && !tryStepUp()) {
+                    playerObj.z -= playerObj.vz; 
+                    playerObj.vz = 0; 
+                }
             }
             
             playerObj.vx *= 0.75; 
@@ -8690,7 +9592,7 @@ const updateChatBubbles = () => {
                 else playerObj.vy = 0; // Stick to the ladder
                 
                 // JUMPING OFF LADDERS
-                if (playInput.justJumped || keys.space) {
+                if (playInput.justJumped || jumpBufferFrames > 0) {
                     playerObj.vy = playerObj.jump * 0.8; // Give a slight vertical boost
                     
                     // Push player backward based on camera so they detach from the rungs
@@ -8700,15 +9602,16 @@ const updateChatBubbles = () => {
                     playerObj.vz -= camForward.z * 0.8;
                     
                     playInput.justJumped = false; // Consume the input!
+                    jumpBufferFrames = 0;
                 }
             } 
             else { 
                 // Standard Gravity
-                playerObj.vy -= (activeLevel.settings ? activeLevel.settings.gravity : 0.35); 
+                playerObj.vy -= (activeLevel.settings ? activeLevel.settings.gravity : 0.08) * frameScale; 
             }
             
             // Apply vertical velocity to actual position
-            playerObj.y += playerObj.vy; 
+            playerObj.y += playerObj.vy * frameScale; 
 
             // --- Terrain Collisions ---
             if (activeLevel.terrain && activeLevel.terrain.active) {
@@ -8729,6 +9632,7 @@ const updateChatBubbles = () => {
                             const impact = -playerObj.vy;
                             playerObj.y = exactHeight + 0.001; 
                             playerObj.grounded = true; // PROVEN GROUNDED
+                            coyoteFrames = 6;
                             playerObj.vy = 0; 
                             if (impact > 2.8) damagePlayer((impact - 2.8) * 10);
                             if (slopeDiff > 0.1) { playerObj.vx *= 0.6; playerObj.vz *= 0.6; } 
@@ -8744,6 +9648,7 @@ const updateChatBubbles = () => {
                     const impact = -playerObj.vy;
                     playerObj.y = hit.max.y + 0.001; 
                     playerObj.grounded = true; // PROVEN GROUNDED
+                    coyoteFrames = 6;
                     playerObj.vy = 0; 
                     if (impact > 3.2) damagePlayer((impact - 3.2) * 8);
                 } else if (playerObj.vy > 0) { 
@@ -8753,9 +9658,12 @@ const updateChatBubbles = () => {
             }
 
             // --- STANDARD JUMP EXECUTION ---
-            if ((keys.space || playInput.justJumped) && playerObj.grounded) {
+            const wantsJump = playInput.justJumped || jumpBufferFrames > 0;
+            if (wantsJump && (playerObj.grounded || coyoteFrames > 0)) {
                 playerObj.vy = playerObj.jump; 
                 playerObj.grounded = false; 
+                coyoteFrames = 0;
+                jumpBufferFrames = 0;
                 currentSessionJumps++; 
                 playInput.justJumped = false; // Consume the jump input!
             }
@@ -8880,11 +9788,14 @@ const animatePlay = () => {
                     playScene.updateMatrixWorld(true);
                     
                     // FIX: Filter out noCollide blocks during live physics updates too!
-                    playColliders = playMeshes.filter(m => !m.userData.isTool && !m.userData.noCollide && m.userData.type !== 'seat' && m.userData.type !== 'aircraftSeat' && m.userData.type !== 'vehicle' && m.userData.type !== 'aircraft' && !['wedge', 'triangle', 'ladder'].includes(m.userData.type)).map(m => { m.updateMatrixWorld(true); return { box: new THREE.Box3().setFromObject(m), mesh: m }; });
+                    refreshPlayColliders();
+                    rebuildCannonWorld();
                     
                     if (window.playLadders) { window.playLadders = playMeshes.filter(m => m.userData.type === 'ladder').map(m => { m.updateMatrixWorld(true); return new THREE.Box3().setFromObject(m); }); }
                 }
                 updatePhysics3D();
+                updateDeathPieces();
+                updateRemoteDeathPieces();
                 updateSmartObjectBehaviors();
                 triggerContextualInteract();
                 updatePlayerHealthHUD();
@@ -9649,17 +10560,17 @@ const groupAsAircraft = () => {
         const generateStarterHouse = (plotX, plotZ, theme, username) => {
             const objs = [];
             const bx = plotX * 50; const bz = plotZ * 50; 
-            const wallColor = theme === 'Greenridge' ? '#d4b895' : '#e67e22'; 
+            const wallColor = theme === 'Greenridge' ? '#c9cfd4' : '#b56a5d'; 
             const roofColor = theme === 'Greenridge' ? '#c0392b' : '#d35400'; 
             
             // House Foundation (SLATE) & Walls (PLASTIC)
             objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx, y:0.5, z:bz}, rotation:{x:0,y:0,z:0}, scale:{x:20, y:1, z:20}, color: '#7f8c8d', material: 'Slate' });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx-9.5, y:6, z:bz}, rotation:{x:0,y:0,z:0}, scale:{x:1, y:10, z:20}, color: wallColor });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+9.5, y:6, z:bz}, rotation:{x:0,y:0,z:0}, scale:{x:1, y:10, z:20}, color: wallColor });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx, y:6, z:bz-9.5}, rotation:{x:0,y:0,z:0}, scale:{x:18, y:10, z:1}, color: wallColor });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx-6, y:6, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:10, z:1}, color: wallColor });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+6, y:6, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:10, z:1}, color: wallColor });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx, y:9.5, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:3, z:1}, color: wallColor }); 
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx-9.5, y:6, z:bz}, rotation:{x:0,y:0,z:0}, scale:{x:1, y:10, z:20}, color: wallColor, material: 'Brick' });
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+9.5, y:6, z:bz}, rotation:{x:0,y:0,z:0}, scale:{x:1, y:10, z:20}, color: wallColor, material: 'Brick' });
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx, y:6, z:bz-9.5}, rotation:{x:0,y:0,z:0}, scale:{x:18, y:10, z:1}, color: wallColor, material: 'Brick' });
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx-6, y:6, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:10, z:1}, color: wallColor, material: 'Brick' });
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+6, y:6, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:10, z:1}, color: wallColor, material: 'Brick' });
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx, y:9.5, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:3, z:1}, color: wallColor, material: 'Concrete' }); 
             objs.push({ id: crypto.randomUUID(), type: 'wedge', position: {x:bx, y:13.5, z:bz}, rotation:{x:0,y:Math.PI/2,z:0}, scale:{x:22, y:5, z:22}, color: roofColor });
             
             // Yard Decor (Tree with WOOD trunk and GRASS leaves)
@@ -9667,7 +10578,7 @@ const groupAsAircraft = () => {
             objs.push({ id: crypto.randomUUID(), type: 'sphere', position: {x:bx-15, y:9, z:bz+15}, rotation:{x:0,y:0,z:0}, scale:{x:8, y:8, z:8}, color: '#2ecc71', material: 'Grass' });
 
             //   INWARD DRIVEWAY (SLATE)
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+13, y:0.05, z:bz+7.5}, rotation:{x:0,y:0,z:0}, scale:{x:10, y:0.1, z:25}, color: '#95a5a6', material: 'Slate' });
+            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+13, y:0.05, z:bz+7.5}, rotation:{x:0,y:0,z:0}, scale:{x:10, y:0.1, z:25}, color: '#6f777f', material: 'Concrete' });
 
             //   MAILBOX MODEL (WOOD Post)
             objs.push({ id: crypto.randomUUID(), type: 'cylinder', position: {x:bx-12, y:1, z:bz+19}, rotation:{x:0,y:0,z:0}, scale:{x:0.3, y:2, z:0.3}, color: '#8B4513', material: 'Wood' });
@@ -9689,10 +10600,10 @@ const groupAsAircraft = () => {
                     const roadNS = gx % 2 === 0;
 
                     if (roadEW || roadNS) {
-                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-1.95, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:200, y:3.8, z:200}, color: '#3a434d', material: 'Slate' });
+                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-1.95, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:200, y:3.8, z:200}, color: '#2f343a', material: 'Asphalt' });
                         objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-0.05, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:18, y:0.1, z:2}, color: '#f1c40f', material: 'Neon', noCollide: true });
                     } else {
-                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-1.95, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:200, y:3.8, z:200}, color: '#67717a', material: 'Concrete' });
+                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-1.95, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:200, y:3.8, z:200}, color: '#9fa8b1', material: 'Concrete' });
                     }
                 }
             }
@@ -9756,9 +10667,13 @@ const groupAsAircraft = () => {
 
             activeLevel = {
                 settings: {
-                    gravity: 0.35,
+                    gravity: 0.08,
                     skyColor: isIndustrial ? '#71808f' : (isGrass ? '#5b88a5' : '#a37b45'),
-                    brightness: isIndustrial ? 0.6 : 0.65
+                    brightness: isIndustrial ? 0.62 : 0.68,
+                    sunIntensity: isIndustrial ? 1.0 : 1.28,
+                    fogDistance: isIndustrial ? 1100 : 1450,
+                    graphicsQuality: 'high',
+                    exposure: isIndustrial ? 0.95 : 1.05
                 },
                 spawn: isIndustrial ? { x: 0, y: 2, z: 380 } : { x: cityGlobalData.cityData.plotX * 50, y: 2, z: (cityGlobalData.cityData.plotZ * 50) + 15 },
                 objects: cityObjects
@@ -9988,7 +10903,8 @@ const groupAsAircraft = () => {
                 
                 // FIX 1: Use the correct localStorage key
                 const token = localStorage.getItem('ps_token'); 
-                if (token) headers['Authorization'] = token; 
+                if (!token) return;
+                headers['Authorization'] = token; 
 
                 const res = await fetch('/api/ping', {
                     method: 'POST',
@@ -9996,6 +10912,7 @@ const groupAsAircraft = () => {
                     body: JSON.stringify({ location: loc })
                 });
 
+                if (!res.ok) return;
                 // FIX 2: Parse the response and update the UI live!
                 const data = await res.json();
                 
