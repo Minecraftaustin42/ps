@@ -6975,7 +6975,9 @@ if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', bri
             if (typeof edData.settings.fogDistance === 'undefined') edData.settings.fogDistance = 1600;
             if (typeof edData.settings.graphicsQuality === 'undefined') edData.settings.graphicsQuality = 'medium';
             if (typeof edData.settings.exposure === 'undefined') edData.settings.exposure = 1.0;
+            if (typeof edData.settings.stepHeight === 'undefined') edData.settings.stepHeight = 1.1;
             document.getElementById('ws-gravity').value = edData.settings.gravity;
+            document.getElementById('ws-step-height').value = edData.settings.stepHeight;
             document.getElementById('ws-skycolor').value = edData.settings.skyColor;
             document.getElementById('ws-brightness').value = edData.settings.brightness;
             document.getElementById('ws-sun-intensity').value = edData.settings.sunIntensity;
