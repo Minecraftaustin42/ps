@@ -6135,7 +6135,7 @@ let currentTransformSpace = 'local';
         // Auto-convert old grid games into the new freeform format
        // Auto-convert old grid games into the new freeform format
         const migrateLevelDataTo3D = (levelData) => {
-            let newData = { settings: { gravity: 0.08, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
+            let newData = { settings: { gravity: 0.08, skyColor: '#87CEEB', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
             if (levelData.settings) newData.settings = levelData.settings;
             if (levelData.objects) { 
                 (levelData.objects || []).forEach(ensureSmartLogicDefaults);
@@ -6970,10 +6970,10 @@ document.addEventListener('keydown', (e) => {
             
             isEditingSettings = true; renderExplorer();
             
-if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
+if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 };
             if (typeof edData.settings.sunIntensity === 'undefined') edData.settings.sunIntensity = 1.1;
             if (typeof edData.settings.fogDistance === 'undefined') edData.settings.fogDistance = 1600;
-            if (typeof edData.settings.graphicsQuality === 'undefined') edData.settings.graphicsQuality = 'medium';
+            if (typeof edData.settings.graphicsQuality === 'undefined') edData.settings.graphicsQuality = 'high';
             if (typeof edData.settings.exposure === 'undefined') edData.settings.exposure = 1.0;
             const setValue = (id, value) => { const el = document.getElementById(id); if (el) el.value = value; };
             setValue('ws-gravity', edData.settings.gravity);
@@ -6995,7 +6995,7 @@ if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', bri
             edData.settings.brightness = parseFloat((val('ws-brightness') || {}).value) || 1.0;
             edData.settings.sunIntensity = parseFloat((val('ws-sun-intensity') || {}).value) || 1.1;
             edData.settings.fogDistance = parseFloat((val('ws-fog-distance') || {}).value) || 1600;
-            edData.settings.graphicsQuality = ((val('ws-graphics-quality') || {}).value) || 'medium';
+            edData.settings.graphicsQuality = ((val('ws-graphics-quality') || {}).value) || 'high';
             edData.settings.exposure = parseFloat((val('ws-exposure') || {}).value) || 1.0;
             applyWorldSettings(); recordEdit();
         };
@@ -7008,10 +7008,10 @@ if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', bri
                 const fogDistance = Math.max(200, edData.settings.fogDistance || 1600);
                 edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.2, fogDistance);
                 if (edRenderer) {
-                    const q = edData.settings.graphicsQuality || 'medium';
-                    const shadow = q === 'high' || q === 'ultra';
+                    const q = (edData.settings.graphicsQuality === 'ultra') ? 'ultra' : 'high';
+                    const shadow = true;
                     edRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-                    edRenderer.toneMappingExposure = Math.max(0.4, Math.min(2.5, edData.settings.exposure || 1));
+                    edRenderer.toneMappingExposure = Math.max(0.6, Math.min(2.8, (edData.settings.exposure || 1.08) + 0.08));
                     edRenderer.outputEncoding = THREE.sRGBEncoding;
                     edRenderer.physicallyCorrectLights = true;
                     edRenderer.shadowMap.enabled = shadow;
@@ -7019,6 +7019,8 @@ if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', bri
                     if (edDirectionalLight) {
                         edDirectionalLight.castShadow = shadow;
                         edDirectionalLight.shadow.mapSize.set(q === 'ultra' ? 2048 : 1024, q === 'ultra' ? 2048 : 1024);
+                        edDirectionalLight.shadow.radius = 2.2;
+                        edDirectionalLight.shadow.bias = -0.00035;
                     }
                 }
             }
@@ -7403,7 +7405,7 @@ const promptClearEditor = () => {
         // --- Editor Core Engine ---
      const clearEditor = () => {
             currentEditGameId = null; 
-            edData = { settings: { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.65, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
+            edData = { settings: { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
@@ -8051,8 +8053,8 @@ const loadPsworld = (event) => {
 
 const applyPlayGraphicsSettings = (settings = {}) => {
             if (!playScene || !playRenderer) return;
-            const quality = settings.graphicsQuality || 'medium';
-            const exposure = Math.max(0.4, Math.min(2.5, settings.exposure || 1));
+            const quality = settings.graphicsQuality === 'ultra' ? 'ultra' : 'high';
+            const exposure = Math.max(0.6, Math.min(2.8, (settings.exposure || 1.08) + 0.08));
             const fogDistance = Math.max(200, settings.fogDistance || 1600);
 
             playScene.fog = new THREE.Fog(settings.skyColor || '#87CEEB', fogDistance * 0.25, fogDistance);
@@ -8060,12 +8062,13 @@ const applyPlayGraphicsSettings = (settings = {}) => {
             playRenderer.toneMappingExposure = exposure;
             playRenderer.outputEncoding = THREE.sRGBEncoding;
             playRenderer.physicallyCorrectLights = true;
-            playRenderer.shadowMap.enabled = quality === 'high' || quality === 'ultra';
+            playRenderer.shadowMap.enabled = true;
             playRenderer.shadowMap.type = quality === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
             if (playDirectionalLight) {
                 playDirectionalLight.intensity = Math.max(0.3, settings.sunIntensity || 1.25);
                 playDirectionalLight.castShadow = playRenderer.shadowMap.enabled;
                 playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 2048 : 1024, quality === 'ultra' ? 2048 : 1024);
+                playDirectionalLight.shadow.radius = 2.8;
                 playDirectionalLight.shadow.bias = -0.00035;
                 playDirectionalLight.shadow.normalBias = 0.015;
             }
@@ -8130,7 +8133,7 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
 
             stopGameLoop(); setupMobileControls();
             
-            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.08, skyColor: '#87CEEB', brightness: 1.0, sunIntensity: 1.1, fogDistance: 1600, graphicsQuality: 'medium', exposure: 1.0 };
+            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.08, skyColor: '#87CEEB', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 };
             
             playScene.background = new THREE.Color(activeLevel.settings.skyColor);
             playScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = activeLevel.settings.brightness; });
