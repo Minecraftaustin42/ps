@@ -6975,27 +6975,28 @@ if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', bri
             if (typeof edData.settings.fogDistance === 'undefined') edData.settings.fogDistance = 1600;
             if (typeof edData.settings.graphicsQuality === 'undefined') edData.settings.graphicsQuality = 'medium';
             if (typeof edData.settings.exposure === 'undefined') edData.settings.exposure = 1.0;
-            if (typeof edData.settings.stepHeight === 'undefined') edData.settings.stepHeight = 1.1;
-            document.getElementById('ws-gravity').value = edData.settings.gravity;
-            document.getElementById('ws-step-height').value = edData.settings.stepHeight;
-            document.getElementById('ws-skycolor').value = edData.settings.skyColor;
-            document.getElementById('ws-brightness').value = edData.settings.brightness;
-            document.getElementById('ws-sun-intensity').value = edData.settings.sunIntensity;
-            document.getElementById('ws-fog-distance').value = edData.settings.fogDistance;
-            document.getElementById('ws-graphics-quality').value = edData.settings.graphicsQuality;
-            document.getElementById('ws-exposure').value = edData.settings.exposure;
-            document.getElementById('world-settings-panel').style.display = 'block';
+            const setValue = (id, value) => { const el = document.getElementById(id); if (el) el.value = value; };
+            setValue('ws-gravity', edData.settings.gravity);
+            setValue('ws-skycolor', edData.settings.skyColor);
+            setValue('ws-brightness', edData.settings.brightness);
+            setValue('ws-sun-intensity', edData.settings.sunIntensity);
+            setValue('ws-fog-distance', edData.settings.fogDistance);
+            setValue('ws-graphics-quality', edData.settings.graphicsQuality);
+            setValue('ws-exposure', edData.settings.exposure);
+            const panel = document.getElementById('world-settings-panel');
+            if (panel) panel.style.display = 'block';
         };
 
 
         const updateWorldSettings = () => {
-            edData.settings.gravity = parseFloat(document.getElementById('ws-gravity').value) || 0.08;
-            edData.settings.skyColor = document.getElementById('ws-skycolor').value;
-            edData.settings.brightness = parseFloat(document.getElementById('ws-brightness').value) || 1.0;
-            edData.settings.sunIntensity = parseFloat(document.getElementById('ws-sun-intensity').value) || 1.1;
-            edData.settings.fogDistance = parseFloat(document.getElementById('ws-fog-distance').value) || 1600;
-            edData.settings.graphicsQuality = document.getElementById('ws-graphics-quality').value || 'medium';
-            edData.settings.exposure = parseFloat(document.getElementById('ws-exposure').value) || 1.0;
+            const val = (id) => document.getElementById(id);
+            edData.settings.gravity = parseFloat((val('ws-gravity') || {}).value) || 0.08;
+            edData.settings.skyColor = ((val('ws-skycolor') || {}).value) || '#5b88a5';
+            edData.settings.brightness = parseFloat((val('ws-brightness') || {}).value) || 1.0;
+            edData.settings.sunIntensity = parseFloat((val('ws-sun-intensity') || {}).value) || 1.1;
+            edData.settings.fogDistance = parseFloat((val('ws-fog-distance') || {}).value) || 1600;
+            edData.settings.graphicsQuality = ((val('ws-graphics-quality') || {}).value) || 'medium';
+            edData.settings.exposure = parseFloat((val('ws-exposure') || {}).value) || 1.0;
             applyWorldSettings(); recordEdit();
         };
 
@@ -10665,7 +10666,11 @@ const groupAsAircraft = () => {
                 settings: {
                     gravity: 0.08,
                     skyColor: isIndustrial ? '#71808f' : (isGrass ? '#5b88a5' : '#a37b45'),
-                    brightness: isIndustrial ? 0.6 : 0.65
+                    brightness: isIndustrial ? 0.62 : 0.68,
+                    sunIntensity: isIndustrial ? 1.0 : 1.28,
+                    fogDistance: isIndustrial ? 1100 : 1450,
+                    graphicsQuality: 'high',
+                    exposure: isIndustrial ? 0.95 : 1.05
                 },
                 spawn: isIndustrial ? { x: 0, y: 2, z: 380 } : { x: cityGlobalData.cityData.plotX * 50, y: 2, z: (cityGlobalData.cityData.plotZ * 50) + 15 },
                 objects: cityObjects
