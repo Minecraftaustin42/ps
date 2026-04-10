@@ -25,6 +25,7 @@ let chatSuspensions = {}; // Tracks suspensions { userId: unbanTimestamp }
 
 let activeEditors = {}; 
 let activePlayers = {}; 
+let activePlayDynamic = {};
 let onlineUsers = {};   
 let gameChats = {}; // { [gameId]: [messages] }
 let gameChatActivity = {}; // { [gameId_userId]: [timestamps] }
@@ -2990,7 +2991,7 @@ app.post('/api/games/:id/chat', requireAuth, (req, res) => {
 
 app.post('/api/games/:id/play-sync', requireAuth, (req, res) => {
     const gameId = req.params.id;
-    const { x, y, z, rotY, sceneId, color, bodyColors, isDead, deadAt } = req.body;
+    const { x, y, z, rotY, sceneId, color, bodyColors, isDead, deadAt, dynamicStates } = req.body;
     const user = db.users.find(u => u.id === req.userId);
 
 if (!activePlayers[gameId]) activePlayers[gameId] = {};
@@ -3019,6 +3020,21 @@ activePlayers[gameId][req.userId] = {
     } : null
 };
 
+if (Array.isArray(dynamicStates)) {
+    activePlayDynamic[gameId] = {
+        updatedAt: Date.now(),
+        states: dynamicStates
+            .slice(0, 48)
+            .map(s => ({
+                id: String(s.id || '').slice(0, 80),
+                x: Number(s.x) || 0, y: Number(s.y) || 0, z: Number(s.z) || 0,
+                qx: Number(s.qx) || 0, qy: Number(s.qy) || 0, qz: Number(s.qz) || 0, qw: Number(s.qw) || 1,
+                vx: Number(s.vx) || 0, vy: Number(s.vy) || 0, vz: Number(s.vz) || 0
+            }))
+            .filter(s => s.id)
+    };
+}
+
 const others = [];
 for (let uId in activePlayers[gameId]) {
     // Check if their last ping was within 3 seconds
@@ -3036,6 +3052,7 @@ for (let uId in activePlayers[gameId]) {
 // If nobody is left in this game server, wipe its temporary server chat too
 if (!activePlayers[gameId] || Object.keys(activePlayers[gameId]).length === 0) {
     delete activePlayers[gameId];
+    delete activePlayDynamic[gameId];
     delete gameChats[gameId];
 
     // Clean any per-user chat cooldown/spam data for this game too
@@ -3047,7 +3064,11 @@ if (!activePlayers[gameId] || Object.keys(activePlayers[gameId]).length === 0) {
     }
 }
 
-res.json(others);
+const dynamicPayload = activePlayDynamic[gameId] && (Date.now() - activePlayDynamic[gameId].updatedAt < 3000)
+    ? activePlayDynamic[gameId].states
+    : [];
+
+res.json({ players: others, dynamicStates: dynamicPayload });
 });
 
 
