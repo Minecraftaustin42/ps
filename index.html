@@ -1960,7 +1960,7 @@
                             </div>
                         </div>
 
-                        <div class="overlay-instruction" id="play-instruction">WASD to move, SPACE to jump. Click & drag to rotate camera! Scroll to zoom into First-Person.</div>
+                        <div class="overlay-instruction" id="play-instruction"></div>
                     </div>
                 </div>
 
@@ -7192,18 +7192,19 @@ if (item.type === 'button' && item.onClickEvent) {
                 partMesh.updateMatrixWorld(true);
                 const pos = new THREE.Vector3();
                 const quat = new THREE.Quaternion();
-                partMesh.getWorldPosition(pos);
-                partMesh.getWorldQuaternion(quat);
-                if (partMesh.parent) partMesh.parent.remove(partMesh);
-                playScene.add(partMesh);
-                partMesh.position.copy(pos);
-                partMesh.quaternion.copy(quat);
+                const scl = new THREE.Vector3();
+                partMesh.matrixWorld.decompose(pos, quat, scl);
+                const shard = new THREE.Mesh(partMesh.geometry.clone(), partMesh.material.clone());
+                shard.position.copy(pos);
+                shard.quaternion.copy(quat);
+                shard.scale.copy(scl);
+                playScene.add(shard);
                 const vel = new THREE.Vector3(
-                    (Math.random() - 0.5) * 0.08 + playerObj.vx * 0.06,
-                    0.01 + Math.random() * 0.04,
-                    (Math.random() - 0.5) * 0.08 + playerObj.vz * 0.06
+                    (Math.random() - 0.5) * 0.12 + playerObj.vx * 0.1,
+                    0.03 + Math.random() * 0.06,
+                    (Math.random() - 0.5) * 0.12 + playerObj.vz * 0.1
                 );
-                deathPieces.push({ mesh: partMesh, velocity: vel, life: 80 + Math.floor(Math.random() * 40) });
+                deathPieces.push({ mesh: shard, velocity: vel, life: 55 + Math.floor(Math.random() * 25) });
             };
 
             const parts = [];
@@ -7239,13 +7240,14 @@ if (item.type === 'button' && item.onClickEvent) {
                 child.updateMatrixWorld(true);
                 const pos = new THREE.Vector3();
                 const quat = new THREE.Quaternion();
-                child.getWorldPosition(pos);
-                child.getWorldQuaternion(quat);
+                const scl = new THREE.Vector3();
+                child.matrixWorld.decompose(pos, quat, scl);
                 const ghost = new THREE.Mesh(child.geometry.clone(), child.material.clone());
                 ghost.position.copy(pos);
                 ghost.quaternion.copy(quat);
+                ghost.scale.copy(scl);
                 const vel = new THREE.Vector3((Math.random() - 0.5) * 0.05, 0.01 + Math.random() * 0.03, (Math.random() - 0.5) * 0.05);
-                remoteDeathPieces.push({ mesh: ghost, velocity: vel, life: 90, owner: userId, deadAt });
+                remoteDeathPieces.push({ mesh: ghost, velocity: vel, life: 55, owner: userId, deadAt });
                 playScene.add(ghost);
             });
         };
@@ -8945,7 +8947,7 @@ const updateChatBubbles = () => {
                 const hits = ray.intersectObject(slope, true);
                 if (!hits.length) return;
                 const y = hits[0].point.y;
-                if (y >= py - 0.4 && y <= py + DEFAULT_STEP_HEIGHT + 0.7) bestY = bestY === null ? y : Math.max(bestY, y);
+                if (y >= py - 1.0 && y <= py + DEFAULT_STEP_HEIGHT + 1.4) bestY = bestY === null ? y : Math.max(bestY, y);
             });
             if (bestY === null) return false;
             playerObj.y = bestY + 0.001;
@@ -9139,6 +9141,7 @@ const updateChatBubbles = () => {
                 body.quaternion.set(mesh.quaternion.x, mesh.quaternion.y, mesh.quaternion.z, mesh.quaternion.w);
                 body.linearDamping = dynamic ? 0.12 : 0.99;
                 body.angularDamping = dynamic ? (mesh.userData?.type === 'sphere' ? 0.05 : 0.28) : 0.99;
+                body.allowSleep = false;
                 physicsWorld.addBody(body);
                 physicsBodies.push(body);
                 meshToBody.set(mesh.id, body);
@@ -9160,9 +9163,16 @@ const updateChatBubbles = () => {
                 if (body.mass > 0) {
                     const dx = body.position.x - playerVec.x;
                     const dz = body.position.z - playerVec.z;
-                    const d2 = dx * dx + dz * dz;
-                    if (d2 < 9) {
-                        body.applyImpulse(new CANNON.Vec3(playerVel.x * 1.5, 0, playerVel.z * 1.5), body.position);
+                    const dist = Math.sqrt(dx * dx + dz * dz);
+                    if (dist < 3.2) {
+                        const dirX = dist > 0.001 ? dx / dist : 0;
+                        const dirZ = dist > 0.001 ? dz / dist : 0;
+                        const playerSpeed = Math.sqrt((playerVel.x * playerVel.x) + (playerVel.z * playerVel.z));
+                        const basePush = (3.2 - dist) * 1.6 + playerSpeed * 0.25;
+                        body.applyImpulse(new CANNON.Vec3(dirX * basePush, 0, dirZ * basePush), body.position);
+                        if (mesh.userData?.type === 'sphere') {
+                            body.applyImpulse(new CANNON.Vec3(dirX * (basePush * 0.55), 0, dirZ * (basePush * 0.55)), new CANNON.Vec3(body.position.x, body.position.y + 0.28, body.position.z));
+                        }
                     }
                 }
                 mesh.position.set(body.position.x, body.position.y, body.position.z);
@@ -9453,6 +9463,7 @@ const updateChatBubbles = () => {
                 playerObj.vx += moveDir.x * playerObj.speed; 
                 playerObj.vz += moveDir.z * playerObj.speed; 
                 playerObj.rotY = Math.atan2(moveDir.x, moveDir.z); 
+                resolveSlopeLift(playerObj.x, playerObj.y, playerObj.z);
             }
 
             const maxStepHeight = DEFAULT_STEP_HEIGHT;
