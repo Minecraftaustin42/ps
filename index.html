@@ -6762,7 +6762,7 @@ document.addEventListener('keydown', (e) => {
                 document.getElementById('floating-text-props').style.display = 'none';
                 document.getElementById('smart-props-section').style.display = 'none';
             }
-            renderExplorer();
+            updateExplorerSelection();
         };
 
 
@@ -7026,30 +7026,45 @@ if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', bri
             }
         };
 
+       const updateExplorerSelection = () => {
+            const list = document.getElementById('explorer-list');
+            if (!list || !list.children.length) return;
+            const selectedIds = new Set(selectedObjects.filter(m => !m.userData.isSpawn).map(m => m.userData.id));
+            const spawnSelected = selectedObjects.some(m => m.userData.isSpawn);
+            list.querySelectorAll('.explorer-item').forEach(item => {
+                const kind = item.dataset.kind;
+                const id = item.dataset.id;
+                const selected = (kind === 'settings' && isEditingSettings) || (kind === 'spawn' && spawnSelected) || (kind === 'object' && selectedIds.has(id));
+                item.classList.toggle('selected', !!selected);
+            });
+        };
+
        const renderExplorer = () => {
             const list = document.getElementById('explorer-list');
-            list.innerHTML = `<div class="explorer-item ${isEditingSettings ? 'selected' : ''}" onclick="selectSettings()"><span>World Settings</span></div>`;
+            if (!list) return;
+            const html = [];
+            html.push(`<div class="explorer-item ${isEditingSettings ? 'selected' : ''}" data-kind="settings" onclick="selectSettings()"><span>World Settings</span></div>`);
             
             if (edData.spawn) {
                 const isSel = selectedObjects.some(m => m.userData.isSpawn);
-                list.innerHTML += `<div class="explorer-item ${isSel ? 'selected' : ''}" onclick="selectObjectById('spawn', event.shiftKey)"><span>Spawn Point</span></div>`;
+                html.push(`<div class="explorer-item ${isSel ? 'selected' : ''}" data-kind="spawn" onclick="selectObjectById('spawn', event.shiftKey)"><span>Spawn Point</span></div>`);
             }
 
             edData.objects.forEach(obj => {
                 const isSel = selectedObjects.some(m => m.userData.id === obj.id);
-                // Highlight items that have scripts with a small yellow dot
                 const scriptIndicator = (obj.script && obj.script.trim() !== '') ? '<span style="color:#f1c40f; margin-right:5px;">●</span>' : '';
-                
-                list.innerHTML += `
-                    <div class="explorer-item ${isSel ? 'selected' : ''}" onclick="selectObjectById('${obj.id}', event.shiftKey)">
-                        <span ondblclick="renameObject('${obj.id}', '${obj.name}')">${scriptIndicator}${obj.name}</span>
+                const safeName = String(obj.name || 'Part').replace(/'/g, "\\'");
+                html.push(`
+                    <div class="explorer-item ${isSel ? 'selected' : ''}" data-kind="object" data-id="${obj.id}" onclick="selectObjectById('${obj.id}', event.shiftKey)">
+                        <span ondblclick="renameObject('${obj.id}', '${safeName}')">${scriptIndicator}${obj.name}</span>
                         <div>
                             <button style="background:none; border:none; cursor:pointer;" title="Edit Script" onclick="event.stopPropagation(); openScriptEditor('${obj.id}')">??</button>
-                            <button style="background:none; border:none; cursor:pointer;" title="Rename" onclick="event.stopPropagation(); renameObject('${obj.id}', '${obj.name}')">??</button>
+                            <button style="background:none; border:none; cursor:pointer;" title="Rename" onclick="event.stopPropagation(); renameObject('${obj.id}', '${safeName}')">??</button>
                         </div>
                     </div>
-                `;
+                `);
             });
+            list.innerHTML = html.join('');
         };
 
         const ensureUILayout = () => {
