@@ -6243,7 +6243,7 @@ const studioMobileState = { initialized: false, moveActive: false, moveX: 0, mov
         let historyStack = [];
         let historyIndex = -1;
         let teamCollaboratorsOnline = 0;
-        let localContributionObjectIds = new Set();
+        let isTeamEditingMode = false;
         let localLockedObjectUntil = {};
 
 let currentEditMode = 'translate';
@@ -6409,7 +6409,8 @@ let currentTransformSpace = 'local';
                 .filter(m => m && m.userData && !m.userData.isSpawn && m.userData.id)
                 .map(m => m.userData.id);
             selectedIds.forEach(id => {
-                localContributionObjectIds.add(id);
+                const obj = (edData.objects || []).find(o => o.id === id);
+                if (obj && currentUser && !obj.ownerId) obj.ownerId = currentUser.userId;
                 localLockedObjectUntil[id] = now + 2200;
             });
             if (pushToHistory) {
@@ -6473,7 +6474,7 @@ let currentTransformSpace = 'local';
                     .map(o => o.id)
             );
 
-            new Set([...localContributionObjectIds, ...ownedIds]).forEach(id => {
+            ownedIds.forEach(id => {
                 if (targetById.has(id)) nextById.set(id, JSON.parse(JSON.stringify(targetById.get(id))));
                 else nextById.delete(id);
             });
@@ -6484,24 +6485,24 @@ let currentTransformSpace = 'local';
         const undo = () => {
             if (historyIndex > 0) {
                 historyIndex--;
-                if (currentEditGameId && teamCollaboratorsOnline > 0) {
+                if (currentEditGameId && isTeamEditingMode) {
                     applyLocalOnlyHistoryState(historyStack[historyIndex]);
                 } else {
                     edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
                 }
-                buildEditorScene(); recordEdit(false, !(currentEditGameId && teamCollaboratorsOnline > 0));
+                buildEditorScene(); recordEdit(false, !(currentEditGameId && isTeamEditingMode));
             }
         };
 
         const redo = () => {
             if (historyIndex < historyStack.length - 1) {
                 historyIndex++;
-                if (currentEditGameId && teamCollaboratorsOnline > 0) {
+                if (currentEditGameId && isTeamEditingMode) {
                     applyLocalOnlyHistoryState(historyStack[historyIndex]);
                 } else {
                     edData = JSON.parse(JSON.stringify(historyStack[historyIndex]));
                 }
-                buildEditorScene(); recordEdit(false, !(currentEditGameId && teamCollaboratorsOnline > 0));
+                buildEditorScene(); recordEdit(false, !(currentEditGameId && isTeamEditingMode));
             }
         };
 
@@ -6514,10 +6515,10 @@ let currentTransformSpace = 'local';
                 await populateGroupPublishDropdown();
                 if(game.groupId) document.getElementById('editor-group-publish').value = game.groupId;
                 edData = migrateLevelDataTo3D(game.gameData || {});
+                isTeamEditingMode = !!(game.groupId || ((game.collaborators || []).length > 0));
                 lastLocalEditTime = game.lastEditTime || Date.now();
                 teamServerEditTime = game.lastEditTime || 0;
                 historyStack = []; historyIndex = -1;
-                localContributionObjectIds = new Set();
                 localLockedObjectUntil = {};
                 navigate('create'); 
             } catch (e) {}
@@ -8111,6 +8112,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     await apiCall(`/games/${currentEditGameId}/publish`, 'POST', { gameData: edData, genre });
                     showModal('Published!', 'New version is now live.', 'To Dashboard', () => { currentEditGameId = null; document.getElementById('editor-title').value = ''; navigate('dashboard'); });
                 } else {
+                    isTeamEditingMode = false;
                     await apiCall('/games', 'POST', { title, gameData: edData, genre, groupId });
                     localStorage.removeItem('ps_autosave');
                     showModal('Published!', 'Your game is now live. You earned the Creator badge!', 'Awesome', () => { document.getElementById('editor-title').value = ''; clearEditor(); navigate('library'); });
