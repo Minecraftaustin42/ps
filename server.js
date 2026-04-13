@@ -15,6 +15,7 @@ const DB_FILE = path.join(__dirname, 'db.json');
 let db = {
     users: [], sessions: {}, games: [], shopItems: [], clothingItems: [], blueprints: [], jams: [], groups: [], cityPlots: [], datastores: {},
     globalChat: [], toolboxItems: [], // NEW
+    reports: [],
     notifications: [],
     moderation: { bans: {}, ipBans: [], warnings: {} },  // <-- ADD THIS LINE
     friendPetDaily: {}
@@ -24,6 +25,7 @@ let chatActivity = {}; // Tracks timestamps for spam { userId: [timestamps] }
 let chatSuspensions = {}; // Tracks suspensions { userId: unbanTimestamp }
 
 let activeEditors = {}; 
+let deletedObjectTombstones = {}; // { [gameId]: { [objectId]: { ownerId, deletedAt } } }
 let activePlayers = {}; 
 let activePlayDynamic = {};
 let onlineUsers = {};   
@@ -38,6 +40,7 @@ if (fs.existsSync(DB_FILE)) {
 
 if (!db.datastores) db.datastores = {};
 if (!db.notifications) db.notifications = [];
+if (!db.reports) db.reports = [];
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} }; // <-- ADD THIS LINE
 if (!db.friendPetDaily) db.friendPetDaily = {};
     try {
@@ -51,6 +54,7 @@ if (!db.friendPetDaily) db.friendPetDaily = {};
         if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} };
         if (!db.groups) db.groups = [];
 if (!db.sounds) db.sounds = [];
+        if (!db.reports) db.reports = [];
 
         db.users.forEach(u => { 
             if (!u.followers) u.followers = []; 
@@ -62,6 +66,8 @@ if (typeof u.createdAt === 'undefined') u.createdAt = 0;
 if (!u.toolboxInventory) u.toolboxInventory = [];
             if (!u.recentlyPlayed) u.recentlyPlayed = [];
             if (!u.badges) u.badges = [];
+            if (!u.reportCrates) u.reportCrates = [];
+            if (typeof u.accurateReports === 'undefined') u.accurateReports = 0;
             if (!u.messages) u.messages = [];
             if (!u.inventory) u.inventory = [];
             if (!u.clothingInventory) u.clothingInventory = [];
@@ -244,6 +250,7 @@ const sanitizeGameData = (gameData) => {
         if (!obj || typeof obj !== 'object') return;
         const cleanObj = {
             id: typeof obj.id === 'string' ? obj.id.slice(0, 80) : crypto.randomUUID(),
+            ownerId: typeof obj.ownerId === 'string' ? obj.ownerId.slice(0, 80) : undefined,
             name: sanitizeText(obj.name || obj.type || 'Object', 48),
             type: sanitizeText(obj.type || 'block', 24),
             position: {
@@ -488,11 +495,11 @@ const MOD_PANEL_DURATION_MS = 10 * 60 * 1000; // 10 minutes
 const getUserById = (userId) => db.users.find(u => u.id === userId);
 
 const isAdminAccount = (user) => {
-    return !!user && user.username && user.username.toLowerCase() === 'admin';
+    return !!user && user.username && user.username.toLowerCase() === 'nick';
 };
 
 const isModAccount = (user) => {
-    return !!user && user.username && user.username.toLowerCase() === 'mod';
+    return !!user && user.username && user.username.toLowerCase() === 'austin';
 };
 
 const canUseModerationPanel = (user) => {
@@ -518,6 +525,13 @@ const requireModPanelUnlocked = (req, res, next) => {
     }
 
     next();
+};
+
+const REPORT_COIN_REWARDS = [150, 300, 800];
+const rollReportCrateReward = () => {
+    const roll = Math.random();
+    if (roll < 0.2) return REPORT_COIN_REWARDS[2];
+    return Math.random() < 0.5 ? REPORT_COIN_REWARDS[0] : REPORT_COIN_REWARDS[1];
 };
 
 
@@ -608,6 +622,7 @@ if (typeof db.lastUserIdNum !== 'number') {
 userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
+        reportCrates: [], accurateReports: 0,
         inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
@@ -734,6 +749,105 @@ if (!actingUser) {
 
     saveDB(); 
     res.json({ success: true, message: `Action ${action} applied to ${target.username}` });
+});
+
+app.post('/api/reports', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+
+    const category = String(req.body.category || '').trim();
+    const targetType = String(req.body.targetType || '').trim();
+    const targetId = String(req.body.targetId || '').trim();
+    const targetName = String(req.body.targetName || 'Unknown').trim().slice(0, 120);
+    const description = String(req.body.description || '').trim().slice(0, 2000);
+    const evidenceFiles = Array.isArray(req.body.evidenceFiles) ? req.body.evidenceFiles.slice(0, 4) : [];
+
+    if (!category || !targetType || !targetId) {
+        return res.status(400).json({ error: 'Missing report target details.' });
+    }
+    if (description.length < 5) {
+        return res.status(400).json({ error: 'Please add a little more detail to your report.' });
+    }
+
+    const safeFiles = evidenceFiles.map((f, idx) => ({
+        id: crypto.randomUUID(),
+        name: String(f.name || `evidence-${idx + 1}`).slice(0, 120),
+        type: String(f.type || 'application/octet-stream').slice(0, 80),
+        size: Math.max(0, Math.min(Number(f.size) || 0, 8 * 1024 * 1024)),
+        dataUrl: String(f.dataUrl || '').slice(0, 2_000_000)
+    })).filter(f => /^data:/.test(f.dataUrl));
+
+    const report = {
+        id: crypto.randomUUID(),
+        reporterId: user.id,
+        reporterName: user.username,
+        category,
+        targetType,
+        targetId,
+        targetName,
+        description,
+        evidenceFiles: safeFiles,
+        createdAt: Date.now(),
+        status: 'pending',
+        reviewedAt: null,
+        reviewedBy: null
+    };
+    db.reports.unshift(report);
+    saveDB();
+    res.json({ success: true, reportId: report.id });
+});
+
+app.get('/api/moderate/reports', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const pending = (db.reports || []).filter(r => r.status === 'pending');
+    res.json(pending);
+});
+
+app.post('/api/moderate/reports/:id', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
+    const report = (db.reports || []).find(r => r.id === req.params.id && r.status === 'pending');
+    if (!report) return res.status(404).json({ error: 'Report not found.' });
+
+    const action = String(req.body.action || '').toLowerCase();
+    if (!['approve', 'deny'].includes(action)) return res.status(400).json({ error: 'Invalid action.' });
+
+    report.status = action;
+    report.reviewedAt = Date.now();
+    report.reviewedBy = req.userId;
+
+    if (action === 'approve') {
+        const reporter = db.users.find(u => u.id === report.reporterId);
+        if (reporter) {
+            if (!Array.isArray(reporter.reportCrates)) reporter.reportCrates = [];
+            reporter.reportCrates.push({
+                id: crypto.randomUUID(),
+                fromReportId: report.id,
+                rewardCoins: rollReportCrateReward(),
+                createdAt: Date.now(),
+                openedAt: null
+            });
+            reporter.accurateReports = (reporter.accurateReports || 0) + 1;
+            if ((reporter.accurateReports || 0) === 1) {
+                awardBadge(reporter.id, 'Guardian');
+            }
+        }
+    }
+
+    saveDB();
+    res.json({ success: true });
+});
+
+app.post('/api/me/report-crates/:crateId/open', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    if (!Array.isArray(user.reportCrates)) user.reportCrates = [];
+    const crate = user.reportCrates.find(c => c.id === req.params.crateId);
+    if (!crate) return res.status(404).json({ error: 'Crate not found.' });
+    if (crate.openedAt) return res.status(400).json({ error: 'Crate already opened.' });
+
+    crate.openedAt = Date.now();
+    const reward = Number(crate.rewardCoins) || 150;
+    user.coins = (user.coins || 0) + reward;
+    saveDB();
+    res.json({ success: true, rewardCoins: reward, coins: user.coins });
 });
 
 // User Endpoint: Acknowledge Warning
@@ -955,7 +1069,9 @@ app.get('/api/me', requireAuth, (req, res) => {
         unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [], equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null,
         lastSpinDate: user.lastSpinDate,
         loginStreak: user.loginStreak, playStreak: user.playStreak, lastLoginDate: user.lastLoginDate,
-        toolboxInventory: user.toolboxInventory // NEW
+        toolboxInventory: user.toolboxInventory,
+        reportCrates: user.reportCrates || [],
+        accurateReports: user.accurateReports || 0
     });
 });
 
@@ -2853,7 +2969,7 @@ app.post('/api/games/:id/sync', requireAuth, (req, res) => {
 
         if (!canEdit) return res.status(403).json({ error: 'Not authorized.' });
 
-        const { gameData, genre, lastLocalEditTime, cursor } = req.body || {};
+        const { gameData, genre, lastLocalEditTime, cursor, baseServerEditTime } = req.body || {};
         if (!activeEditors[game.id]) activeEditors[game.id] = {};
         
         // Store their timestamp AND their 3D cursor position
@@ -2879,15 +2995,61 @@ app.post('/api/games/:id/sync', requireAuth, (req, res) => {
         }
 
         let appliedUpdate = false;
-        if (gameData && Number.isFinite(lastLocalEditTime) && lastLocalEditTime > game.lastEditTime) {
-            game.gameData = sanitizeGameData(gameData);
+        const hasMatchingBase = Number.isFinite(baseServerEditTime) && Number(baseServerEditTime) === Number(game.lastEditTime);
+        if (gameData && hasMatchingBase && Number.isFinite(lastLocalEditTime) && lastLocalEditTime > game.lastEditTime) {
+            const incomingData = sanitizeGameData(gameData);
+            const existingData = sanitizeGameData(game.gameData || {});
+            const existingById = new Map((existingData.objects || []).map(o => [o.id, o]));
+            const incomingById = new Map((incomingData.objects || []).map(o => [o.id, o]));
+            const mergedObjects = [];
+            if (!deletedObjectTombstones[game.id]) deletedObjectTombstones[game.id] = {};
+            const gameTombstones = deletedObjectTombstones[game.id];
+            const now = Date.now();
+            Object.keys(gameTombstones).forEach((objId) => {
+                if (now - (gameTombstones[objId].deletedAt || 0) > 120000) delete gameTombstones[objId];
+            });
+
+            existingById.forEach((oldObj, id) => {
+                const ownerId = oldObj.ownerId || game.authorId;
+                const incomingObj = incomingById.get(id);
+                if (!incomingObj) {
+                    if (ownerId !== req.userId) mergedObjects.push({ ...oldObj, ownerId });
+                    else gameTombstones[id] = { ownerId, deletedAt: now };
+                    return;
+                }
+                if (ownerId !== req.userId) mergedObjects.push({ ...oldObj, ownerId });
+                else mergedObjects.push({ ...incomingObj, ownerId });
+                if (gameTombstones[id]) delete gameTombstones[id];
+                incomingById.delete(id);
+            });
+            incomingById.forEach((newObj) => {
+                const tombstone = gameTombstones[newObj.id];
+                if (tombstone && tombstone.ownerId !== req.userId) return;
+                mergedObjects.push({ ...newObj, ownerId: req.userId });
+                if (gameTombstones[newObj.id]) delete gameTombstones[newObj.id];
+            });
+
+            if (req.userId !== game.authorId) {
+                incomingData.settings = existingData.settings || incomingData.settings;
+                incomingData.spawn = existingData.spawn || incomingData.spawn;
+            }
+            incomingData.objects = mergedObjects;
+            game.gameData = incomingData;
             if (genre) game.genre = genre;
             game.lastEditTime = lastLocalEditTime;
             saveDB(); appliedUpdate = true;
         }
 
         // Return the new activeEditorsData array
-        res.json({ gameData: game.gameData, genre: game.genre, lastEditTime: game.lastEditTime, activeEditors: activeUsernames, activeEditorsData, acceptedLocalUpdate: appliedUpdate });
+        res.json({
+            gameData: game.gameData,
+            genre: game.genre,
+            lastEditTime: game.lastEditTime,
+            activeEditors: activeUsernames,
+            activeEditorsData,
+            acceptedLocalUpdate: appliedUpdate,
+            rejectedReason: appliedUpdate ? null : (!hasMatchingBase ? 'stale_base' : 'older_edit')
+        });
     } catch (error) {
         console.error('Team sync error:', error);
         res.status(500).json({ error: 'Team sync temporarily unavailable. Please retry.' });
