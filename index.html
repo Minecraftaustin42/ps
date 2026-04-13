@@ -2618,12 +2618,17 @@ if (data.coins !== undefined && currentUser && !data.groupCoins) {
 
         const openReportModal = (context) => {
             if (!currentUser) return showModal('Login Required', 'Please login to submit reports.');
+            const modalEl = document.getElementById('report-modal');
+            if (modalEl && modalEl.parentElement !== document.body) {
+                document.body.appendChild(modalEl);
+            }
+            if (!modalEl) return showModal('Error', 'Report modal unavailable. Please refresh.');
             currentReportContext = context;
             document.getElementById('report-modal-title').innerText = `Reporting ${context.targetName}`;
             document.getElementById('report-modal-subtitle').innerText = `Category: ${context.categoryLabel}`;
             document.getElementById('report-description').value = '';
             document.getElementById('report-evidence').value = '';
-            document.getElementById('report-modal').style.display = 'flex';
+            modalEl.style.display = 'flex';
         };
 
         const closeReportModal = () => {
