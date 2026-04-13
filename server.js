@@ -262,6 +262,8 @@ const sanitizeGameData = (gameData) => {
             material: sanitizeText(obj.material || 'Plastic', 24),
             script: String(obj.script || '').slice(0, 12000),
             objSource: String(obj.objSource || '').slice(0, 1200000),
+            objMtl: String(obj.objMtl || '').slice(0, 400000),
+            objTextureMap: {},
             isAnchored: obj.isAnchored !== false,
             canCollide: obj.canCollide !== false,
             noCollide: !!obj.noCollide,
@@ -277,6 +279,14 @@ const sanitizeGameData = (gameData) => {
                 team: ['all', 'red', 'blue', 'neutral'].includes(obj.smart.team) ? obj.smart.team : 'all',
                 advanced: !!obj.smart.advanced
             };
+        }
+        if (obj.objTextureMap && typeof obj.objTextureMap === 'object') {
+            const entries = Object.entries(obj.objTextureMap).slice(0, 64);
+            entries.forEach(([k, v]) => {
+                const key = String(k || '').slice(0, 120);
+                const value = String(v || '').slice(0, 4000000);
+                if (key) cleanObj.objTextureMap[key] = value;
+            });
         }
         safe.objects.push(cleanObj);
     });

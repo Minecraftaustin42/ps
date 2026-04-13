@@ -10,6 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js"></script>
     <style>
         /* 2016 Nostalgic CSS / Flat Design Era */
@@ -1491,8 +1492,8 @@
                         <div class="studio-toolbar-actions">
                             <button class="btn btn-sm btn-success" style="background-color:#27ae60;" onclick="openToolbox()">Toolbox</button>
                             <button class="btn btn-sm btn-primary" onclick="promptUploadModel()">Publish Model</button>
-                            <button class="btn btn-sm btn-info" onclick="triggerOBJImport()">Import OBJ</button>
-                            <input type="file" id="obj-import-input" accept=".obj,text/plain,model/obj" style="display:none;" onchange="handleOBJImport(event)">
+                            <button class="btn btn-sm btn-info" onclick="triggerOBJImport()">Import Roblox OBJ</button>
+                            <input type="file" id="obj-import-input" multiple accept=".obj,.mtl,.png,.jpg,.jpeg,.bmp,.tga,image/*,text/plain,model/obj" style="display:none;" onchange="handleOBJImport(event)">
                             <label style="font-size:12px;">Move <input type="number" id="snap-move" value="1" style="width:48px; padding:2px;"></label>
                             <label style="font-size:12px;">Rot <input type="number" id="snap-rot" value="15" style="width:48px; padding:2px;"></label>
                             <label style="font-size:12px;">Scale <input type="number" id="snap-scale" value="1" style="width:48px; padding:2px;"></label>
@@ -7447,9 +7448,34 @@ const promptClearEditor = () => {
         const buildOBJGroup = (objData, forPlay = false) => {
             const source = String(objData?.objSource || '');
             if (!source.trim() || !window.THREE?.OBJLoader) return null;
-            const loader = new THREE.OBJLoader();
+            const manager = new THREE.LoadingManager();
+            const textureMap = objData?.objTextureMap && typeof objData.objTextureMap === 'object' ? objData.objTextureMap : {};
+            const urlCache = {};
+            manager.setURLModifier((url) => {
+                const raw = String(url || '').replace(/\\/g, '/');
+                const base = raw.split('/').pop();
+                const entry = textureMap[raw] || textureMap[base];
+                if (!entry) return url;
+                if (!urlCache[base]) {
+                    const mime = /^data:(.*?);base64,/.exec(entry)?.[1] || 'image/png';
+                    const b64 = entry.split(',')[1] || '';
+                    const bytes = atob(b64);
+                    const arr = new Uint8Array(bytes.length);
+                    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+                    urlCache[base] = URL.createObjectURL(new Blob([arr], { type: mime }));
+                }
+                return urlCache[base];
+            });
+            const loader = new THREE.OBJLoader(manager);
             let parsed;
             try {
+                const mtlSource = String(objData?.objMtl || '');
+                if (mtlSource.trim() && window.THREE?.MTLLoader) {
+                    const mtlLoader = new THREE.MTLLoader(manager);
+                    const materials = mtlLoader.parse(mtlSource, '');
+                    materials.preload();
+                    loader.setMaterials(materials);
+                }
                 parsed = loader.parse(source);
             } catch (e) {
                 return null;
@@ -7457,7 +7483,8 @@ const promptClearEditor = () => {
             const group = new THREE.Group();
             parsed.traverse((child) => {
                 if (!child.isMesh) return;
-                const material = getMaterialForType(objData.material || 'Plastic', objData.color || '#d9d9d9');
+                let material = child.material;
+                if (!material || !material.map) material = getMaterialForType(objData.material || 'Plastic', objData.color || '#d9d9d9');
                 const imported = new THREE.Mesh(child.geometry.clone(), material);
                 imported.castShadow = objectCastsShadow(objData, forPlay ? activeLevel?.settings : edData?.settings);
                 imported.receiveShadow = areGlobalShadowsEnabled(forPlay ? activeLevel?.settings : edData?.settings);
@@ -7484,18 +7511,34 @@ const promptClearEditor = () => {
         };
 
         const handleOBJImport = async (event) => {
-            const file = (event?.target?.files || [])[0];
-            if (!file) return;
+            const files = Array.from(event?.target?.files || []);
+            if (!files.length) return;
             try {
-                const text = await file.text();
+                const objFile = files.find(f => /\.obj$/i.test(f.name));
+                if (!objFile) return showModal('Import Failed', 'Please select an .obj file.');
+                const text = await objFile.text();
                 if (!text.trim()) return showModal('Import Failed', 'OBJ file is empty.');
+                const mtlFile = files.find(f => /\.mtl$/i.test(f.name));
+                const mtlText = mtlFile ? await mtlFile.text() : '';
+                const textureFiles = files.filter(f => /\.(png|jpe?g|bmp|tga)$/i.test(f.name));
+                const textureMap = {};
+                for (const tf of textureFiles) {
+                    textureMap[tf.name] = await new Promise((resolve) => {
+                        const fr = new FileReader();
+                        fr.onload = () => resolve(String(fr.result || ''));
+                        fr.onerror = () => resolve('');
+                        fr.readAsDataURL(tf);
+                    });
+                }
                 const dir = new THREE.Vector3(); edCamera.getWorldDirection(dir);
                 const insertPos = edCamera.position.clone().add(dir.multiplyScalar(14));
                 edData.objects.push({
                     id: crypto.randomUUID(),
-                    name: file.name.replace(/\.obj$/i, '') || 'Imported OBJ',
+                    name: objFile.name.replace(/\.obj$/i, '') || 'Imported OBJ',
                     type: 'objModel',
                     objSource: text.slice(0, 1200000),
+                    objMtl: String(mtlText || '').slice(0, 400000),
+                    objTextureMap: textureMap,
                     position: { x: insertPos.x, y: insertPos.y, z: insertPos.z },
                     rotation: { x: 0, y: 0, z: 0 },
                     scale: { x: 1, y: 1, z: 1 },
@@ -7508,7 +7551,7 @@ const promptClearEditor = () => {
                 });
                 buildEditorScene();
                 recordEdit();
-                showModal('OBJ Imported', `${file.name} imported successfully.`);
+                showModal('OBJ Imported', `${objFile.name} imported successfully with ${textureFiles.length} texture file(s).`);
             } catch (e) {
                 showModal('Import Failed', 'Could not parse OBJ file.');
             } finally {
@@ -8731,6 +8774,7 @@ if (objData.type === 'objModel') {
                     const chunk = getChunkGroup(playScene, playChunkGroups, chunkKeyFromPos(objData.position || {}), 0);
                     chunk.add(objGroup);
                     playMeshes.push(objGroup);
+                    objGroup.traverse((child) => { if (child.isMesh) playMeshes.push(child); });
                 } else 
 if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     const group = new THREE.Group();
