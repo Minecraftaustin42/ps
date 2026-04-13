@@ -2161,7 +2161,6 @@ let currentSessionIsMobile = false;
         let serverLeaderboardInterval = null;
         let lastServerPlayers = [];
         let currentReportContext = null;
-        let reportsPollInterval = null;
 
 window.CURRENT_GAME_ID = null;
 
@@ -12148,7 +12147,8 @@ const toggleOutputPanel = () => {
 
 
 
-        let modPanelInterval = null;
+let modPanelInterval = null;
+let modReportsInterval = null;
 
 const isModeratorAccount = () => {
     return currentUser && ['nick','austin'].includes((currentUser.username || '').toLowerCase());
@@ -12379,6 +12379,9 @@ async function openModPanel() {
             loadAccessoryModerationQueue();
             loadClothingModerationQueue();
             loadReportsModerationQueue();
+            startModReportsPolling();
+        } else {
+            stopModReportsPolling();
         }
     } catch {}
     startModWatchdog();
@@ -12394,6 +12397,7 @@ async function unlockModPanel() {
         loadAccessoryModerationQueue();
         loadClothingModerationQueue();
         loadReportsModerationQueue();
+        startModReportsPolling();
     } catch {
         navigate('dashboard');
     }
@@ -12413,9 +12417,22 @@ function startModWatchdog() {
                 navigate('mod-panel');
                 document.getElementById('mod-panel-content').style.display = 'none';
                 document.getElementById('mod-panel-lock-screen').style.display = 'block';
+                stopModReportsPolling();
             }
         } catch {}
     }, 600000); // 10 minutes
+}
+
+function startModReportsPolling() {
+    stopModReportsPolling();
+    modReportsInterval = setInterval(() => {
+        if (document.getElementById('view-mod-panel').classList.contains('active')) loadReportsModerationQueue(true);
+    }, 3000);
+}
+
+function stopModReportsPolling() {
+    if (modReportsInterval) clearInterval(modReportsInterval);
+    modReportsInterval = null;
 }
 
 async function loadReportsModerationQueue(silent = false) {
@@ -12423,7 +12440,17 @@ async function loadReportsModerationQueue(silent = false) {
     if (!host) return;
     if (!silent) host.innerHTML = 'Loading reports...';
     try {
-        const reports = await apiCall('/moderate/reports', 'GET');
+        const token = localStorage.getItem('ps_token');
+        const res = await fetch('/api/moderate/reports', {
+            method: 'GET',
+            headers: { Authorization: token || '' }
+        });
+        if (res.status === 403) {
+            if (!silent) host.innerHTML = '<div style="color:#777;">Unlock the Mod Panel to view reports.</div>';
+            return;
+        }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const reports = await res.json();
         if (!reports.length) {
             host.innerHTML = '<div style="color:#777;">No pending reports.</div>';
             return;
