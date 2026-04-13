@@ -9,6 +9,8 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/MTLLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js"></script>
     <style>
         /* 2016 Nostalgic CSS / Flat Design Era */
@@ -1490,6 +1492,7 @@
                         <div class="studio-toolbar-actions">
                             <button class="btn btn-sm btn-success" style="background-color:#27ae60;" onclick="openToolbox()">Toolbox</button>
                             <button class="btn btn-sm btn-primary" onclick="promptUploadModel()">Publish Model</button>
+                            <button class="btn btn-sm btn-info" title="Upload OBJ, MTL, and texture files" onclick="triggerOBJImport()">Import OBJ Model</button>
                             <label style="font-size:12px;">Move <input type="number" id="snap-move" value="1" style="width:48px; padding:2px;"></label>
                             <label style="font-size:12px;">Rot <input type="number" id="snap-rot" value="15" style="width:48px; padding:2px;"></label>
                             <label style="font-size:12px;">Scale <input type="number" id="snap-scale" value="1" style="width:48px; padding:2px;"></label>
@@ -1680,6 +1683,12 @@
                             <label style="font-size:12px; font-weight:bold;">Exposure:</label>
                             <input type="number" id="ws-exposure" class="form-control" value="1.0" step="0.1" onchange="updateWorldSettings()">
                         </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold; display:flex; align-items:center; gap:8px;">
+                                <input type="checkbox" id="ws-global-shadows" checked onchange="updateWorldSettings()">
+                                Enable Global Shadows
+                            </label>
+                        </div>
                     </div>
 
                     <div id="studio-mobile-controls">
@@ -1758,6 +1767,10 @@
 <div class="form-group mb-10">
     <label>CanCollide:</label>
     <input type="checkbox" id="prop-cancollide" checked>
+</div>
+<div class="form-group mb-10">
+    <label>Cast Shadow:</label>
+    <input type="checkbox" id="prop-castshadow" checked>
 </div>
 
                         <div class="form-group mb-10">
@@ -2034,6 +2047,23 @@
         <input type="number" id="model-price" class="form-control mb-10" placeholder="Price in SC (0 for free)">
         <button class="btn btn-success mt-10" style="width:100%;" onclick="uploadModelToToolbox()">Publish</button>
         <button class="btn btn-danger mt-10" style="width:100%;" onclick="document.getElementById('upload-model-modal').style.display='none'">Cancel</button>
+    </div>
+</div>
+
+<div id="obj-import-modal" class="modal-overlay">
+    <div class="modal-box" style="text-align:left; max-width:520px; width:100%;">
+        <h2 style="margin-top:0;">Import OBJ Model</h2>
+        <p style="font-size:12px; color:#666; margin-top:-6px;">Choose OBJ + MTL + textures from the same export folder. Textures will auto-attach from MTL references.</p>
+        <label style="font-size:12px; font-weight:700;">OBJ File</label>
+        <input type="file" id="obj-import-obj" class="form-control mb-10" accept=".obj,text/plain,model/obj">
+        <label style="font-size:12px; font-weight:700;">MTL File (Optional)</label>
+        <input type="file" id="obj-import-mtl" class="form-control mb-10" accept=".mtl,text/plain">
+        <label style="font-size:12px; font-weight:700;">Texture Files (Optional, multiple)</label>
+        <input type="file" id="obj-import-textures" class="form-control mb-10" accept=".png,.jpg,.jpeg,.bmp,.tga,image/*" multiple>
+        <div class="flex-center" style="justify-content:flex-end;">
+            <button class="btn btn-danger" onclick="closeOBJImportModal()">Cancel</button>
+            <button class="btn btn-success" onclick="handleOBJImportFromModal()">Import</button>
+        </div>
     </div>
 </div>
 
@@ -2422,93 +2452,42 @@ async function safeFetch(url, options = {}) {
        const getMaterialForType = (matType, colorHex) => {
             const c = new THREE.Color(colorHex || '#cccccc');
             const hsl = {}; c.getHSL(hsl);
-            // Slightly richer color preservation
-            c.setHSL(hsl.h, Math.min(hsl.s, 0.70), Math.min(hsl.l, 0.65));
+            c.setHSL(hsl.h, Math.min(hsl.s, 0.82), Math.max(0.34, Math.min(hsl.l, 0.72)));
 
-            // Neon stays basic so it "glows" and ignores shadows
-            if (matType === 'Neon') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex) });
-            if (matType === 'Hologram') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#66e5ff'), transparent: true, opacity: 0.45, wireframe: true });
-            if (matType === 'Glass') return new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.02, metalness: 0.0, transparent: true, opacity: 0.35, transmission: 0.85, thickness: 0.6 });
-            if (matType === 'Ice') return new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.08, metalness: 0.0, transparent: true, opacity: 0.6, transmission: 0.5, thickness: 0.9 });
-
-            // Smooth Plastic gets no texture, but is highly reflective
-            if (matType === 'SmoothPlastic') return new THREE.MeshStandardMaterial({ 
-                color: c, 
-                roughness: 0.15, 
-                metalness: 0.1 
-            });
-
-            const validTypes = ['Plastic', 'Wood', 'Grass', 'Slate', 'Sand', 'Metal', 'Marble', 'CarbonFiber', 'Obsidian', 'LavaRock', 'Concrete', 'Asphalt', 'Brick'];
-            const safeType = validTypes.includes(matType) ? matType : 'Plastic';
-            const tex = generateRealisticTexture(safeType);
-
-            // PBR Material Settings based on type
-            let matRoughness = 0.5;
-            let matMetalness = 0.0;
-            let matBumpScale = 0.2;
-
-            if (safeType === 'Plastic') { 
-                matRoughness = 0.3; 
-                matMetalness = 0.1; 
-                matBumpScale = 0.05; 
-            } else if (safeType === 'Wood') { 
-                matRoughness = 0.85; 
-                matMetalness = 0.0; 
-                matBumpScale = 0.3; 
-            } else if (safeType === 'Grass') { 
-                matRoughness = 0.9; 
-                matMetalness = 0.0; 
-                matBumpScale = 0.4; 
-            } else if (safeType === 'Slate') { 
-                matRoughness = 0.95; 
-                matMetalness = 0.1; 
-                matBumpScale = 1.2; // Deep rock crevices
-            } else if (safeType === 'Sand') { 
-                matRoughness = 0.9; 
-                matMetalness = 0.0; 
-                matBumpScale = 0.5; 
-            } else if (safeType === 'Metal') {
-                matRoughness = 0.18;
-                matMetalness = 0.95;
-                matBumpScale = 0.08;
-            } else if (safeType === 'Marble') {
-                matRoughness = 0.35;
-                matMetalness = 0.05;
-                matBumpScale = 0.22;
-            } else if (safeType === 'CarbonFiber') {
-                matRoughness = 0.45;
-                matMetalness = 0.4;
-                matBumpScale = 0.18;
-            } else if (safeType === 'Obsidian') {
-                matRoughness = 0.12;
-                matMetalness = 0.3;
-                matBumpScale = 0.09;
-            } else if (safeType === 'LavaRock') {
-                matRoughness = 0.92;
-                matMetalness = 0.0;
-                matBumpScale = 1.0;
-            } else if (safeType === 'Concrete') {
-                matRoughness = 0.93;
-                matMetalness = 0.02;
-                matBumpScale = 0.28;
-            } else if (safeType === 'Asphalt') {
-                matRoughness = 0.95;
-                matMetalness = 0.01;
-                matBumpScale = 0.22;
-            } else if (safeType === 'Brick') {
-                matRoughness = 0.88;
-                matMetalness = 0.02;
-                matBumpScale = 0.35;
+            if (matType === 'Neon') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#ffe066') });
+            if (matType === 'Hologram') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#66e5ff'), transparent: true, opacity: 0.38, wireframe: true });
+            if (matType === 'Glass' || matType === 'Ice') {
+                return new THREE.MeshPhongMaterial({ color: c, transparent: true, opacity: matType === 'Glass' ? 0.38 : 0.56, shininess: 58, specular: new THREE.Color('#f2f7ff') });
             }
 
-            // Return the upgraded PBR Material
-            return new THREE.MeshStandardMaterial({ 
-                color: c, 
-                map: tex, 
-                bumpMap: tex, 
-                bumpScale: matBumpScale,
-                roughness: matRoughness,
-                metalness: matMetalness
+            const nostalgicRules = {
+                Plastic: { roughness: 0.34, metalness: 0.02, shininess: 42, specular: '#ffffff' },
+                SmoothPlastic: { roughness: 0.26, metalness: 0.03, shininess: 65, specular: '#ffffff' },
+                Metal: { roughness: 0.48, metalness: 0.18, shininess: 36, specular: '#d3deea' },
+                Grass: { roughness: 0.8, metalness: 0.0, shininess: 12, specular: '#7fbf67' },
+                Wood: { roughness: 0.7, metalness: 0.0, shininess: 18, specular: '#b4875f' },
+                Sand: { roughness: 0.84, metalness: 0.0, shininess: 8, specular: '#f2d089' },
+                Slate: { roughness: 0.78, metalness: 0.0, shininess: 10, specular: '#7c8896' },
+                Marble: { roughness: 0.45, metalness: 0.01, shininess: 28, specular: '#f3f3f3' },
+                CarbonFiber: { roughness: 0.62, metalness: 0.07, shininess: 20, specular: '#7c8997' },
+                Obsidian: { roughness: 0.55, metalness: 0.1, shininess: 22, specular: '#a8b0be' },
+                LavaRock: { roughness: 0.88, metalness: 0.0, shininess: 6, specular: '#5f4b44' },
+                Concrete: { roughness: 0.86, metalness: 0.0, shininess: 8, specular: '#bcc6cf' },
+                Asphalt: { roughness: 0.9, metalness: 0.0, shininess: 6, specular: '#727c86' },
+                Brick: { roughness: 0.75, metalness: 0.0, shininess: 12, specular: '#b87362' }
+            };
+
+            const validTypes = Object.keys(nostalgicRules);
+            const safeType = validTypes.includes(matType) ? matType : 'Plastic';
+            const textureBlocked = ['Plastic', 'SmoothPlastic', 'Metal', 'Marble'];
+            const tex = textureBlocked.includes(safeType) ? null : generateRealisticTexture(safeType);
+            const rule = nostalgicRules[safeType];
+
+            return new THREE.MeshPhongMaterial({
+                color: c,
+                map: tex,
+                shininess: rule.shininess,
+                specular: new THREE.Color(rule.specular)
             });
         };  // --------------------------------------
 
@@ -4507,14 +4486,14 @@ let customGizmo = null;
             customGizmo.visible = false;
             edScene.add(customGizmo);
 
-            const ambLight = new THREE.AmbientLight( 0xffffff, 1.0 );
+            const ambLight = new THREE.AmbientLight( 0xf7fbff, 0.78 );
             ambLight.isAmbientLight = true;
             edAmbientLight = ambLight;
             edScene.add( ambLight );
-            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
+            const hemiLight = new THREE.HemisphereLight(0xdff2ff, 0x7f8f9f, 0.3);
             edScene.add(hemiLight); 
-            const dirLight = new THREE.DirectionalLight( 0xffffff, 0.9 );
-            dirLight.position.set( 1, 0.75, 0.5 ).normalize();
+            const dirLight = new THREE.DirectionalLight( 0xfff6de, 0.88 );
+            dirLight.position.set( 40, 58, 22 );
             edDirectionalLight = dirLight;
             edScene.add( dirLight );
 
@@ -5974,8 +5953,38 @@ Keep playing together for more daily rewards.`, 'Aww!');
         // =========================================================================
         
 const DEFAULT_STEP_HEIGHT = 1.0;
+const NOSTALGIA_GRAPHICS_DEFAULTS = {
+    gravity: 0.08,
+    skyColor: '#8dc8ff',
+    brightness: 0.78,
+    sunIntensity: 0.88,
+    fogDistance: 980,
+    graphicsQuality: 'high',
+    exposure: 0.98,
+    globalShadows: true
+};
+const NOSTALGIA_PROFILE_VERSION = 1;
+const applyNostalgiaWorldDefaults = (settings = {}) => ({ ...NOSTALGIA_GRAPHICS_DEFAULTS, ...(settings || {}) });
+const normalizeNostalgiaWorldSettings = (settings = {}) => {
+    const merged = applyNostalgiaWorldDefaults(settings || {});
+    const currentVersion = Number(settings?.graphicsProfileVersion || 0);
+    if (currentVersion < NOSTALGIA_PROFILE_VERSION) {
+        merged.skyColor = NOSTALGIA_GRAPHICS_DEFAULTS.skyColor;
+        merged.brightness = NOSTALGIA_GRAPHICS_DEFAULTS.brightness;
+        merged.sunIntensity = NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity;
+        merged.fogDistance = NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance;
+        merged.graphicsQuality = NOSTALGIA_GRAPHICS_DEFAULTS.graphicsQuality;
+        merged.exposure = NOSTALGIA_GRAPHICS_DEFAULTS.exposure;
+        merged.globalShadows = NOSTALGIA_GRAPHICS_DEFAULTS.globalShadows;
+    }
+    merged.graphicsProfileVersion = NOSTALGIA_PROFILE_VERSION;
+    return merged;
+};
+const areGlobalShadowsEnabled = (settings = {}) => settings?.globalShadows !== false;
+const objectCastsShadow = (objData = {}, settings = {}) => areGlobalShadowsEnabled(settings) && objData?.castsShadow !== false && objData?.type !== 'floatingText';
+const withLegacyShadowDefaults = (obj = {}) => ({ ...obj, castsShadow: obj?.castsShadow !== false && obj?.type !== 'floatingText' });
 let edData = { 
-            settings: { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.65 }, // FIX: Sculpt City Defaults!
+            settings: normalizeNostalgiaWorldSettings({ skyColor: '#7fbeff', brightness: 0.72 }), // Nostalgic default look
             spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, 
             objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], 
             uiLayout: [],
@@ -6137,11 +6146,11 @@ let currentTransformSpace = 'local';
         // Auto-convert old grid games into the new freeform format
        // Auto-convert old grid games into the new freeform format
         const migrateLevelDataTo3D = (levelData) => {
-            let newData = { settings: { gravity: 0.08, skyColor: '#87CEEB', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
-            if (levelData.settings) newData.settings = levelData.settings;
+            let newData = { settings: normalizeNostalgiaWorldSettings(), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
+            if (levelData.settings) newData.settings = normalizeNostalgiaWorldSettings(levelData.settings);
             if (levelData.objects) { 
                 (levelData.objects || []).forEach(ensureSmartLogicDefaults);
-                newData.objects = levelData.objects; 
+                newData.objects = (levelData.objects || []).map(withLegacyShadowDefaults); 
                 newData.spawn = levelData.spawn; 
                 if (levelData.terrain) newData.terrain = levelData.terrain; // FIX: Ensure terrain loads!
                 return newData; 
@@ -6737,6 +6746,7 @@ document.addEventListener('keydown', (e) => {
                         }
                         document.getElementById('prop-anchored').checked = objData.isAnchored !== false;
                         document.getElementById('prop-cancollide').checked = objData.canCollide !== false;
+                        document.getElementById('prop-castshadow').checked = objData.castsShadow !== false && objData.type !== 'floatingText';
                         const tr = Math.max(0, Math.min(1, typeof objData.transparency === 'number' ? objData.transparency : (1 - (typeof primary.material?.opacity === 'number' ? primary.material.opacity : 1))));
                         document.getElementById('prop-transparency').value = tr.toFixed(1);
                         const smartSection = document.getElementById('smart-props-section');
@@ -6777,6 +6787,7 @@ document.addEventListener('keydown', (e) => {
             const color = document.getElementById('prop-color').value;
             const material = document.getElementById('prop-material').value;
             const transparency = Math.max(0, Math.min(1, parseFloat((document.getElementById('prop-transparency') || {}).value) || 0));
+            const castsShadow = !!((document.getElementById('prop-castshadow') || {}).checked);
             const floatingTextValue = (document.getElementById('prop-ftext') || {}).value || 'Text';
             const floatingFont = (document.getElementById('prop-ffont') || {}).value || 'Arial';
             const floatingSize = Math.max(8, Math.min(160, parseInt((document.getElementById('prop-fsize') || {}).value, 10) || 40));
@@ -6793,6 +6804,7 @@ document.addEventListener('keydown', (e) => {
                     objData.color = color;
                     objData.material = material;
                     objData.transparency = transparency;
+                    objData.castsShadow = castsShadow && objData.type !== 'floatingText';
                     if (objData.type === 'floatingText') {
                         objData.text = floatingTextValue;
                         objData.fontFamily = floatingFont;
@@ -6803,14 +6815,24 @@ document.addEventListener('keydown', (e) => {
                     }
                     
                     // Live-update the 3D graphics!
-                    if (!mesh.userData.isLadder) { 
+                    if (mesh.userData.type === 'objModel') {
+                        mesh.traverse((child) => {
+                            if (!child.isMesh) return;
+                            child.material = getMaterialForType(material, color);
+                            child.material.transparent = transparency > 0 || child.material.transparent;
+                            child.material.opacity = Math.max(0.02, 1 - transparency);
+                        });
+                    } else if (!mesh.userData.isLadder && mesh.material) { 
                         mesh.material = getMaterialForType(material, color);
-                    } else {
+                        mesh.material.transparent = transparency > 0 || mesh.material.transparent;
+                        mesh.material.opacity = Math.max(0.02, 1 - transparency);
+                    } else if (mesh.material?.color) {
                         // Ladders retain their texture, but we tint the color underneath
                         mesh.material.color.setHex(color.replace('#', '0x'));
                     }
-                    mesh.material.transparent = transparency > 0 || mesh.material.transparent;
-                    mesh.material.opacity = Math.max(0.02, 1 - transparency);
+                    mesh.userData.castsShadow = objData.castsShadow !== false && objData.type !== 'floatingText';
+                    mesh.castShadow = objectCastsShadow(objData, edData.settings);
+                    mesh.receiveShadow = areGlobalShadowsEnabled(edData.settings);
                     applyFloatingTextVisual(mesh, objData);
                 }
             });
@@ -6972,11 +6994,11 @@ document.addEventListener('keydown', (e) => {
             
             isEditingSettings = true; renderExplorer();
             
-if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 };
-            if (typeof edData.settings.sunIntensity === 'undefined') edData.settings.sunIntensity = 1.1;
-            if (typeof edData.settings.fogDistance === 'undefined') edData.settings.fogDistance = 1600;
+            edData.settings = normalizeNostalgiaWorldSettings(edData.settings || { skyColor: '#7fbeff', brightness: 0.72 });
+            if (typeof edData.settings.sunIntensity === 'undefined') edData.settings.sunIntensity = NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity;
+            if (typeof edData.settings.fogDistance === 'undefined') edData.settings.fogDistance = NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance;
             if (typeof edData.settings.graphicsQuality === 'undefined') edData.settings.graphicsQuality = 'high';
-            if (typeof edData.settings.exposure === 'undefined') edData.settings.exposure = 1.0;
+            if (typeof edData.settings.exposure === 'undefined') edData.settings.exposure = NOSTALGIA_GRAPHICS_DEFAULTS.exposure;
             const setValue = (id, value) => { const el = document.getElementById(id); if (el) el.value = value; };
             setValue('ws-gravity', edData.settings.gravity);
             setValue('ws-skycolor', edData.settings.skyColor);
@@ -6985,6 +7007,9 @@ if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', bri
             setValue('ws-fog-distance', edData.settings.fogDistance);
             setValue('ws-graphics-quality', edData.settings.graphicsQuality);
             setValue('ws-exposure', edData.settings.exposure);
+            setValue('ws-global-shadows', areGlobalShadowsEnabled(edData.settings));
+            const globalShadowsEl = document.getElementById('ws-global-shadows');
+            if (globalShadowsEl) globalShadowsEl.checked = areGlobalShadowsEnabled(edData.settings);
             const panel = document.getElementById('world-settings-panel');
             if (panel) panel.style.display = 'block';
         };
@@ -6993,38 +7018,56 @@ if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', bri
         const updateWorldSettings = () => {
             const val = (id) => document.getElementById(id);
             edData.settings.gravity = parseFloat((val('ws-gravity') || {}).value) || 0.08;
-            edData.settings.skyColor = ((val('ws-skycolor') || {}).value) || '#5b88a5';
-            edData.settings.brightness = parseFloat((val('ws-brightness') || {}).value) || 1.0;
-            edData.settings.sunIntensity = parseFloat((val('ws-sun-intensity') || {}).value) || 1.1;
-            edData.settings.fogDistance = parseFloat((val('ws-fog-distance') || {}).value) || 1600;
+            edData.settings.skyColor = ((val('ws-skycolor') || {}).value) || '#7fbeff';
+            edData.settings.brightness = parseFloat((val('ws-brightness') || {}).value) || NOSTALGIA_GRAPHICS_DEFAULTS.brightness;
+            edData.settings.sunIntensity = parseFloat((val('ws-sun-intensity') || {}).value) || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity;
+            edData.settings.fogDistance = parseFloat((val('ws-fog-distance') || {}).value) || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance;
             edData.settings.graphicsQuality = ((val('ws-graphics-quality') || {}).value) || 'high';
-            edData.settings.exposure = parseFloat((val('ws-exposure') || {}).value) || 1.0;
+            edData.settings.exposure = parseFloat((val('ws-exposure') || {}).value) || NOSTALGIA_GRAPHICS_DEFAULTS.exposure;
+            edData.settings.globalShadows = !!((val('ws-global-shadows') || {}).checked);
+            edData.settings.graphicsProfileVersion = NOSTALGIA_PROFILE_VERSION;
             applyWorldSettings(); recordEdit();
         };
 
         const applyWorldSettings = () => {
             if (edScene && edData.settings) {
+                const shadow = areGlobalShadowsEnabled(edData.settings);
                 edScene.background = new THREE.Color(edData.settings.skyColor);
                 edScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = edData.settings.brightness; });
-                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.2, edData.settings.sunIntensity || 1.1);
-                const fogDistance = Math.max(200, edData.settings.fogDistance || 1600);
-                edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.2, fogDistance);
+                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.45, edData.settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
+                const fogDistance = Math.max(280, edData.settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
+                edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.28, fogDistance);
                 if (edRenderer) {
                     const q = (edData.settings.graphicsQuality === 'ultra') ? 'ultra' : 'high';
-                    const shadow = true;
                     edRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-                    edRenderer.toneMappingExposure = Math.max(0.6, Math.min(2.8, (edData.settings.exposure || 1.08) + 0.08));
+                    edRenderer.toneMappingExposure = Math.max(0.65, Math.min(1.6, (edData.settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
                     edRenderer.outputEncoding = THREE.sRGBEncoding;
                     edRenderer.physicallyCorrectLights = true;
                     edRenderer.shadowMap.enabled = shadow;
-                    edRenderer.shadowMap.type = q === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+                    edRenderer.shadowMap.type = q === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFSoftShadowMap;
                     if (edDirectionalLight) {
                         edDirectionalLight.castShadow = shadow;
-                        edDirectionalLight.shadow.mapSize.set(q === 'ultra' ? 2048 : 1024, q === 'ultra' ? 2048 : 1024);
-                        edDirectionalLight.shadow.radius = 2.2;
-                        edDirectionalLight.shadow.bias = -0.00035;
+                        edDirectionalLight.shadow.mapSize.set(q === 'ultra' ? 1024 : 512, q === 'ultra' ? 1024 : 512);
+                        edDirectionalLight.shadow.radius = 3.3;
+                        edDirectionalLight.shadow.bias = -0.0005;
                     }
                 }
+                editorMeshes.forEach((mesh) => {
+                    if (!mesh || mesh.userData?.isSpawn) return;
+                    const objData = edData.objects.find(o => o.id === mesh.userData?.id);
+                    if (!objData) return;
+                    const cast = objectCastsShadow(objData, edData.settings);
+                    mesh.castShadow = cast;
+                    mesh.receiveShadow = shadow;
+                    if (mesh.userData?.type === 'objModel') {
+                        mesh.traverse((child) => {
+                            if (!child.isMesh) return;
+                            child.castShadow = cast;
+                            child.receiveShadow = shadow;
+                        });
+                    }
+                });
+                if (terrainMesh) terrainMesh.receiveShadow = shadow;
             }
         };
 
@@ -7404,6 +7447,7 @@ if (item.type === 'button' && item.onClickEvent) {
             objData.isAnchored = mesh.userData.isAnchored;
             objData.canCollide = mesh.userData.canCollide;
             objData.noCollide = mesh.userData.canCollide === false;
+            objData.castsShadow = mesh.userData.castsShadow !== false && objData.type !== 'floatingText';
             // ---------------------------
         }
     }
@@ -7417,12 +7461,202 @@ const promptClearEditor = () => {
             }, false, true);
         };
 
+        const normalizeAssetKey = (value = '') => decodeURIComponent(String(value || '')).replace(/\\/g, '/').replace(/^\.\/+/, '').trim().toLowerCase();
+        const parseOBJSceneFromSources = (objSource = '', mtlSource = '', textureMap = {}) => {
+            if (!objSource.trim() || !window.THREE?.OBJLoader) return null;
+            const manager = new THREE.LoadingManager();
+            const urlCache = {};
+            manager.setURLModifier((url) => {
+                const raw = String(url || '').replace(/\\/g, '/');
+                const base = raw.split('/').pop();
+                const normRaw = normalizeAssetKey(raw);
+                const normBase = normalizeAssetKey(base);
+                const entry = textureMap[raw] || textureMap[base] || textureMap[normRaw] || textureMap[normBase];
+                if (!entry) return url;
+                if (!urlCache[normBase || base]) {
+                    const mime = /^data:(.*?);base64,/.exec(entry)?.[1] || 'image/png';
+                    const b64 = entry.split(',')[1] || '';
+                    const bytes = atob(b64);
+                    const arr = new Uint8Array(bytes.length);
+                    for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
+                    urlCache[normBase || base] = URL.createObjectURL(new Blob([arr], { type: mime }));
+                }
+                return urlCache[normBase || base];
+            });
+            const loader = new THREE.OBJLoader(manager);
+            if (mtlSource.trim() && window.THREE?.MTLLoader) {
+                const mtlLoader = new THREE.MTLLoader(manager);
+                const materials = mtlLoader.parse(mtlSource, '');
+                materials.preload();
+                loader.setMaterials(materials);
+            }
+            return loader.parse(objSource);
+        };
+
+        const buildOBJGroup = (objData, forPlay = false) => {
+            const source = String(objData?.objSource || '');
+            if (!source.trim() || !window.THREE?.OBJLoader) return null;
+            const textureMap = objData?.objTextureMap && typeof objData.objTextureMap === 'object' ? objData.objTextureMap : {};
+            const mtlSource = String(objData?.objMtl || '');
+            let parsed = null;
+            try {
+                parsed = parseOBJSceneFromSources(source, mtlSource, textureMap);
+            } catch (e) {
+                return null;
+            }
+            if (!parsed) return null;
+            const group = new THREE.Group();
+            const canCollide = objData.canCollide !== false && !objData.noCollide;
+            parsed.traverse((child) => {
+                if (!child.isMesh) return;
+                let material = child.material;
+                if (!material || !material.map) material = getMaterialForType(objData.material || 'Plastic', objData.color || '#d9d9d9');
+                if (Array.isArray(material)) {
+                    material = material.map((mat) => {
+                        if (!mat) return getMaterialForType(objData.material || 'Plastic', objData.color || '#d9d9d9');
+                        mat.transparent = !!mat.alphaMap;
+                        if (!mat.alphaMap) mat.opacity = 1;
+                        return mat;
+                    });
+                } else if (material) {
+                    material.transparent = !!material.alphaMap;
+                    if (!material.alphaMap) material.opacity = 1;
+                }
+                const imported = new THREE.Mesh(child.geometry.clone(), material);
+                imported.castShadow = objectCastsShadow(objData, forPlay ? activeLevel?.settings : edData?.settings);
+                imported.receiveShadow = areGlobalShadowsEnabled(forPlay ? activeLevel?.settings : edData?.settings);
+                imported.userData = {
+                    type: 'objModelPart',
+                    isTool: false,
+                    noCollide: !canCollide,
+                    isAnchored: true
+                };
+                group.add(imported);
+            });
+            if (!group.children.length) return null;
+            group.position.set(objData.position.x, objData.position.y, objData.position.z);
+            group.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
+            group.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+            group.userData = {
+                id: objData.id,
+                type: 'objModel',
+                isSpawn: false,
+                isAnchored: objData.isAnchored !== false,
+                canCollide: objData.canCollide !== false,
+                noCollide: true,
+                castsShadow: objData.castsShadow !== false
+            };
+            return group;
+        };
+
+        const triggerOBJImport = () => {
+            const modal = document.getElementById('obj-import-modal');
+            if (modal) modal.style.display = 'flex';
+        };
+
+        const closeOBJImportModal = () => {
+            const modal = document.getElementById('obj-import-modal');
+            if (modal) modal.style.display = 'none';
+        };
+
+        const handleOBJImport = async ({ objFile, mtlFile = null, textureFiles = [] } = {}) => {
+            if (!objFile) return showModal('Import Failed', 'Please select an .obj file.');
+            try {
+                const text = await objFile.text();
+                if (!text.trim()) return showModal('Import Failed', 'OBJ file is empty.');
+                const mtlText = mtlFile ? await mtlFile.text() : '';
+                const textureMap = {};
+                for (const tf of textureFiles) {
+                    const dataUrl = await new Promise((resolve) => {
+                        const fr = new FileReader();
+                        fr.onload = () => resolve(String(fr.result || ''));
+                        fr.onerror = () => resolve('');
+                        fr.readAsDataURL(tf);
+                    });
+                    const full = (tf.webkitRelativePath || tf.name || '').replace(/\\/g, '/');
+                    const base = full.split('/').pop();
+                    if (full) textureMap[full] = dataUrl;
+                    if (base) textureMap[base] = dataUrl;
+                    if (full) textureMap[normalizeAssetKey(full)] = dataUrl;
+                    if (base) textureMap[normalizeAssetKey(base)] = dataUrl;
+                }
+                const parsed = parseOBJSceneFromSources(text, mtlText, textureMap);
+                if (!parsed) return showModal('Import Failed', 'Could not parse OBJ/MTL bundle.');
+                const dir = new THREE.Vector3(); edCamera.getWorldDirection(dir);
+                const insertPos = edCamera.position.clone().add(dir.multiplyScalar(14));
+                const meshParts = [];
+                const allCenters = [];
+                parsed.updateMatrixWorld(true);
+                parsed.traverse((node) => {
+                    if (!node.isMesh || !node.geometry) return;
+                    const box = new THREE.Box3().setFromObject(node);
+                    if (box.isEmpty()) return;
+                    const center = new THREE.Vector3(); box.getCenter(center);
+                    const size = new THREE.Vector3(); box.getSize(size);
+                    if (size.lengthSq() <= 1e-6) return;
+                    allCenters.push(center.clone());
+                    const worldQuat = new THREE.Quaternion();
+                    node.getWorldQuaternion(worldQuat);
+                    const euler = new THREE.Euler().setFromQuaternion(worldQuat, 'XYZ');
+                    const mat = Array.isArray(node.material) ? node.material[0] : node.material;
+                    const colorHex = mat?.color ? `#${mat.color.getHexString()}` : '#d9d9d9';
+                    meshParts.push({
+                        center,
+                        size,
+                        rotation: euler,
+                        color: colorHex
+                    });
+                });
+                if (!meshParts.length) return showModal('Import Failed', 'No valid meshes were found in OBJ.');
+                const importCenter = new THREE.Vector3();
+                allCenters.forEach(c => importCenter.add(c));
+                importCenter.multiplyScalar(1 / allCenters.length);
+                const offset = new THREE.Vector3().subVectors(insertPos, importCenter);
+                const baseName = objFile.name.replace(/\.obj$/i, '') || 'Imported OBJ';
+                meshParts.forEach((part, idx) => {
+                    edData.objects.push({
+                        id: crypto.randomUUID(),
+                        name: `${baseName} Part ${idx + 1}`,
+                        type: 'block',
+                        position: { x: part.center.x + offset.x, y: part.center.y + offset.y, z: part.center.z + offset.z },
+                        rotation: { x: part.rotation.x, y: part.rotation.y, z: part.rotation.z },
+                        scale: { x: Math.max(0.2, part.size.x), y: Math.max(0.2, part.size.y), z: Math.max(0.2, part.size.z) },
+                        color: part.color,
+                        material: 'Plastic',
+                        transparency: 0,
+                        isAnchored: true,
+                        canCollide: true,
+                        castsShadow: true
+                    });
+                });
+                buildEditorScene();
+                recordEdit();
+                showModal('OBJ Imported', `${objFile.name} converted to ${meshParts.length} Playsculpt parts.\nColors were copied from OBJ/MTL materials.`);
+                closeOBJImportModal();
+            } catch (e) {
+                showModal('Import Failed', 'Could not parse OBJ file.');
+            }
+        };
+        const handleOBJImportFromModal = async () => {
+            const objInput = document.getElementById('obj-import-obj');
+            const mtlInput = document.getElementById('obj-import-mtl');
+            const texInput = document.getElementById('obj-import-textures');
+            const objFile = (objInput?.files || [])[0];
+            const mtlFile = (mtlInput?.files || [])[0] || null;
+            const textureFiles = Array.from(texInput?.files || []);
+            await handleOBJImport({ objFile, mtlFile, textureFiles });
+        };
+        window.triggerOBJImport = triggerOBJImport;
+        window.handleOBJImport = handleOBJImport;
+        window.handleOBJImportFromModal = handleOBJImportFromModal;
+        window.closeOBJImportModal = closeOBJImportModal;
+
 
         
         // --- Editor Core Engine ---
      const clearEditor = () => {
             currentEditGameId = null; 
-            edData = { settings: { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
+            edData = { settings: normalizeNostalgiaWorldSettings({ skyColor: '#7fbeff', brightness: 0.72 }), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
@@ -7461,6 +7695,11 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     });
                     const chunk = getChunkGroup(edScene, editorChunkGroups, chunkKeyFromPos(objData.position || {}), 80);
                     chunk.add(group); editorMeshes.push(group);
+                } else if (objData.type === 'objModel') {
+                    const objGroup = buildOBJGroup(objData, false);
+                    if (!objGroup) return;
+                    const chunk = getChunkGroup(edScene, editorChunkGroups, chunkKeyFromPos(objData.position || {}), 80);
+                    chunk.add(objGroup); editorMeshes.push(objGroup);
                 } else {
                     let geo, mat;
                     let isLadder = objData.type === 'ladder';
@@ -7478,12 +7717,16 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+                    const blockCastsShadow = objectCastsShadow(objData, edData.settings);
+                    mesh.castShadow = blockCastsShadow;
+                    mesh.receiveShadow = areGlobalShadowsEnabled(edData.settings);
                     mesh.userData = {
                 id: objData.id, 
                 isSpawn: false, 
                 type: objData.type,
                 isAnchored: objData.isAnchored !== false, // Defaults to true
-                canCollide: objData.canCollide !== false  // Defaults to true
+                canCollide: objData.canCollide !== false,  // Defaults to true
+                castsShadow: objData.castsShadow !== false && objData.type !== 'floatingText'
             };
                     if (objData.type === 'floatingText') applyFloatingTextVisual(mesh, objData);
 
@@ -7521,6 +7764,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     bumpScale: 0.8,
                     side: THREE.DoubleSide 
                 }));
+                terrainMesh.receiveShadow = areGlobalShadowsEnabled(edData.settings);
                 edScene.add(terrainMesh);
 
                 terrainCursor = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 4, 16), new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true, transparent: true, opacity: 0.5 }));
@@ -8108,25 +8352,26 @@ const loadPsworld = (event) => {
 const applyPlayGraphicsSettings = (settings = {}) => {
             if (!playScene || !playRenderer) return;
             const quality = settings.graphicsQuality === 'ultra' ? 'ultra' : 'high';
-            const exposure = Math.max(0.6, Math.min(2.8, (settings.exposure || 1.08) + 0.08));
-            const fogDistance = Math.max(200, settings.fogDistance || 1600);
+            const exposure = Math.max(0.65, Math.min(1.6, (settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
+            const fogDistance = Math.max(280, settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
 
-            playScene.fog = new THREE.Fog(settings.skyColor || '#87CEEB', fogDistance * 0.25, fogDistance);
+            playScene.fog = new THREE.Fog(settings.skyColor || '#8dc8ff', fogDistance * 0.28, fogDistance);
             playRenderer.toneMapping = THREE.ACESFilmicToneMapping;
             playRenderer.toneMappingExposure = exposure;
             playRenderer.outputEncoding = THREE.sRGBEncoding;
             playRenderer.physicallyCorrectLights = true;
-            playRenderer.shadowMap.enabled = true;
-            playRenderer.shadowMap.type = quality === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+            const shadowsEnabled = areGlobalShadowsEnabled(settings);
+            playRenderer.shadowMap.enabled = shadowsEnabled;
+            playRenderer.shadowMap.type = quality === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFSoftShadowMap;
             if (playDirectionalLight) {
-                playDirectionalLight.intensity = Math.max(0.3, settings.sunIntensity || 1.25);
-                playDirectionalLight.castShadow = playRenderer.shadowMap.enabled;
-                playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 2048 : 1024, quality === 'ultra' ? 2048 : 1024);
-                playDirectionalLight.shadow.radius = 2.8;
-                playDirectionalLight.shadow.bias = -0.00035;
+                playDirectionalLight.intensity = Math.max(0.45, settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
+                playDirectionalLight.castShadow = shadowsEnabled;
+                playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 1024 : 512, quality === 'ultra' ? 1024 : 512);
+                playDirectionalLight.shadow.radius = 3.4;
+                playDirectionalLight.shadow.bias = -0.0005;
                 playDirectionalLight.shadow.normalBias = 0.015;
             }
-            if (playAmbientLight) playAmbientLight.intensity = Math.max(0.45, settings.brightness || 0.65);
+            if (playAmbientLight) playAmbientLight.intensity = Math.max(0.45, settings.brightness || NOSTALGIA_GRAPHICS_DEFAULTS.brightness);
         };
 
 const startGame = () => {
@@ -8159,15 +8404,15 @@ const startGame = () => {
                 playScene = new THREE.Scene(); 
                 playCamera = new THREE.PerspectiveCamera( 50, 16/9, 1, 2000 );
                 
-                const ambLight = new THREE.AmbientLight( 0xf8fbff, 0.62 );
+                const ambLight = new THREE.AmbientLight( 0xf6fbff, 0.78 );
                 ambLight.isAmbientLight = true;
                 playAmbientLight = ambLight;
                 playScene.add( ambLight );
                 
-                const hemiLight = new THREE.HemisphereLight(0xdfeeff, 0x5e666f, 0.45);
+                const hemiLight = new THREE.HemisphereLight(0xe6f5ff, 0x7e8c98, 0.3);
                 playScene.add(hemiLight);
                 
-                const dirLight = new THREE.DirectionalLight( 0xfff8ee, 1.2 );
+                const dirLight = new THREE.DirectionalLight( 0xfff4dc, 0.88 );
                 dirLight.position.set( 42, 56, 26 );
                 playDirectionalLight = dirLight;
                 playScene.add( dirLight );
@@ -8187,7 +8432,7 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
 
             stopGameLoop(); setupMobileControls();
             
-            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.08, skyColor: '#87CEEB', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 };
+            activeLevel.settings = normalizeNostalgiaWorldSettings(activeLevel.settings || {});
             
             playScene.background = new THREE.Color(activeLevel.settings.skyColor);
             playScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = activeLevel.settings.brightness; });
@@ -8613,6 +8858,14 @@ if (window.playTerrainMesh) {
             const staticColliderBoxes = [];
 
             (activeLevel.objects || []).forEach(objData => {
+if (objData.type === 'objModel') {
+                    const objGroup = buildOBJGroup(objData, true);
+                    if (!objGroup) return;
+                    const chunk = getChunkGroup(playScene, playChunkGroups, chunkKeyFromPos(objData.position || {}), 0);
+                    chunk.add(objGroup);
+                    playMeshes.push(objGroup);
+                    objGroup.traverse((child) => { if (child.isMesh) playMeshes.push(child); });
+                } else 
 if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     const group = new THREE.Group();
                     group.position.set(objData.position.x, objData.position.y, objData.position.z);
@@ -8632,8 +8885,8 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         childMesh.position.set(cData.position.x, cData.position.y, cData.position.z);
                         childMesh.rotation.set(cData.rotation.x, cData.rotation.y, cData.rotation.z);
                         childMesh.scale.set(cData.scale.x, cData.scale.y, cData.scale.z);
-                        childMesh.castShadow = true;
-                        childMesh.receiveShadow = true;
+                        childMesh.castShadow = objectCastsShadow(cData, activeLevel.settings);
+                        childMesh.receiveShadow = areGlobalShadowsEnabled(activeLevel.settings);
                         childMesh.userData = { type: cData.type };
                         group.add(childMesh);
                         playMeshes.push(childMesh); // Push children to playMeshes so seats can be detected!
@@ -8678,9 +8931,10 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         const objTransparency = Math.max(0, Math.min(1, objData.transparency || 0));
                         const chunkKey = chunkKeyFromPos(objData.position || {});
                         const matType = objData.material || 'Plastic';
-                        const key = `${chunkKey}|${objData.type}|${matType}|${objData.color || '#3498db'}|${objTransparency.toFixed(2)}`;
+                        const castsShadow = objectCastsShadow(objData, activeLevel.settings);
+                        const key = `${chunkKey}|${objData.type}|${matType}|${objData.color || '#3498db'}|${objTransparency.toFixed(2)}|${castsShadow ? 1 : 0}`;
                         if (!instancedBuckets.has(key)) {
-                            instancedBuckets.set(key, { chunkKey, type: objData.type, material: matType, color: objData.color || '#3498db', transparency: objTransparency, entries: [] });
+                            instancedBuckets.set(key, { chunkKey, type: objData.type, material: matType, color: objData.color || '#3498db', transparency: objTransparency, entries: [], castsShadow });
                         }
                         instancedBuckets.get(key).entries.push(objData);
                         const sx = Math.abs(objData.scale?.x || 1), sy = Math.abs(objData.scale?.y || 1), sz = Math.abs(objData.scale?.z || 1);
@@ -8696,8 +8950,8 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-                    mesh.castShadow = objData.type !== 'floatingText';
-                    mesh.receiveShadow = true;
+                    mesh.castShadow = objectCastsShadow(objData, activeLevel.settings);
+                    mesh.receiveShadow = areGlobalShadowsEnabled(activeLevel.settings);
                     mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: (objData.noCollide || objData.canCollide === false), isAnchored: objData.isAnchored !== false, smart: objData.smart || null, smartState: {} };
                     if (objData.type === 'floatingText') applyFloatingTextVisual(mesh, objData);
 
@@ -8725,8 +8979,8 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mat.transparent = bucket.transparency > 0 || mat.transparent;
                     mat.opacity = Math.max(0.02, 1 - bucket.transparency);
                     const iMesh = new THREE.InstancedMesh(geo, mat, bucket.entries.length);
-                    iMesh.castShadow = true;
-                    iMesh.receiveShadow = true;
+                    iMesh.castShadow = !!bucket.castsShadow;
+                    iMesh.receiveShadow = areGlobalShadowsEnabled(activeLevel.settings);
                     iMesh.userData = { type: bucket.type, isInstancedStatic: true };
                     bucket.entries.forEach((objData, idx) => {
                         tempObj.position.set(objData.position.x, objData.position.y, objData.position.z);
@@ -8758,7 +9012,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     bumpMap: terrainTex,
                     bumpScale: 0.8
                 }));
-                playTerrain.receiveShadow = true;
+                playTerrain.receiveShadow = areGlobalShadowsEnabled(activeLevel.settings);
                 playScene.add(playTerrain); window.playTerrainMesh = playTerrain; 
             }
 
@@ -11389,8 +11643,16 @@ document.getElementById('prop-transparency').addEventListener('input', (e) => {
         if (mesh.userData.isSpawn) return; // Cannot make spawn invisible
         const objData = edData.objects.find(o => o.id === mesh.userData.id);
         if (objData) objData.transparency = Math.max(0, Math.min(1, val));
-        mesh.material.transparent = val > 0;
-        mesh.material.opacity = Math.max(0.02, 1 - val); // 1 transparency = almost invisible
+        if (mesh.userData?.type === 'objModel') {
+            mesh.traverse((child) => {
+                if (!child.isMesh) return;
+                child.material.transparent = val > 0 || child.material.transparent;
+                child.material.opacity = Math.max(0.02, 1 - val);
+            });
+        } else if (mesh.material) {
+            mesh.material.transparent = val > 0;
+            mesh.material.opacity = Math.max(0.02, 1 - val); // 1 transparency = almost invisible
+        }
     });
     recordEdit(); // Save the state
 });
@@ -11419,6 +11681,21 @@ document.getElementById('prop-cancollide').addEventListener('change', (e) => {
             objData.canCollide = e.target.checked;
             objData.noCollide = !e.target.checked;
         }
+    });
+    recordEdit();
+});
+
+document.getElementById('prop-castshadow').addEventListener('change', (e) => {
+    if (selectedObjects.length === 0) return;
+    const enabled = !!e.target.checked;
+    selectedObjects.forEach(mesh => {
+        if (mesh.userData.isSpawn) return;
+        const objData = edData.objects.find(o => o.id === mesh.userData.id);
+        if (!objData) return;
+        objData.castsShadow = enabled && objData.type !== 'floatingText';
+        mesh.userData.castsShadow = objData.castsShadow;
+        mesh.castShadow = objectCastsShadow(objData, edData.settings);
+        mesh.receiveShadow = areGlobalShadowsEnabled(edData.settings);
     });
     recordEdit();
 });
