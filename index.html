@@ -9,6 +9,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/cannon@0.6.2/build/cannon.min.js"></script>
     <style>
         /* 2016 Nostalgic CSS / Flat Design Era */
@@ -1490,6 +1491,8 @@
                         <div class="studio-toolbar-actions">
                             <button class="btn btn-sm btn-success" style="background-color:#27ae60;" onclick="openToolbox()">Toolbox</button>
                             <button class="btn btn-sm btn-primary" onclick="promptUploadModel()">Publish Model</button>
+                            <button class="btn btn-sm btn-info" onclick="triggerOBJImport()">Import OBJ</button>
+                            <input type="file" id="obj-import-input" accept=".obj,text/plain,model/obj" style="display:none;" onchange="handleOBJImport(event)">
                             <label style="font-size:12px;">Move <input type="number" id="snap-move" value="1" style="width:48px; padding:2px;"></label>
                             <label style="font-size:12px;">Rot <input type="number" id="snap-rot" value="15" style="width:48px; padding:2px;"></label>
                             <label style="font-size:12px;">Scale <input type="number" id="snap-scale" value="1" style="width:48px; padding:2px;"></label>
@@ -6795,14 +6798,21 @@ document.addEventListener('keydown', (e) => {
                     }
                     
                     // Live-update the 3D graphics!
-                    if (!mesh.userData.isLadder) { 
+                    if (mesh.userData.type === 'objModel') {
+                        mesh.traverse((child) => {
+                            if (!child.isMesh) return;
+                            child.material = getMaterialForType(material, color);
+                            child.material.transparent = transparency > 0 || child.material.transparent;
+                            child.material.opacity = Math.max(0.02, 1 - transparency);
+                        });
+                    } else if (!mesh.userData.isLadder && mesh.material) { 
                         mesh.material = getMaterialForType(material, color);
-                    } else {
+                        mesh.material.transparent = transparency > 0 || mesh.material.transparent;
+                        mesh.material.opacity = Math.max(0.02, 1 - transparency);
+                    } else if (mesh.material?.color) {
                         // Ladders retain their texture, but we tint the color underneath
                         mesh.material.color.setHex(color.replace('#', '0x'));
                     }
-                    mesh.material.transparent = transparency > 0 || mesh.material.transparent;
-                    mesh.material.opacity = Math.max(0.02, 1 - transparency);
                     mesh.userData.castsShadow = objData.castsShadow !== false && objData.type !== 'floatingText';
                     mesh.castShadow = objectCastsShadow(objData, edData.settings);
                     mesh.receiveShadow = areGlobalShadowsEnabled(edData.settings);
@@ -7004,6 +7014,7 @@ document.addEventListener('keydown', (e) => {
 
         const applyWorldSettings = () => {
             if (edScene && edData.settings) {
+                const shadow = areGlobalShadowsEnabled(edData.settings);
                 edScene.background = new THREE.Color(edData.settings.skyColor);
                 edScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = edData.settings.brightness; });
                 if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.45, edData.settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
@@ -7011,7 +7022,6 @@ document.addEventListener('keydown', (e) => {
                 edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.28, fogDistance);
                 if (edRenderer) {
                     const q = (edData.settings.graphicsQuality === 'ultra') ? 'ultra' : 'high';
-                    const shadow = areGlobalShadowsEnabled(edData.settings);
                     edRenderer.toneMapping = THREE.ACESFilmicToneMapping;
                     edRenderer.toneMappingExposure = Math.max(0.65, Math.min(1.6, (edData.settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
                     edRenderer.outputEncoding = THREE.sRGBEncoding;
@@ -7029,8 +7039,16 @@ document.addEventListener('keydown', (e) => {
                     if (!mesh || mesh.userData?.isSpawn) return;
                     const objData = edData.objects.find(o => o.id === mesh.userData?.id);
                     if (!objData) return;
-                    mesh.castShadow = objectCastsShadow(objData, edData.settings);
+                    const cast = objectCastsShadow(objData, edData.settings);
+                    mesh.castShadow = cast;
                     mesh.receiveShadow = shadow;
+                    if (mesh.userData?.type === 'objModel') {
+                        mesh.traverse((child) => {
+                            if (!child.isMesh) return;
+                            child.castShadow = cast;
+                            child.receiveShadow = shadow;
+                        });
+                    }
                 });
                 if (terrainMesh) terrainMesh.receiveShadow = shadow;
             }
@@ -7426,6 +7444,80 @@ const promptClearEditor = () => {
             }, false, true);
         };
 
+        const buildOBJGroup = (objData, forPlay = false) => {
+            const source = String(objData?.objSource || '');
+            if (!source.trim() || !window.THREE?.OBJLoader) return null;
+            const loader = new THREE.OBJLoader();
+            let parsed;
+            try {
+                parsed = loader.parse(source);
+            } catch (e) {
+                return null;
+            }
+            const group = new THREE.Group();
+            parsed.traverse((child) => {
+                if (!child.isMesh) return;
+                const material = getMaterialForType(objData.material || 'Plastic', objData.color || '#d9d9d9');
+                const imported = new THREE.Mesh(child.geometry.clone(), material);
+                imported.castShadow = objectCastsShadow(objData, forPlay ? activeLevel?.settings : edData?.settings);
+                imported.receiveShadow = areGlobalShadowsEnabled(forPlay ? activeLevel?.settings : edData?.settings);
+                group.add(imported);
+            });
+            if (!group.children.length) return null;
+            group.position.set(objData.position.x, objData.position.y, objData.position.z);
+            group.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
+            group.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+            group.userData = {
+                id: objData.id,
+                type: 'objModel',
+                isSpawn: false,
+                isAnchored: objData.isAnchored !== false,
+                canCollide: objData.canCollide !== false,
+                castsShadow: objData.castsShadow !== false
+            };
+            return group;
+        };
+
+        const triggerOBJImport = () => {
+            const input = document.getElementById('obj-import-input');
+            if (input) input.click();
+        };
+
+        const handleOBJImport = async (event) => {
+            const file = (event?.target?.files || [])[0];
+            if (!file) return;
+            try {
+                const text = await file.text();
+                if (!text.trim()) return showModal('Import Failed', 'OBJ file is empty.');
+                const dir = new THREE.Vector3(); edCamera.getWorldDirection(dir);
+                const insertPos = edCamera.position.clone().add(dir.multiplyScalar(14));
+                edData.objects.push({
+                    id: crypto.randomUUID(),
+                    name: file.name.replace(/\.obj$/i, '') || 'Imported OBJ',
+                    type: 'objModel',
+                    objSource: text.slice(0, 1200000),
+                    position: { x: insertPos.x, y: insertPos.y, z: insertPos.z },
+                    rotation: { x: 0, y: 0, z: 0 },
+                    scale: { x: 1, y: 1, z: 1 },
+                    color: '#d9d9d9',
+                    material: 'Plastic',
+                    transparency: 0,
+                    isAnchored: true,
+                    canCollide: true,
+                    castsShadow: true
+                });
+                buildEditorScene();
+                recordEdit();
+                showModal('OBJ Imported', `${file.name} imported successfully.`);
+            } catch (e) {
+                showModal('Import Failed', 'Could not parse OBJ file.');
+            } finally {
+                if (event?.target) event.target.value = '';
+            }
+        };
+        window.triggerOBJImport = triggerOBJImport;
+        window.handleOBJImport = handleOBJImport;
+
 
         
         // --- Editor Core Engine ---
@@ -7470,6 +7562,11 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     });
                     const chunk = getChunkGroup(edScene, editorChunkGroups, chunkKeyFromPos(objData.position || {}), 80);
                     chunk.add(group); editorMeshes.push(group);
+                } else if (objData.type === 'objModel') {
+                    const objGroup = buildOBJGroup(objData, false);
+                    if (!objGroup) return;
+                    const chunk = getChunkGroup(edScene, editorChunkGroups, chunkKeyFromPos(objData.position || {}), 80);
+                    chunk.add(objGroup); editorMeshes.push(objGroup);
                 } else {
                     let geo, mat;
                     let isLadder = objData.type === 'ladder';
@@ -8628,6 +8725,13 @@ if (window.playTerrainMesh) {
             const staticColliderBoxes = [];
 
             (activeLevel.objects || []).forEach(objData => {
+if (objData.type === 'objModel') {
+                    const objGroup = buildOBJGroup(objData, true);
+                    if (!objGroup) return;
+                    const chunk = getChunkGroup(playScene, playChunkGroups, chunkKeyFromPos(objData.position || {}), 0);
+                    chunk.add(objGroup);
+                    playMeshes.push(objGroup);
+                } else 
 if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     const group = new THREE.Group();
                     group.position.set(objData.position.x, objData.position.y, objData.position.z);
@@ -11405,8 +11509,16 @@ document.getElementById('prop-transparency').addEventListener('input', (e) => {
         if (mesh.userData.isSpawn) return; // Cannot make spawn invisible
         const objData = edData.objects.find(o => o.id === mesh.userData.id);
         if (objData) objData.transparency = Math.max(0, Math.min(1, val));
-        mesh.material.transparent = val > 0;
-        mesh.material.opacity = Math.max(0.02, 1 - val); // 1 transparency = almost invisible
+        if (mesh.userData?.type === 'objModel') {
+            mesh.traverse((child) => {
+                if (!child.isMesh) return;
+                child.material.transparent = val > 0 || child.material.transparent;
+                child.material.opacity = Math.max(0.02, 1 - val);
+            });
+        } else if (mesh.material) {
+            mesh.material.transparent = val > 0;
+            mesh.material.opacity = Math.max(0.02, 1 - val); // 1 transparency = almost invisible
+        }
     });
     recordEdit(); // Save the state
 });

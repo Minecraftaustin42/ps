@@ -261,6 +261,7 @@ const sanitizeGameData = (gameData) => {
             color: /^#[0-9a-fA-F]{6}$/.test(obj.color || '') ? obj.color : '#3498db',
             material: sanitizeText(obj.material || 'Plastic', 24),
             script: String(obj.script || '').slice(0, 12000),
+            objSource: String(obj.objSource || '').slice(0, 1200000),
             isAnchored: obj.isAnchored !== false,
             canCollide: obj.canCollide !== false,
             noCollide: !!obj.noCollide,
