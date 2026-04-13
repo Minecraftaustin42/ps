@@ -7501,13 +7501,31 @@ const promptClearEditor = () => {
                 return null;
             }
             const group = new THREE.Group();
+            const canCollide = objData.canCollide !== false && !objData.noCollide;
             parsed.traverse((child) => {
                 if (!child.isMesh) return;
                 let material = child.material;
                 if (!material || !material.map) material = getMaterialForType(objData.material || 'Plastic', objData.color || '#d9d9d9');
+                if (Array.isArray(material)) {
+                    material = material.map((mat) => {
+                        if (!mat) return getMaterialForType(objData.material || 'Plastic', objData.color || '#d9d9d9');
+                        mat.transparent = !!mat.alphaMap;
+                        if (!mat.alphaMap) mat.opacity = 1;
+                        return mat;
+                    });
+                } else if (material) {
+                    material.transparent = !!material.alphaMap;
+                    if (!material.alphaMap) material.opacity = 1;
+                }
                 const imported = new THREE.Mesh(child.geometry.clone(), material);
                 imported.castShadow = objectCastsShadow(objData, forPlay ? activeLevel?.settings : edData?.settings);
                 imported.receiveShadow = areGlobalShadowsEnabled(forPlay ? activeLevel?.settings : edData?.settings);
+                imported.userData = {
+                    type: 'objModelPart',
+                    isTool: false,
+                    noCollide: !canCollide,
+                    isAnchored: true
+                };
                 group.add(imported);
             });
             if (!group.children.length) return null;
@@ -7520,6 +7538,7 @@ const promptClearEditor = () => {
                 isSpawn: false,
                 isAnchored: objData.isAnchored !== false,
                 canCollide: objData.canCollide !== false,
+                noCollide: true,
                 castsShadow: objData.castsShadow !== false
             };
             return group;
