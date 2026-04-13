@@ -201,11 +201,26 @@ const sanitizeNumber = (value, fallback, min, max) => {
 };
 
 const sanitizeGameData = (gameData) => {
+    const nostalgiaDefaults = {
+        gravity: 0.08,
+        skyColor: '#8dc8ff',
+        brightness: 0.78,
+        sunIntensity: 0.88,
+        fogDistance: 980,
+        graphicsQuality: 'high',
+        exposure: 0.98
+    };
     const safe = {
         settings: {
-            gravity: sanitizeNumber(gameData?.settings?.gravity, 0.35, 0, 5),
-            skyColor: /^#[0-9a-fA-F]{6}$/.test(gameData?.settings?.skyColor || '') ? gameData.settings.skyColor : '#87CEEB',
-            brightness: sanitizeNumber(gameData?.settings?.brightness, 1, 0.1, 3)
+            gravity: sanitizeNumber(gameData?.settings?.gravity, nostalgiaDefaults.gravity, 0, 5),
+            skyColor: /^#[0-9a-fA-F]{6}$/.test(gameData?.settings?.skyColor || '') ? gameData.settings.skyColor : nostalgiaDefaults.skyColor,
+            brightness: sanitizeNumber(gameData?.settings?.brightness, nostalgiaDefaults.brightness, 0.1, 3),
+            sunIntensity: sanitizeNumber(gameData?.settings?.sunIntensity, nostalgiaDefaults.sunIntensity, 0.2, 2),
+            fogDistance: sanitizeNumber(gameData?.settings?.fogDistance, nostalgiaDefaults.fogDistance, 200, 3000),
+            graphicsQuality: ['high', 'ultra'].includes(gameData?.settings?.graphicsQuality) ? gameData.settings.graphicsQuality : nostalgiaDefaults.graphicsQuality,
+            exposure: sanitizeNumber(gameData?.settings?.exposure, nostalgiaDefaults.exposure, 0.4, 2.5),
+            globalShadows: gameData?.settings?.globalShadows !== false,
+            graphicsProfileVersion: Number.isFinite(Number(gameData?.settings?.graphicsProfileVersion)) ? Number(gameData.settings.graphicsProfileVersion) : 1
         },
         spawn: gameData?.spawn ? {
             x: sanitizeNumber(gameData.spawn.x, 0, -5000, 5000),
@@ -246,9 +261,13 @@ const sanitizeGameData = (gameData) => {
             color: /^#[0-9a-fA-F]{6}$/.test(obj.color || '') ? obj.color : '#3498db',
             material: sanitizeText(obj.material || 'Plastic', 24),
             script: String(obj.script || '').slice(0, 12000),
+            objSource: String(obj.objSource || '').slice(0, 1200000),
+            objMtl: String(obj.objMtl || '').slice(0, 400000),
+            objTextureMap: {},
             isAnchored: obj.isAnchored !== false,
             canCollide: obj.canCollide !== false,
-            noCollide: !!obj.noCollide
+            noCollide: !!obj.noCollide,
+            castsShadow: obj.castsShadow !== false && String(obj.type || '').trim() !== 'floatingText'
         };
 
         if (obj.smart && typeof obj.smart === 'object') {
@@ -260,6 +279,14 @@ const sanitizeGameData = (gameData) => {
                 team: ['all', 'red', 'blue', 'neutral'].includes(obj.smart.team) ? obj.smart.team : 'all',
                 advanced: !!obj.smart.advanced
             };
+        }
+        if (obj.objTextureMap && typeof obj.objTextureMap === 'object') {
+            const entries = Object.entries(obj.objTextureMap).slice(0, 64);
+            entries.forEach(([k, v]) => {
+                const key = String(k || '').slice(0, 120);
+                const value = String(v || '').slice(0, 4000000);
+                if (key) cleanObj.objTextureMap[key] = value;
+            });
         }
         safe.objects.push(cleanObj);
     });
