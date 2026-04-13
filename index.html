@@ -7462,12 +7462,9 @@ const promptClearEditor = () => {
         };
 
         const normalizeAssetKey = (value = '') => decodeURIComponent(String(value || '')).replace(/\\/g, '/').replace(/^\.\/+/, '').trim().toLowerCase();
-
-        const buildOBJGroup = (objData, forPlay = false) => {
-            const source = String(objData?.objSource || '');
-            if (!source.trim() || !window.THREE?.OBJLoader) return null;
+        const parseOBJSceneFromSources = (objSource = '', mtlSource = '', textureMap = {}) => {
+            if (!objSource.trim() || !window.THREE?.OBJLoader) return null;
             const manager = new THREE.LoadingManager();
-            const textureMap = objData?.objTextureMap && typeof objData.objTextureMap === 'object' ? objData.objTextureMap : {};
             const urlCache = {};
             manager.setURLModifier((url) => {
                 const raw = String(url || '').replace(/\\/g, '/');
@@ -7487,19 +7484,27 @@ const promptClearEditor = () => {
                 return urlCache[normBase || base];
             });
             const loader = new THREE.OBJLoader(manager);
-            let parsed;
+            if (mtlSource.trim() && window.THREE?.MTLLoader) {
+                const mtlLoader = new THREE.MTLLoader(manager);
+                const materials = mtlLoader.parse(mtlSource, '');
+                materials.preload();
+                loader.setMaterials(materials);
+            }
+            return loader.parse(objSource);
+        };
+
+        const buildOBJGroup = (objData, forPlay = false) => {
+            const source = String(objData?.objSource || '');
+            if (!source.trim() || !window.THREE?.OBJLoader) return null;
+            const textureMap = objData?.objTextureMap && typeof objData.objTextureMap === 'object' ? objData.objTextureMap : {};
+            const mtlSource = String(objData?.objMtl || '');
+            let parsed = null;
             try {
-                const mtlSource = String(objData?.objMtl || '');
-                if (mtlSource.trim() && window.THREE?.MTLLoader) {
-                    const mtlLoader = new THREE.MTLLoader(manager);
-                    const materials = mtlLoader.parse(mtlSource, '');
-                    materials.preload();
-                    loader.setMaterials(materials);
-                }
-                parsed = loader.parse(source);
+                parsed = parseOBJSceneFromSources(source, mtlSource, textureMap);
             } catch (e) {
                 return null;
             }
+            if (!parsed) return null;
             const group = new THREE.Group();
             const canCollide = objData.canCollide !== false && !objData.noCollide;
             parsed.traverse((child) => {
@@ -7575,29 +7580,58 @@ const promptClearEditor = () => {
                     if (full) textureMap[normalizeAssetKey(full)] = dataUrl;
                     if (base) textureMap[normalizeAssetKey(base)] = dataUrl;
                 }
+                const parsed = parseOBJSceneFromSources(text, mtlText, textureMap);
+                if (!parsed) return showModal('Import Failed', 'Could not parse OBJ/MTL bundle.');
                 const dir = new THREE.Vector3(); edCamera.getWorldDirection(dir);
                 const insertPos = edCamera.position.clone().add(dir.multiplyScalar(14));
-                edData.objects.push({
-                    id: crypto.randomUUID(),
-                    name: objFile.name.replace(/\.obj$/i, '') || 'Imported OBJ',
-                    type: 'objModel',
-                    objSource: text.slice(0, 12000000),
-                    objMtl: String(mtlText || '').slice(0, 2000000),
-                    objTextureMap: textureMap,
-                    position: { x: insertPos.x, y: insertPos.y, z: insertPos.z },
-                    rotation: { x: 0, y: 0, z: 0 },
-                    scale: { x: 1, y: 1, z: 1 },
-                    color: '#d9d9d9',
-                    material: 'Plastic',
-                    transparency: 0,
-                    isAnchored: true,
-                    canCollide: true,
-                    castsShadow: true
+                const meshParts = [];
+                const allCenters = [];
+                parsed.updateMatrixWorld(true);
+                parsed.traverse((node) => {
+                    if (!node.isMesh || !node.geometry) return;
+                    const box = new THREE.Box3().setFromObject(node);
+                    if (box.isEmpty()) return;
+                    const center = new THREE.Vector3(); box.getCenter(center);
+                    const size = new THREE.Vector3(); box.getSize(size);
+                    if (size.lengthSq() <= 1e-6) return;
+                    allCenters.push(center.clone());
+                    const worldQuat = new THREE.Quaternion();
+                    node.getWorldQuaternion(worldQuat);
+                    const euler = new THREE.Euler().setFromQuaternion(worldQuat, 'XYZ');
+                    const mat = Array.isArray(node.material) ? node.material[0] : node.material;
+                    const colorHex = mat?.color ? `#${mat.color.getHexString()}` : '#d9d9d9';
+                    meshParts.push({
+                        center,
+                        size,
+                        rotation: euler,
+                        color: colorHex
+                    });
+                });
+                if (!meshParts.length) return showModal('Import Failed', 'No valid meshes were found in OBJ.');
+                const importCenter = new THREE.Vector3();
+                allCenters.forEach(c => importCenter.add(c));
+                importCenter.multiplyScalar(1 / allCenters.length);
+                const offset = new THREE.Vector3().subVectors(insertPos, importCenter);
+                const baseName = objFile.name.replace(/\.obj$/i, '') || 'Imported OBJ';
+                meshParts.forEach((part, idx) => {
+                    edData.objects.push({
+                        id: crypto.randomUUID(),
+                        name: `${baseName} Part ${idx + 1}`,
+                        type: 'block',
+                        position: { x: part.center.x + offset.x, y: part.center.y + offset.y, z: part.center.z + offset.z },
+                        rotation: { x: part.rotation.x, y: part.rotation.y, z: part.rotation.z },
+                        scale: { x: Math.max(0.2, part.size.x), y: Math.max(0.2, part.size.y), z: Math.max(0.2, part.size.z) },
+                        color: part.color,
+                        material: 'Plastic',
+                        transparency: 0,
+                        isAnchored: true,
+                        canCollide: true,
+                        castsShadow: true
+                    });
                 });
                 buildEditorScene();
                 recordEdit();
-                const mtlMsg = mtlFile ? 'MTL loaded.' : 'No MTL found (colors/materials may be basic).';
-                showModal('OBJ Imported', `${objFile.name} imported.\n${mtlMsg}\nTextures detected: ${textureFiles.length}.`);
+                showModal('OBJ Imported', `${objFile.name} converted to ${meshParts.length} Playsculpt parts.\nColors were copied from OBJ/MTL materials.`);
                 closeOBJImportModal();
             } catch (e) {
                 showModal('Import Failed', 'Could not parse OBJ file.');
