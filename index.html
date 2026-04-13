@@ -5992,6 +5992,7 @@ const studioMobileState = { initialized: false, moveActive: false, moveX: 0, mov
 
         let raycaster, mouse;
         let editorMeshes = []; 
+        let editorChunkGroups = new Map();
         
         // Advanced State Management
         let selectedObjects = [];
@@ -7434,6 +7435,8 @@ const promptClearEditor = () => {
             if(customGizmo) customGizmo.visible = false; // Safely hide our new custom gizmo instead
             editorMeshes.forEach(m => edScene.remove(m));
             editorMeshes = [];
+            editorChunkGroups.forEach(g => edScene.remove(g));
+            editorChunkGroups = new Map();
 
             edData.objects.forEach(objData => {
 if (objData.type === 'vehicle' || objData.type === 'aircraft') {
@@ -7455,7 +7458,8 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                         mesh.scale.set(cData.scale.x, cData.scale.y, cData.scale.z);
                         group.add(mesh);
                     });
-                    edScene.add(group); editorMeshes.push(group);
+                    const chunk = getChunkGroup(edScene, editorChunkGroups, chunkKeyFromPos(objData.position || {}), 80);
+                    chunk.add(group); editorMeshes.push(group);
                 } else {
                     let geo, mat;
                     let isLadder = objData.type === 'ladder';
@@ -7482,7 +7486,8 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
             };
                     if (objData.type === 'floatingText') applyFloatingTextVisual(mesh, objData);
 
-                    edScene.add(mesh); editorMeshes.push(mesh);
+                    const chunk = getChunkGroup(edScene, editorChunkGroups, chunkKeyFromPos(objData.position || {}), 80);
+                    chunk.add(mesh); editorMeshes.push(mesh);
                 }
             });
 
@@ -7492,7 +7497,8 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                 const spawnScale = edData.spawn.scale || {};
                 spMesh.scale.set(spawnScale.x || 4, spawnScale.y || 1, spawnScale.z || 4);
                 spMesh.userData = { isSpawn: true };
-                edScene.add(spMesh); editorMeshes.push(spMesh);
+                const chunk = getChunkGroup(edScene, editorChunkGroups, chunkKeyFromPos(edData.spawn || {}), 80);
+                chunk.add(spMesh); editorMeshes.push(spMesh);
             }
 
             if (terrainCursor) { edScene.remove(terrainCursor); terrainCursor = null; }
@@ -7582,6 +7588,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                         edCamera.position.addScaledVector(mobileRight, studioMobileState.moveX * 0.55);
                     }
                 }
+                updateChunkVisibility(edCamera, editorChunkGroups, 5200);
 
                 edRenderer.render( edScene, edCamera );
             }
@@ -7709,6 +7716,7 @@ playerObj = {
         
         let playMeshes = []; 
         let playColliders = []; 
+        let playChunkGroups = new Map();
         let lastPlayFrameAt = performance.now();
         let playSyncInFlight = false;
         let otherPlayerMeshes = {}; 
@@ -7721,6 +7729,35 @@ playerObj = {
         let physicsWorld = null;
         let physicsBodies = [];
         let meshToBody = new Map();
+
+        const CHUNK_SIZE = 256;
+        const PLAY_STATIC_INSTANCE_LIMIT = 120000;
+        const INSTANCABLE_PLAY_TYPES = new Set(['block']);
+        const chunkKeyFromPos = (p) => `${Math.floor((p.x || 0) / CHUNK_SIZE)}:${Math.floor((p.z || 0) / CHUNK_SIZE)}`;
+        const getChunkGroup = (scene, map, key, yLift = 0) => {
+            if (map.has(key)) return map.get(key);
+            const grp = new THREE.Group();
+            grp.userData.chunkKey = key;
+            const [cx, cz] = key.split(':').map(Number);
+            grp.userData.chunkCenter = new THREE.Vector3((cx + 0.5) * CHUNK_SIZE, yLift, (cz + 0.5) * CHUNK_SIZE);
+            grp.userData.chunkRadius = Math.sqrt(2) * (CHUNK_SIZE * 0.5) + 120;
+            scene.add(grp);
+            map.set(key, grp);
+            return grp;
+        };
+        const updateChunkVisibility = (camera, map, maxDistance = 4200) => {
+            if (!camera || !map || map.size === 0) return;
+            const frustum = new THREE.Frustum();
+            const proj = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+            frustum.setFromProjectionMatrix(proj);
+            const camPos = camera.position;
+            map.forEach((grp) => {
+                const c = grp.userData.chunkCenter || grp.position;
+                const radius = grp.userData.chunkRadius || 140;
+                const inRange = camPos.distanceToSquared(c) <= (maxDistance * maxDistance);
+                grp.visible = inRange && frustum.intersectsSphere(new THREE.Sphere(c, radius));
+            });
+        };
 
         // Tool System Variables
         let playerInventory = [];
@@ -8563,9 +8600,15 @@ if (window.playTerrainMesh) {
     }
 
             playMeshes.forEach(m => playScene.remove(m)); playMeshes = [];
+            playChunkGroups.forEach(g => playScene.remove(g));
+            playChunkGroups = new Map();
             if(playerMesh) playScene.remove(playerMesh);
 
             playerInventory = []; equippedToolIndex = -1;
+            const candidateCount = (activeLevel.objects || []).length;
+            const canUseInstancing = candidateCount <= PLAY_STATIC_INSTANCE_LIMIT;
+            const instancedBuckets = new Map();
+            const staticColliderBoxes = [];
 
             (activeLevel.objects || []).forEach(objData => {
 if (objData.type === 'vehicle' || objData.type === 'aircraft') {
@@ -8600,7 +8643,8 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         group.userData.sculptEngine = engine;
                         engine.triggerEvent('start');
                     }
-                    playScene.add(group); playMeshes.push(group);
+                    const chunk = getChunkGroup(playScene, playChunkGroups, chunkKeyFromPos(objData.position || {}), 0);
+                    chunk.add(group); playMeshes.push(group);
 
                 } else {
                     let geo, mat; let isLadder = objData.type === 'ladder';
@@ -8614,15 +8658,47 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mat.transparent = objTransparency > 0 || mat.transparent;
                     mat.opacity = Math.max(0.02, 1 - objTransparency);
 
+                    const hasScript = !!((objData.script || '').trim());
+                    const isSimpleStatic = canUseInstancing &&
+                        INSTANCABLE_PLAY_TYPES.has(objData.type) &&
+                        !hasScript &&
+                        !objData.smart &&
+                        !isLadder &&
+                        objData.type !== 'floatingText' &&
+                        objData.type !== 'tool' &&
+                        !objData.noCollide &&
+                        objData.canCollide !== false &&
+                        (objData.rotation?.x || 0) === 0 &&
+                        (objData.rotation?.y || 0) === 0 &&
+                        (objData.rotation?.z || 0) === 0;
+
+                    if (isSimpleStatic) {
+                        const objTransparency = Math.max(0, Math.min(1, objData.transparency || 0));
+                        const chunkKey = chunkKeyFromPos(objData.position || {});
+                        const matType = objData.material || 'Plastic';
+                        const key = `${chunkKey}|${objData.type}|${matType}|${objData.color || '#3498db'}|${objTransparency.toFixed(2)}`;
+                        if (!instancedBuckets.has(key)) {
+                            instancedBuckets.set(key, { chunkKey, type: objData.type, material: matType, color: objData.color || '#3498db', transparency: objTransparency, entries: [] });
+                        }
+                        instancedBuckets.get(key).entries.push(objData);
+                        const sx = Math.abs(objData.scale?.x || 1), sy = Math.abs(objData.scale?.y || 1), sz = Math.abs(objData.scale?.z || 1);
+                        const px = objData.position?.x || 0, py = objData.position?.y || 0, pz = objData.position?.z || 0;
+                        staticColliderBoxes.push(new THREE.Box3(
+                            new THREE.Vector3(px - sx * 0.5, py - sy * 0.5, pz - sz * 0.5),
+                            new THREE.Vector3(px + sx * 0.5, py + sy * 0.5, pz + sz * 0.5)
+                        ));
+                        return;
+                    }
+
                     const mesh = new THREE.Mesh(geo, mat);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
                     mesh.castShadow = objData.type !== 'floatingText';
                     mesh.receiveShadow = true;
-mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: (objData.noCollide || objData.canCollide === false), isAnchored: objData.isAnchored !== false, smart: objData.smart || null, smartState: {} };
+                    mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: (objData.noCollide || objData.canCollide === false), isAnchored: objData.isAnchored !== false, smart: objData.smart || null, smartState: {} };
                     if (objData.type === 'floatingText') applyFloatingTextVisual(mesh, objData);
-                    
+
                     const scriptSource = objData.script || '';
                     if (scriptSource.trim() !== '') {
                         const engine = new SculptScriptEngine(scriptSource, (eventName) => buildScriptContext(mesh, eventName));
@@ -8631,9 +8707,39 @@ mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type ===
                     }
 
                     if (objData.type === 'tool') { playerInventory.push({ data: objData, mesh: mesh }); playMeshes.push(mesh); } 
-                    else { playScene.add(mesh); playMeshes.push(mesh); }
+                    else {
+                        const chunk = getChunkGroup(playScene, playChunkGroups, chunkKeyFromPos(objData.position || {}), 0);
+                        chunk.add(mesh);
+                        playMeshes.push(mesh);
+                    }
                 }
             });
+
+            if (instancedBuckets.size) {
+                const tempObj = new THREE.Object3D();
+                instancedBuckets.forEach((bucket) => {
+                    const geo = createPartGeometry(bucket.type);
+                    const mat = getMaterialForType(bucket.material, bucket.color);
+                    mat.transparent = bucket.transparency > 0 || mat.transparent;
+                    mat.opacity = Math.max(0.02, 1 - bucket.transparency);
+                    const iMesh = new THREE.InstancedMesh(geo, mat, bucket.entries.length);
+                    iMesh.castShadow = true;
+                    iMesh.receiveShadow = true;
+                    iMesh.userData = { type: bucket.type, isInstancedStatic: true };
+                    bucket.entries.forEach((objData, idx) => {
+                        tempObj.position.set(objData.position.x, objData.position.y, objData.position.z);
+                        tempObj.rotation.set(0, 0, 0);
+                        tempObj.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+                        tempObj.updateMatrix();
+                        iMesh.setMatrixAt(idx, tempObj.matrix);
+                    });
+                    iMesh.instanceMatrix.needsUpdate = true;
+                    const chunk = getChunkGroup(playScene, playChunkGroups, bucket.chunkKey, 0);
+                    chunk.add(iMesh);
+                    playMeshes.push(iMesh);
+                });
+            }
+            window.playStaticColliderBoxes = staticColliderBoxes;
 
      if (activeLevel.terrain && activeLevel.terrain.active) {
                 const geo = new THREE.PlaneGeometry(activeLevel.terrain.size, activeLevel.terrain.size, activeLevel.terrain.res - 1, activeLevel.terrain.res - 1);
@@ -8925,11 +9031,14 @@ const updateChatBubbles = () => {
 // Advanced Raycast Collision for Complex Shapes
         const refreshPlayColliders = () => {
             playColliders = playMeshes
-                .filter(m => m?.userData && !m.userData.isTool && !m.userData.noCollide && m.userData.type !== 'seat' && m.userData.type !== 'aircraftSeat' && m.userData.type !== 'vehicle' && m.userData.type !== 'aircraft')
+                .filter(m => m?.userData && !m.userData.isInstancedStatic && !m.userData.isTool && !m.userData.noCollide && m.userData.type !== 'seat' && m.userData.type !== 'aircraftSeat' && m.userData.type !== 'vehicle' && m.userData.type !== 'aircraft')
                 .map(m => {
                     m.updateMatrixWorld(true);
                     return { box: new THREE.Box3().setFromObject(m), mesh: m };
                 });
+            if (Array.isArray(window.playStaticColliderBoxes) && window.playStaticColliderBoxes.length) {
+                window.playStaticColliderBoxes.forEach(b => playColliders.push({ box: b, mesh: { userData: { type: 'block' }, rotation: { x: 0, y: 0, z: 0 } } }));
+            }
         };
 
         const checkWallCollision = (px, py, pz, excludeMesh = null) => {
@@ -9777,7 +9886,12 @@ const animatePlay = () => {
                 if (window.activeBullets) {
                     window.activeBullets = window.activeBullets.filter(b => {
                         b.position.add(b.userData.velocity); b.userData.lifetime--; let hitSomething = false;
-                        playScene.children.forEach(obj => { if (obj.userData && obj.userData.id && !obj.userData.isSpawn && !obj.userData.isTool && obj !== b) { if (b.position.distanceTo(obj.position) < 1.5) { playScene.remove(obj); obj.position.y = -9999; hitSomething = true; } } });
+                        playMeshes.forEach(obj => {
+                            if (!obj || obj === b || !obj.position) return;
+                            if (obj.userData && obj.userData.id && !obj.userData.isSpawn && !obj.userData.isTool && !obj.userData.isInstancedStatic) {
+                                if (b.position.distanceTo(obj.position) < 1.5) { if (obj.parent) obj.parent.remove(obj); obj.position.y = -9999; hitSomething = true; }
+                            }
+                        });
                         if (!hitSomething && b.position.distanceTo(new THREE.Vector3(playerObj.x, playerObj.y + 3, playerObj.z)) < 1.3 && b.userData.owner !== (currentUser ? currentUser.username : 'local')) {
                             damagePlayer(b.userData.damage || 20);
                             hitSomething = true;
@@ -9884,8 +9998,7 @@ if (window.playControls) {
 }
 
 
-
-
+              updateChunkVisibility(playCamera, playChunkGroups, 6000);
               playRenderer.render(playScene, playCamera); 
                 updateNametags(); 
                 
