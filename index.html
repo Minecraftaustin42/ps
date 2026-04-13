@@ -1492,7 +1492,7 @@
                         <div class="studio-toolbar-actions">
                             <button class="btn btn-sm btn-success" style="background-color:#27ae60;" onclick="openToolbox()">Toolbox</button>
                             <button class="btn btn-sm btn-primary" onclick="promptUploadModel()">Publish Model</button>
-                            <button class="btn btn-sm btn-info" onclick="triggerOBJImport()">Import Roblox OBJ</button>
+                            <button class="btn btn-sm btn-info" title="Select OBJ + MTL + texture image files together" onclick="triggerOBJImport()">Import Roblox OBJ</button>
                             <input type="file" id="obj-import-input" multiple accept=".obj,.mtl,.png,.jpg,.jpeg,.bmp,.tga,image/*,text/plain,model/obj" style="display:none;" onchange="handleOBJImport(event)">
                             <label style="font-size:12px;">Move <input type="number" id="snap-move" value="1" style="width:48px; padding:2px;"></label>
                             <label style="font-size:12px;">Rot <input type="number" id="snap-rot" value="15" style="width:48px; padding:2px;"></label>
@@ -7445,6 +7445,8 @@ const promptClearEditor = () => {
             }, false, true);
         };
 
+        const normalizeAssetKey = (value = '') => decodeURIComponent(String(value || '')).replace(/\\/g, '/').replace(/^\.\/+/, '').trim().toLowerCase();
+
         const buildOBJGroup = (objData, forPlay = false) => {
             const source = String(objData?.objSource || '');
             if (!source.trim() || !window.THREE?.OBJLoader) return null;
@@ -7454,17 +7456,19 @@ const promptClearEditor = () => {
             manager.setURLModifier((url) => {
                 const raw = String(url || '').replace(/\\/g, '/');
                 const base = raw.split('/').pop();
-                const entry = textureMap[raw] || textureMap[base];
+                const normRaw = normalizeAssetKey(raw);
+                const normBase = normalizeAssetKey(base);
+                const entry = textureMap[raw] || textureMap[base] || textureMap[normRaw] || textureMap[normBase];
                 if (!entry) return url;
-                if (!urlCache[base]) {
+                if (!urlCache[normBase || base]) {
                     const mime = /^data:(.*?);base64,/.exec(entry)?.[1] || 'image/png';
                     const b64 = entry.split(',')[1] || '';
                     const bytes = atob(b64);
                     const arr = new Uint8Array(bytes.length);
                     for (let i = 0; i < bytes.length; i++) arr[i] = bytes.charCodeAt(i);
-                    urlCache[base] = URL.createObjectURL(new Blob([arr], { type: mime }));
+                    urlCache[normBase || base] = URL.createObjectURL(new Blob([arr], { type: mime }));
                 }
-                return urlCache[base];
+                return urlCache[normBase || base];
             });
             const loader = new THREE.OBJLoader(manager);
             let parsed;
@@ -7523,12 +7527,18 @@ const promptClearEditor = () => {
                 const textureFiles = files.filter(f => /\.(png|jpe?g|bmp|tga)$/i.test(f.name));
                 const textureMap = {};
                 for (const tf of textureFiles) {
-                    textureMap[tf.name] = await new Promise((resolve) => {
+                    const dataUrl = await new Promise((resolve) => {
                         const fr = new FileReader();
                         fr.onload = () => resolve(String(fr.result || ''));
                         fr.onerror = () => resolve('');
                         fr.readAsDataURL(tf);
                     });
+                    const full = (tf.webkitRelativePath || tf.name || '').replace(/\\/g, '/');
+                    const base = full.split('/').pop();
+                    if (full) textureMap[full] = dataUrl;
+                    if (base) textureMap[base] = dataUrl;
+                    if (full) textureMap[normalizeAssetKey(full)] = dataUrl;
+                    if (base) textureMap[normalizeAssetKey(base)] = dataUrl;
                 }
                 const dir = new THREE.Vector3(); edCamera.getWorldDirection(dir);
                 const insertPos = edCamera.position.clone().add(dir.multiplyScalar(14));
@@ -7536,8 +7546,8 @@ const promptClearEditor = () => {
                     id: crypto.randomUUID(),
                     name: objFile.name.replace(/\.obj$/i, '') || 'Imported OBJ',
                     type: 'objModel',
-                    objSource: text.slice(0, 1200000),
-                    objMtl: String(mtlText || '').slice(0, 400000),
+                    objSource: text.slice(0, 12000000),
+                    objMtl: String(mtlText || '').slice(0, 2000000),
                     objTextureMap: textureMap,
                     position: { x: insertPos.x, y: insertPos.y, z: insertPos.z },
                     rotation: { x: 0, y: 0, z: 0 },
@@ -7551,7 +7561,8 @@ const promptClearEditor = () => {
                 });
                 buildEditorScene();
                 recordEdit();
-                showModal('OBJ Imported', `${objFile.name} imported successfully with ${textureFiles.length} texture file(s).`);
+                const mtlMsg = mtlFile ? 'MTL loaded.' : 'No MTL found (colors/materials may be basic).';
+                showModal('OBJ Imported', `${objFile.name} imported.\n${mtlMsg}\nTextures detected: ${textureFiles.length}.`);
             } catch (e) {
                 showModal('Import Failed', 'Could not parse OBJ file.');
             } finally {

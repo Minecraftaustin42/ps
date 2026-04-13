@@ -261,8 +261,8 @@ const sanitizeGameData = (gameData) => {
             color: /^#[0-9a-fA-F]{6}$/.test(obj.color || '') ? obj.color : '#3498db',
             material: sanitizeText(obj.material || 'Plastic', 24),
             script: String(obj.script || '').slice(0, 12000),
-            objSource: String(obj.objSource || '').slice(0, 1200000),
-            objMtl: String(obj.objMtl || '').slice(0, 400000),
+            objSource: String(obj.objSource || '').slice(0, 12000000),
+            objMtl: String(obj.objMtl || '').slice(0, 2000000),
             objTextureMap: {},
             isAnchored: obj.isAnchored !== false,
             canCollide: obj.canCollide !== false,
@@ -284,7 +284,7 @@ const sanitizeGameData = (gameData) => {
             const entries = Object.entries(obj.objTextureMap).slice(0, 64);
             entries.forEach(([k, v]) => {
                 const key = String(k || '').slice(0, 120);
-                const value = String(v || '').slice(0, 4000000);
+                const value = String(v || '').slice(0, 6000000);
                 if (key) cleanObj.objTextureMap[key] = value;
             });
         }
