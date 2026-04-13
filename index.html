@@ -2422,93 +2422,42 @@ async function safeFetch(url, options = {}) {
        const getMaterialForType = (matType, colorHex) => {
             const c = new THREE.Color(colorHex || '#cccccc');
             const hsl = {}; c.getHSL(hsl);
-            // Slightly richer color preservation
-            c.setHSL(hsl.h, Math.min(hsl.s, 0.70), Math.min(hsl.l, 0.65));
+            c.setHSL(hsl.h, Math.min(hsl.s, 0.82), Math.max(0.34, Math.min(hsl.l, 0.72)));
 
-            // Neon stays basic so it "glows" and ignores shadows
-            if (matType === 'Neon') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex) });
-            if (matType === 'Hologram') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#66e5ff'), transparent: true, opacity: 0.45, wireframe: true });
-            if (matType === 'Glass') return new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.02, metalness: 0.0, transparent: true, opacity: 0.35, transmission: 0.85, thickness: 0.6 });
-            if (matType === 'Ice') return new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.08, metalness: 0.0, transparent: true, opacity: 0.6, transmission: 0.5, thickness: 0.9 });
-
-            // Smooth Plastic gets no texture, but is highly reflective
-            if (matType === 'SmoothPlastic') return new THREE.MeshStandardMaterial({ 
-                color: c, 
-                roughness: 0.15, 
-                metalness: 0.1 
-            });
-
-            const validTypes = ['Plastic', 'Wood', 'Grass', 'Slate', 'Sand', 'Metal', 'Marble', 'CarbonFiber', 'Obsidian', 'LavaRock', 'Concrete', 'Asphalt', 'Brick'];
-            const safeType = validTypes.includes(matType) ? matType : 'Plastic';
-            const tex = generateRealisticTexture(safeType);
-
-            // PBR Material Settings based on type
-            let matRoughness = 0.5;
-            let matMetalness = 0.0;
-            let matBumpScale = 0.2;
-
-            if (safeType === 'Plastic') { 
-                matRoughness = 0.3; 
-                matMetalness = 0.1; 
-                matBumpScale = 0.05; 
-            } else if (safeType === 'Wood') { 
-                matRoughness = 0.85; 
-                matMetalness = 0.0; 
-                matBumpScale = 0.3; 
-            } else if (safeType === 'Grass') { 
-                matRoughness = 0.9; 
-                matMetalness = 0.0; 
-                matBumpScale = 0.4; 
-            } else if (safeType === 'Slate') { 
-                matRoughness = 0.95; 
-                matMetalness = 0.1; 
-                matBumpScale = 1.2; // Deep rock crevices
-            } else if (safeType === 'Sand') { 
-                matRoughness = 0.9; 
-                matMetalness = 0.0; 
-                matBumpScale = 0.5; 
-            } else if (safeType === 'Metal') {
-                matRoughness = 0.18;
-                matMetalness = 0.95;
-                matBumpScale = 0.08;
-            } else if (safeType === 'Marble') {
-                matRoughness = 0.35;
-                matMetalness = 0.05;
-                matBumpScale = 0.22;
-            } else if (safeType === 'CarbonFiber') {
-                matRoughness = 0.45;
-                matMetalness = 0.4;
-                matBumpScale = 0.18;
-            } else if (safeType === 'Obsidian') {
-                matRoughness = 0.12;
-                matMetalness = 0.3;
-                matBumpScale = 0.09;
-            } else if (safeType === 'LavaRock') {
-                matRoughness = 0.92;
-                matMetalness = 0.0;
-                matBumpScale = 1.0;
-            } else if (safeType === 'Concrete') {
-                matRoughness = 0.93;
-                matMetalness = 0.02;
-                matBumpScale = 0.28;
-            } else if (safeType === 'Asphalt') {
-                matRoughness = 0.95;
-                matMetalness = 0.01;
-                matBumpScale = 0.22;
-            } else if (safeType === 'Brick') {
-                matRoughness = 0.88;
-                matMetalness = 0.02;
-                matBumpScale = 0.35;
+            if (matType === 'Neon') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#ffe066') });
+            if (matType === 'Hologram') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#66e5ff'), transparent: true, opacity: 0.38, wireframe: true });
+            if (matType === 'Glass' || matType === 'Ice') {
+                return new THREE.MeshPhongMaterial({ color: c, transparent: true, opacity: matType === 'Glass' ? 0.38 : 0.56, shininess: 58, specular: new THREE.Color('#f2f7ff') });
             }
 
-            // Return the upgraded PBR Material
-            return new THREE.MeshStandardMaterial({ 
-                color: c, 
-                map: tex, 
-                bumpMap: tex, 
-                bumpScale: matBumpScale,
-                roughness: matRoughness,
-                metalness: matMetalness
+            const nostalgicRules = {
+                Plastic: { roughness: 0.34, metalness: 0.02, shininess: 42, specular: '#ffffff' },
+                SmoothPlastic: { roughness: 0.26, metalness: 0.03, shininess: 65, specular: '#ffffff' },
+                Metal: { roughness: 0.48, metalness: 0.18, shininess: 36, specular: '#d3deea' },
+                Grass: { roughness: 0.8, metalness: 0.0, shininess: 12, specular: '#7fbf67' },
+                Wood: { roughness: 0.7, metalness: 0.0, shininess: 18, specular: '#b4875f' },
+                Sand: { roughness: 0.84, metalness: 0.0, shininess: 8, specular: '#f2d089' },
+                Slate: { roughness: 0.78, metalness: 0.0, shininess: 10, specular: '#7c8896' },
+                Marble: { roughness: 0.45, metalness: 0.01, shininess: 28, specular: '#f3f3f3' },
+                CarbonFiber: { roughness: 0.62, metalness: 0.07, shininess: 20, specular: '#7c8997' },
+                Obsidian: { roughness: 0.55, metalness: 0.1, shininess: 22, specular: '#a8b0be' },
+                LavaRock: { roughness: 0.88, metalness: 0.0, shininess: 6, specular: '#5f4b44' },
+                Concrete: { roughness: 0.86, metalness: 0.0, shininess: 8, specular: '#bcc6cf' },
+                Asphalt: { roughness: 0.9, metalness: 0.0, shininess: 6, specular: '#727c86' },
+                Brick: { roughness: 0.75, metalness: 0.0, shininess: 12, specular: '#b87362' }
+            };
+
+            const validTypes = Object.keys(nostalgicRules);
+            const safeType = validTypes.includes(matType) ? matType : 'Plastic';
+            const textureBlocked = ['Plastic', 'SmoothPlastic', 'Metal', 'Marble'];
+            const tex = textureBlocked.includes(safeType) ? null : generateRealisticTexture(safeType);
+            const rule = nostalgicRules[safeType];
+
+            return new THREE.MeshPhongMaterial({
+                color: c,
+                map: tex,
+                shininess: rule.shininess,
+                specular: new THREE.Color(rule.specular)
             });
         };  // --------------------------------------
 
@@ -4507,14 +4456,14 @@ let customGizmo = null;
             customGizmo.visible = false;
             edScene.add(customGizmo);
 
-            const ambLight = new THREE.AmbientLight( 0xffffff, 1.0 );
+            const ambLight = new THREE.AmbientLight( 0xf7fbff, 0.78 );
             ambLight.isAmbientLight = true;
             edAmbientLight = ambLight;
             edScene.add( ambLight );
-            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.4);
+            const hemiLight = new THREE.HemisphereLight(0xdff2ff, 0x7f8f9f, 0.3);
             edScene.add(hemiLight); 
-            const dirLight = new THREE.DirectionalLight( 0xffffff, 0.9 );
-            dirLight.position.set( 1, 0.75, 0.5 ).normalize();
+            const dirLight = new THREE.DirectionalLight( 0xfff6de, 0.88 );
+            dirLight.position.set( 40, 58, 22 );
             edDirectionalLight = dirLight;
             edScene.add( dirLight );
 
@@ -5974,8 +5923,18 @@ Keep playing together for more daily rewards.`, 'Aww!');
         // =========================================================================
         
 const DEFAULT_STEP_HEIGHT = 1.0;
+const NOSTALGIA_GRAPHICS_DEFAULTS = {
+    gravity: 0.08,
+    skyColor: '#8dc8ff',
+    brightness: 0.78,
+    sunIntensity: 0.88,
+    fogDistance: 980,
+    graphicsQuality: 'high',
+    exposure: 0.98
+};
+const applyNostalgiaWorldDefaults = (settings = {}) => ({ ...NOSTALGIA_GRAPHICS_DEFAULTS, ...(settings || {}) });
 let edData = { 
-            settings: { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.65 }, // FIX: Sculpt City Defaults!
+            settings: applyNostalgiaWorldDefaults({ skyColor: '#7fbeff', brightness: 0.72 }), // Nostalgic default look
             spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, 
             objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], 
             uiLayout: [],
@@ -6137,8 +6096,8 @@ let currentTransformSpace = 'local';
         // Auto-convert old grid games into the new freeform format
        // Auto-convert old grid games into the new freeform format
         const migrateLevelDataTo3D = (levelData) => {
-            let newData = { settings: { gravity: 0.08, skyColor: '#87CEEB', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
-            if (levelData.settings) newData.settings = levelData.settings;
+            let newData = { settings: applyNostalgiaWorldDefaults(), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
+            if (levelData.settings) newData.settings = applyNostalgiaWorldDefaults(levelData.settings);
             if (levelData.objects) { 
                 (levelData.objects || []).forEach(ensureSmartLogicDefaults);
                 newData.objects = levelData.objects; 
@@ -6972,11 +6931,11 @@ document.addEventListener('keydown', (e) => {
             
             isEditingSettings = true; renderExplorer();
             
-if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 };
-            if (typeof edData.settings.sunIntensity === 'undefined') edData.settings.sunIntensity = 1.1;
-            if (typeof edData.settings.fogDistance === 'undefined') edData.settings.fogDistance = 1600;
+if(!edData.settings) edData.settings = applyNostalgiaWorldDefaults({ skyColor: '#7fbeff', brightness: 0.72 });
+            if (typeof edData.settings.sunIntensity === 'undefined') edData.settings.sunIntensity = NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity;
+            if (typeof edData.settings.fogDistance === 'undefined') edData.settings.fogDistance = NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance;
             if (typeof edData.settings.graphicsQuality === 'undefined') edData.settings.graphicsQuality = 'high';
-            if (typeof edData.settings.exposure === 'undefined') edData.settings.exposure = 1.0;
+            if (typeof edData.settings.exposure === 'undefined') edData.settings.exposure = NOSTALGIA_GRAPHICS_DEFAULTS.exposure;
             const setValue = (id, value) => { const el = document.getElementById(id); if (el) el.value = value; };
             setValue('ws-gravity', edData.settings.gravity);
             setValue('ws-skycolor', edData.settings.skyColor);
@@ -6993,12 +6952,12 @@ if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', bri
         const updateWorldSettings = () => {
             const val = (id) => document.getElementById(id);
             edData.settings.gravity = parseFloat((val('ws-gravity') || {}).value) || 0.08;
-            edData.settings.skyColor = ((val('ws-skycolor') || {}).value) || '#5b88a5';
-            edData.settings.brightness = parseFloat((val('ws-brightness') || {}).value) || 1.0;
-            edData.settings.sunIntensity = parseFloat((val('ws-sun-intensity') || {}).value) || 1.1;
-            edData.settings.fogDistance = parseFloat((val('ws-fog-distance') || {}).value) || 1600;
+            edData.settings.skyColor = ((val('ws-skycolor') || {}).value) || '#7fbeff';
+            edData.settings.brightness = parseFloat((val('ws-brightness') || {}).value) || NOSTALGIA_GRAPHICS_DEFAULTS.brightness;
+            edData.settings.sunIntensity = parseFloat((val('ws-sun-intensity') || {}).value) || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity;
+            edData.settings.fogDistance = parseFloat((val('ws-fog-distance') || {}).value) || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance;
             edData.settings.graphicsQuality = ((val('ws-graphics-quality') || {}).value) || 'high';
-            edData.settings.exposure = parseFloat((val('ws-exposure') || {}).value) || 1.0;
+            edData.settings.exposure = parseFloat((val('ws-exposure') || {}).value) || NOSTALGIA_GRAPHICS_DEFAULTS.exposure;
             applyWorldSettings(); recordEdit();
         };
 
@@ -7006,23 +6965,23 @@ if(!edData.settings) edData.settings = { gravity: 0.08, skyColor: '#5b88a5', bri
             if (edScene && edData.settings) {
                 edScene.background = new THREE.Color(edData.settings.skyColor);
                 edScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = edData.settings.brightness; });
-                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.2, edData.settings.sunIntensity || 1.1);
-                const fogDistance = Math.max(200, edData.settings.fogDistance || 1600);
-                edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.2, fogDistance);
+                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.45, edData.settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
+                const fogDistance = Math.max(280, edData.settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
+                edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.28, fogDistance);
                 if (edRenderer) {
                     const q = (edData.settings.graphicsQuality === 'ultra') ? 'ultra' : 'high';
                     const shadow = true;
                     edRenderer.toneMapping = THREE.ACESFilmicToneMapping;
-                    edRenderer.toneMappingExposure = Math.max(0.6, Math.min(2.8, (edData.settings.exposure || 1.08) + 0.08));
+                    edRenderer.toneMappingExposure = Math.max(0.65, Math.min(1.6, (edData.settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
                     edRenderer.outputEncoding = THREE.sRGBEncoding;
                     edRenderer.physicallyCorrectLights = true;
                     edRenderer.shadowMap.enabled = shadow;
-                    edRenderer.shadowMap.type = q === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+                    edRenderer.shadowMap.type = q === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFSoftShadowMap;
                     if (edDirectionalLight) {
                         edDirectionalLight.castShadow = shadow;
-                        edDirectionalLight.shadow.mapSize.set(q === 'ultra' ? 2048 : 1024, q === 'ultra' ? 2048 : 1024);
-                        edDirectionalLight.shadow.radius = 2.2;
-                        edDirectionalLight.shadow.bias = -0.00035;
+                        edDirectionalLight.shadow.mapSize.set(q === 'ultra' ? 1024 : 512, q === 'ultra' ? 1024 : 512);
+                        edDirectionalLight.shadow.radius = 3.3;
+                        edDirectionalLight.shadow.bias = -0.0005;
                     }
                 }
             }
@@ -7422,7 +7381,7 @@ const promptClearEditor = () => {
         // --- Editor Core Engine ---
      const clearEditor = () => {
             currentEditGameId = null; 
-            edData = { settings: { gravity: 0.08, skyColor: '#5b88a5', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 }, spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
+            edData = { settings: applyNostalgiaWorldDefaults({ skyColor: '#7fbeff', brightness: 0.72 }), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
@@ -8108,25 +8067,25 @@ const loadPsworld = (event) => {
 const applyPlayGraphicsSettings = (settings = {}) => {
             if (!playScene || !playRenderer) return;
             const quality = settings.graphicsQuality === 'ultra' ? 'ultra' : 'high';
-            const exposure = Math.max(0.6, Math.min(2.8, (settings.exposure || 1.08) + 0.08));
-            const fogDistance = Math.max(200, settings.fogDistance || 1600);
+            const exposure = Math.max(0.65, Math.min(1.6, (settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
+            const fogDistance = Math.max(280, settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
 
-            playScene.fog = new THREE.Fog(settings.skyColor || '#87CEEB', fogDistance * 0.25, fogDistance);
+            playScene.fog = new THREE.Fog(settings.skyColor || '#8dc8ff', fogDistance * 0.28, fogDistance);
             playRenderer.toneMapping = THREE.ACESFilmicToneMapping;
             playRenderer.toneMappingExposure = exposure;
             playRenderer.outputEncoding = THREE.sRGBEncoding;
             playRenderer.physicallyCorrectLights = true;
             playRenderer.shadowMap.enabled = true;
-            playRenderer.shadowMap.type = quality === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+            playRenderer.shadowMap.type = quality === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFSoftShadowMap;
             if (playDirectionalLight) {
-                playDirectionalLight.intensity = Math.max(0.3, settings.sunIntensity || 1.25);
+                playDirectionalLight.intensity = Math.max(0.45, settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
                 playDirectionalLight.castShadow = playRenderer.shadowMap.enabled;
-                playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 2048 : 1024, quality === 'ultra' ? 2048 : 1024);
-                playDirectionalLight.shadow.radius = 2.8;
-                playDirectionalLight.shadow.bias = -0.00035;
+                playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 1024 : 512, quality === 'ultra' ? 1024 : 512);
+                playDirectionalLight.shadow.radius = 3.4;
+                playDirectionalLight.shadow.bias = -0.0005;
                 playDirectionalLight.shadow.normalBias = 0.015;
             }
-            if (playAmbientLight) playAmbientLight.intensity = Math.max(0.45, settings.brightness || 0.65);
+            if (playAmbientLight) playAmbientLight.intensity = Math.max(0.45, settings.brightness || NOSTALGIA_GRAPHICS_DEFAULTS.brightness);
         };
 
 const startGame = () => {
@@ -8159,15 +8118,15 @@ const startGame = () => {
                 playScene = new THREE.Scene(); 
                 playCamera = new THREE.PerspectiveCamera( 50, 16/9, 1, 2000 );
                 
-                const ambLight = new THREE.AmbientLight( 0xf8fbff, 0.62 );
+                const ambLight = new THREE.AmbientLight( 0xf6fbff, 0.78 );
                 ambLight.isAmbientLight = true;
                 playAmbientLight = ambLight;
                 playScene.add( ambLight );
                 
-                const hemiLight = new THREE.HemisphereLight(0xdfeeff, 0x5e666f, 0.45);
+                const hemiLight = new THREE.HemisphereLight(0xe6f5ff, 0x7e8c98, 0.3);
                 playScene.add(hemiLight);
                 
-                const dirLight = new THREE.DirectionalLight( 0xfff8ee, 1.2 );
+                const dirLight = new THREE.DirectionalLight( 0xfff4dc, 0.88 );
                 dirLight.position.set( 42, 56, 26 );
                 playDirectionalLight = dirLight;
                 playScene.add( dirLight );
@@ -8187,7 +8146,7 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
 
             stopGameLoop(); setupMobileControls();
             
-            if(!activeLevel.settings) activeLevel.settings = { gravity: 0.08, skyColor: '#87CEEB', brightness: 0.78, sunIntensity: 1.35, fogDistance: 1700, graphicsQuality: 'high', exposure: 1.08 };
+            activeLevel.settings = applyNostalgiaWorldDefaults(activeLevel.settings || {});
             
             playScene.background = new THREE.Color(activeLevel.settings.skyColor);
             playScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = activeLevel.settings.brightness; });
