@@ -6,7 +6,7 @@ const fs = require('fs');
 const app = express();
 const PORT = 3000;
 
-app.use(express.json({ limit: '10mb' })); 
+app.use(express.json({ limit: '100mb' })); 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use("/seo", express.static(path.join(__dirname, "public", "seo")));
 
@@ -201,6 +201,8 @@ const sanitizeNumber = (value, fallback, min, max) => {
 };
 
 const sanitizeGameData = (gameData) => {
+    const MAX_WORLD_OBJECTS = 50000;
+    const MAX_UI_LAYOUT_ITEMS = 1000;
     const nostalgiaDefaults = {
         gravity: 0.08,
         skyColor: '#8dc8ff',
@@ -233,10 +235,10 @@ const sanitizeGameData = (gameData) => {
             }
         } : { x: 0, y: 2, z: 0, scale: { x: 4, y: 1, z: 4 } },
         objects: [],
-        uiLayout: Array.isArray(gameData?.uiLayout) ? gameData.uiLayout.slice(0, 150) : []
+        uiLayout: Array.isArray(gameData?.uiLayout) ? gameData.uiLayout.slice(0, MAX_UI_LAYOUT_ITEMS) : []
     };
 
-    const objects = Array.isArray(gameData?.objects) ? gameData.objects.slice(0, 2500) : [];
+    const objects = Array.isArray(gameData?.objects) ? gameData.objects.slice(0, MAX_WORLD_OBJECTS) : [];
     objects.forEach((obj) => {
         if (!obj || typeof obj !== 'object') return;
         const cleanObj = {
