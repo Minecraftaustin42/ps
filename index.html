@@ -1492,8 +1492,7 @@
                         <div class="studio-toolbar-actions">
                             <button class="btn btn-sm btn-success" style="background-color:#27ae60;" onclick="openToolbox()">Toolbox</button>
                             <button class="btn btn-sm btn-primary" onclick="promptUploadModel()">Publish Model</button>
-                            <button class="btn btn-sm btn-info" title="Select OBJ + MTL + texture image files together" onclick="triggerOBJImport()">Import Roblox OBJ</button>
-                            <input type="file" id="obj-import-input" multiple accept=".obj,.mtl,.png,.jpg,.jpeg,.bmp,.tga,image/*,text/plain,model/obj" style="display:none;" onchange="handleOBJImport(event)">
+                            <button class="btn btn-sm btn-info" title="Upload OBJ, MTL, and texture files" onclick="triggerOBJImport()">Import OBJ Model</button>
                             <label style="font-size:12px;">Move <input type="number" id="snap-move" value="1" style="width:48px; padding:2px;"></label>
                             <label style="font-size:12px;">Rot <input type="number" id="snap-rot" value="15" style="width:48px; padding:2px;"></label>
                             <label style="font-size:12px;">Scale <input type="number" id="snap-scale" value="1" style="width:48px; padding:2px;"></label>
@@ -2048,6 +2047,23 @@
         <input type="number" id="model-price" class="form-control mb-10" placeholder="Price in SC (0 for free)">
         <button class="btn btn-success mt-10" style="width:100%;" onclick="uploadModelToToolbox()">Publish</button>
         <button class="btn btn-danger mt-10" style="width:100%;" onclick="document.getElementById('upload-model-modal').style.display='none'">Cancel</button>
+    </div>
+</div>
+
+<div id="obj-import-modal" class="modal-overlay">
+    <div class="modal-box" style="text-align:left; max-width:520px; width:100%;">
+        <h2 style="margin-top:0;">Import OBJ Model</h2>
+        <p style="font-size:12px; color:#666; margin-top:-6px;">Choose OBJ + MTL + textures from the same export folder. Textures will auto-attach from MTL references.</p>
+        <label style="font-size:12px; font-weight:700;">OBJ File</label>
+        <input type="file" id="obj-import-obj" class="form-control mb-10" accept=".obj,text/plain,model/obj">
+        <label style="font-size:12px; font-weight:700;">MTL File (Optional)</label>
+        <input type="file" id="obj-import-mtl" class="form-control mb-10" accept=".mtl,text/plain">
+        <label style="font-size:12px; font-weight:700;">Texture Files (Optional, multiple)</label>
+        <input type="file" id="obj-import-textures" class="form-control mb-10" accept=".png,.jpg,.jpeg,.bmp,.tga,image/*" multiple>
+        <div class="flex-center" style="justify-content:flex-end;">
+            <button class="btn btn-danger" onclick="closeOBJImportModal()">Cancel</button>
+            <button class="btn btn-success" onclick="handleOBJImportFromModal()">Import</button>
+        </div>
     </div>
 </div>
 
@@ -7510,21 +7526,21 @@ const promptClearEditor = () => {
         };
 
         const triggerOBJImport = () => {
-            const input = document.getElementById('obj-import-input');
-            if (input) input.click();
+            const modal = document.getElementById('obj-import-modal');
+            if (modal) modal.style.display = 'flex';
         };
 
-        const handleOBJImport = async (event) => {
-            const files = Array.from(event?.target?.files || []);
-            if (!files.length) return;
+        const closeOBJImportModal = () => {
+            const modal = document.getElementById('obj-import-modal');
+            if (modal) modal.style.display = 'none';
+        };
+
+        const handleOBJImport = async ({ objFile, mtlFile = null, textureFiles = [] } = {}) => {
+            if (!objFile) return showModal('Import Failed', 'Please select an .obj file.');
             try {
-                const objFile = files.find(f => /\.obj$/i.test(f.name));
-                if (!objFile) return showModal('Import Failed', 'Please select an .obj file.');
                 const text = await objFile.text();
                 if (!text.trim()) return showModal('Import Failed', 'OBJ file is empty.');
-                const mtlFile = files.find(f => /\.mtl$/i.test(f.name));
                 const mtlText = mtlFile ? await mtlFile.text() : '';
-                const textureFiles = files.filter(f => /\.(png|jpe?g|bmp|tga)$/i.test(f.name));
                 const textureMap = {};
                 for (const tf of textureFiles) {
                     const dataUrl = await new Promise((resolve) => {
@@ -7563,14 +7579,24 @@ const promptClearEditor = () => {
                 recordEdit();
                 const mtlMsg = mtlFile ? 'MTL loaded.' : 'No MTL found (colors/materials may be basic).';
                 showModal('OBJ Imported', `${objFile.name} imported.\n${mtlMsg}\nTextures detected: ${textureFiles.length}.`);
+                closeOBJImportModal();
             } catch (e) {
                 showModal('Import Failed', 'Could not parse OBJ file.');
-            } finally {
-                if (event?.target) event.target.value = '';
             }
+        };
+        const handleOBJImportFromModal = async () => {
+            const objInput = document.getElementById('obj-import-obj');
+            const mtlInput = document.getElementById('obj-import-mtl');
+            const texInput = document.getElementById('obj-import-textures');
+            const objFile = (objInput?.files || [])[0];
+            const mtlFile = (mtlInput?.files || [])[0] || null;
+            const textureFiles = Array.from(texInput?.files || []);
+            await handleOBJImport({ objFile, mtlFile, textureFiles });
         };
         window.triggerOBJImport = triggerOBJImport;
         window.handleOBJImport = handleOBJImport;
+        window.handleOBJImportFromModal = handleOBJImportFromModal;
+        window.closeOBJImportModal = closeOBJImportModal;
 
 
         
