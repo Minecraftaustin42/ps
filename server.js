@@ -25,6 +25,7 @@ let chatActivity = {}; // Tracks timestamps for spam { userId: [timestamps] }
 let chatSuspensions = {}; // Tracks suspensions { userId: unbanTimestamp }
 
 let activeEditors = {}; 
+let deletedObjectTombstones = {}; // { [gameId]: { [objectId]: { ownerId, deletedAt } } }
 let activePlayers = {}; 
 let activePlayDynamic = {};
 let onlineUsers = {};   
@@ -3001,20 +3002,31 @@ app.post('/api/games/:id/sync', requireAuth, (req, res) => {
             const existingById = new Map((existingData.objects || []).map(o => [o.id, o]));
             const incomingById = new Map((incomingData.objects || []).map(o => [o.id, o]));
             const mergedObjects = [];
+            if (!deletedObjectTombstones[game.id]) deletedObjectTombstones[game.id] = {};
+            const gameTombstones = deletedObjectTombstones[game.id];
+            const now = Date.now();
+            Object.keys(gameTombstones).forEach((objId) => {
+                if (now - (gameTombstones[objId].deletedAt || 0) > 120000) delete gameTombstones[objId];
+            });
 
             existingById.forEach((oldObj, id) => {
                 const ownerId = oldObj.ownerId || game.authorId;
                 const incomingObj = incomingById.get(id);
                 if (!incomingObj) {
                     if (ownerId !== req.userId) mergedObjects.push({ ...oldObj, ownerId });
+                    else gameTombstones[id] = { ownerId, deletedAt: now };
                     return;
                 }
                 if (ownerId !== req.userId) mergedObjects.push({ ...oldObj, ownerId });
                 else mergedObjects.push({ ...incomingObj, ownerId });
+                if (gameTombstones[id]) delete gameTombstones[id];
                 incomingById.delete(id);
             });
             incomingById.forEach((newObj) => {
+                const tombstone = gameTombstones[newObj.id];
+                if (tombstone && tombstone.ownerId !== req.userId) return;
                 mergedObjects.push({ ...newObj, ownerId: req.userId });
+                if (gameTombstones[newObj.id]) delete gameTombstones[newObj.id];
             });
 
             if (req.userId !== game.authorId) {
