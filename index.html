@@ -12405,6 +12405,10 @@ async function unlockModPanel() {
 
 function startModWatchdog() {
     if (modPanelInterval) clearInterval(modPanelInterval);
+    if (reportsPollInterval) clearInterval(reportsPollInterval);
+    reportsPollInterval = setInterval(() => {
+        if (document.getElementById('view-mod-panel').classList.contains('active')) loadReportsModerationQueue(true);
+    }, 3000);
 
     modPanelInterval = setInterval(async () => {
         try {
