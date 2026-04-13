@@ -3015,9 +3015,9 @@ checkDailyReward(); // <-- ADDED HERE
                 updateCoinsUI();
 loadSponsoredAssetsDashboard(); // Add this line!
                 loadDashboardGames();
-                loadDashboardFriends();
+                loadDashboardFriends(false);
                 if (!dashboardFriendsInterval) dashboardFriendsInterval = setInterval(() => {
-                    if (document.getElementById('view-dashboard').classList.contains('active')) loadDashboardFriends();
+                    if (document.getElementById('view-dashboard').classList.contains('active')) loadDashboardFriends(true);
                 }, 2500);
                 loadCreatorChallenges();
             } else if (viewId === 'library') {
@@ -4602,7 +4602,7 @@ const dom = edRenderer.domElement;
                 const intersects = raycaster.intersectObjects(editorMeshes, true);
                 if (intersects.length > 0) {
                     let obj = intersects[0].object;
-                    while (obj.parent && obj.parent.type === 'Group') obj = obj.parent;
+                    while (obj.parent && obj.parent.type === 'Group' && !(obj.parent.userData && obj.parent.userData.isChunkGroup)) obj = obj.parent;
                     selectObject(obj, e.shiftKey || isMultiSelect);
 
                     if (currentEditMode === 'select' && !obj.userData.isSpawn) {
@@ -5594,10 +5594,11 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
         window.setClothingZoom = setClothingZoom;
 
         // --- Dashboard & Library ---
-        const loadDashboardFriends = async () => {
+        const loadDashboardFriends = async (silent = false) => {
             const grid = document.getElementById('dashboard-friends-grid');
             if (!grid) return;
-            grid.innerHTML = '<p style="color:#7f8c8d;">Loading friends...</p>';
+            const hasExistingCards = grid.children && grid.children.length > 0;
+            if (!silent || !hasExistingCards) grid.innerHTML = '<p style="color:#7f8c8d;">Loading friends...</p>';
             try {
                 const friends = await apiCall('/friends');
                 if (!friends || friends.length === 0) {
@@ -7738,6 +7739,7 @@ playerObj = {
             if (map.has(key)) return map.get(key);
             const grp = new THREE.Group();
             grp.userData.chunkKey = key;
+            grp.userData.isChunkGroup = true;
             const [cx, cz] = key.split(':').map(Number);
             grp.userData.chunkCenter = new THREE.Vector3((cx + 0.5) * CHUNK_SIZE, yLift, (cz + 0.5) * CHUNK_SIZE);
             grp.userData.chunkRadius = Math.sqrt(2) * (CHUNK_SIZE * 0.5) + 120;
