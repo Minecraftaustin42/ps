@@ -1680,6 +1680,12 @@
                             <label style="font-size:12px; font-weight:bold;">Exposure:</label>
                             <input type="number" id="ws-exposure" class="form-control" value="1.0" step="0.1" onchange="updateWorldSettings()">
                         </div>
+                        <div class="form-group">
+                            <label style="font-size:12px; font-weight:bold; display:flex; align-items:center; gap:8px;">
+                                <input type="checkbox" id="ws-global-shadows" checked onchange="updateWorldSettings()">
+                                Enable Global Shadows
+                            </label>
+                        </div>
                     </div>
 
                     <div id="studio-mobile-controls">
@@ -1758,6 +1764,10 @@
 <div class="form-group mb-10">
     <label>CanCollide:</label>
     <input type="checkbox" id="prop-cancollide" checked>
+</div>
+<div class="form-group mb-10">
+    <label>Cast Shadow:</label>
+    <input type="checkbox" id="prop-castshadow" checked>
 </div>
 
                         <div class="form-group mb-10">
@@ -5930,11 +5940,31 @@ const NOSTALGIA_GRAPHICS_DEFAULTS = {
     sunIntensity: 0.88,
     fogDistance: 980,
     graphicsQuality: 'high',
-    exposure: 0.98
+    exposure: 0.98,
+    globalShadows: true
 };
+const NOSTALGIA_PROFILE_VERSION = 1;
 const applyNostalgiaWorldDefaults = (settings = {}) => ({ ...NOSTALGIA_GRAPHICS_DEFAULTS, ...(settings || {}) });
+const normalizeNostalgiaWorldSettings = (settings = {}) => {
+    const merged = applyNostalgiaWorldDefaults(settings || {});
+    const currentVersion = Number(settings?.graphicsProfileVersion || 0);
+    if (currentVersion < NOSTALGIA_PROFILE_VERSION) {
+        merged.skyColor = NOSTALGIA_GRAPHICS_DEFAULTS.skyColor;
+        merged.brightness = NOSTALGIA_GRAPHICS_DEFAULTS.brightness;
+        merged.sunIntensity = NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity;
+        merged.fogDistance = NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance;
+        merged.graphicsQuality = NOSTALGIA_GRAPHICS_DEFAULTS.graphicsQuality;
+        merged.exposure = NOSTALGIA_GRAPHICS_DEFAULTS.exposure;
+        merged.globalShadows = NOSTALGIA_GRAPHICS_DEFAULTS.globalShadows;
+    }
+    merged.graphicsProfileVersion = NOSTALGIA_PROFILE_VERSION;
+    return merged;
+};
+const areGlobalShadowsEnabled = (settings = {}) => settings?.globalShadows !== false;
+const objectCastsShadow = (objData = {}, settings = {}) => areGlobalShadowsEnabled(settings) && objData?.castsShadow !== false && objData?.type !== 'floatingText';
+const withLegacyShadowDefaults = (obj = {}) => ({ ...obj, castsShadow: obj?.castsShadow !== false && obj?.type !== 'floatingText' });
 let edData = { 
-            settings: applyNostalgiaWorldDefaults({ skyColor: '#7fbeff', brightness: 0.72 }), // Nostalgic default look
+            settings: normalizeNostalgiaWorldSettings({ skyColor: '#7fbeff', brightness: 0.72 }), // Nostalgic default look
             spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, 
             objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], 
             uiLayout: [],
@@ -6096,11 +6126,11 @@ let currentTransformSpace = 'local';
         // Auto-convert old grid games into the new freeform format
        // Auto-convert old grid games into the new freeform format
         const migrateLevelDataTo3D = (levelData) => {
-            let newData = { settings: applyNostalgiaWorldDefaults(), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
-            if (levelData.settings) newData.settings = applyNostalgiaWorldDefaults(levelData.settings);
+            let newData = { settings: normalizeNostalgiaWorldSettings(), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [], genre: 'Sandbox' };
+            if (levelData.settings) newData.settings = normalizeNostalgiaWorldSettings(levelData.settings);
             if (levelData.objects) { 
                 (levelData.objects || []).forEach(ensureSmartLogicDefaults);
-                newData.objects = levelData.objects; 
+                newData.objects = (levelData.objects || []).map(withLegacyShadowDefaults); 
                 newData.spawn = levelData.spawn; 
                 if (levelData.terrain) newData.terrain = levelData.terrain; // FIX: Ensure terrain loads!
                 return newData; 
@@ -6696,6 +6726,7 @@ document.addEventListener('keydown', (e) => {
                         }
                         document.getElementById('prop-anchored').checked = objData.isAnchored !== false;
                         document.getElementById('prop-cancollide').checked = objData.canCollide !== false;
+                        document.getElementById('prop-castshadow').checked = objData.castsShadow !== false && objData.type !== 'floatingText';
                         const tr = Math.max(0, Math.min(1, typeof objData.transparency === 'number' ? objData.transparency : (1 - (typeof primary.material?.opacity === 'number' ? primary.material.opacity : 1))));
                         document.getElementById('prop-transparency').value = tr.toFixed(1);
                         const smartSection = document.getElementById('smart-props-section');
@@ -6736,6 +6767,7 @@ document.addEventListener('keydown', (e) => {
             const color = document.getElementById('prop-color').value;
             const material = document.getElementById('prop-material').value;
             const transparency = Math.max(0, Math.min(1, parseFloat((document.getElementById('prop-transparency') || {}).value) || 0));
+            const castsShadow = !!((document.getElementById('prop-castshadow') || {}).checked);
             const floatingTextValue = (document.getElementById('prop-ftext') || {}).value || 'Text';
             const floatingFont = (document.getElementById('prop-ffont') || {}).value || 'Arial';
             const floatingSize = Math.max(8, Math.min(160, parseInt((document.getElementById('prop-fsize') || {}).value, 10) || 40));
@@ -6752,6 +6784,7 @@ document.addEventListener('keydown', (e) => {
                     objData.color = color;
                     objData.material = material;
                     objData.transparency = transparency;
+                    objData.castsShadow = castsShadow && objData.type !== 'floatingText';
                     if (objData.type === 'floatingText') {
                         objData.text = floatingTextValue;
                         objData.fontFamily = floatingFont;
@@ -6770,6 +6803,9 @@ document.addEventListener('keydown', (e) => {
                     }
                     mesh.material.transparent = transparency > 0 || mesh.material.transparent;
                     mesh.material.opacity = Math.max(0.02, 1 - transparency);
+                    mesh.userData.castsShadow = objData.castsShadow !== false && objData.type !== 'floatingText';
+                    mesh.castShadow = objectCastsShadow(objData, edData.settings);
+                    mesh.receiveShadow = areGlobalShadowsEnabled(edData.settings);
                     applyFloatingTextVisual(mesh, objData);
                 }
             });
@@ -6931,7 +6967,7 @@ document.addEventListener('keydown', (e) => {
             
             isEditingSettings = true; renderExplorer();
             
-if(!edData.settings) edData.settings = applyNostalgiaWorldDefaults({ skyColor: '#7fbeff', brightness: 0.72 });
+            edData.settings = normalizeNostalgiaWorldSettings(edData.settings || { skyColor: '#7fbeff', brightness: 0.72 });
             if (typeof edData.settings.sunIntensity === 'undefined') edData.settings.sunIntensity = NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity;
             if (typeof edData.settings.fogDistance === 'undefined') edData.settings.fogDistance = NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance;
             if (typeof edData.settings.graphicsQuality === 'undefined') edData.settings.graphicsQuality = 'high';
@@ -6944,6 +6980,9 @@ if(!edData.settings) edData.settings = applyNostalgiaWorldDefaults({ skyColor: '
             setValue('ws-fog-distance', edData.settings.fogDistance);
             setValue('ws-graphics-quality', edData.settings.graphicsQuality);
             setValue('ws-exposure', edData.settings.exposure);
+            setValue('ws-global-shadows', areGlobalShadowsEnabled(edData.settings));
+            const globalShadowsEl = document.getElementById('ws-global-shadows');
+            if (globalShadowsEl) globalShadowsEl.checked = areGlobalShadowsEnabled(edData.settings);
             const panel = document.getElementById('world-settings-panel');
             if (panel) panel.style.display = 'block';
         };
@@ -6958,6 +6997,8 @@ if(!edData.settings) edData.settings = applyNostalgiaWorldDefaults({ skyColor: '
             edData.settings.fogDistance = parseFloat((val('ws-fog-distance') || {}).value) || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance;
             edData.settings.graphicsQuality = ((val('ws-graphics-quality') || {}).value) || 'high';
             edData.settings.exposure = parseFloat((val('ws-exposure') || {}).value) || NOSTALGIA_GRAPHICS_DEFAULTS.exposure;
+            edData.settings.globalShadows = !!((val('ws-global-shadows') || {}).checked);
+            edData.settings.graphicsProfileVersion = NOSTALGIA_PROFILE_VERSION;
             applyWorldSettings(); recordEdit();
         };
 
@@ -6970,7 +7011,7 @@ if(!edData.settings) edData.settings = applyNostalgiaWorldDefaults({ skyColor: '
                 edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.28, fogDistance);
                 if (edRenderer) {
                     const q = (edData.settings.graphicsQuality === 'ultra') ? 'ultra' : 'high';
-                    const shadow = true;
+                    const shadow = areGlobalShadowsEnabled(edData.settings);
                     edRenderer.toneMapping = THREE.ACESFilmicToneMapping;
                     edRenderer.toneMappingExposure = Math.max(0.65, Math.min(1.6, (edData.settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
                     edRenderer.outputEncoding = THREE.sRGBEncoding;
@@ -6984,6 +7025,14 @@ if(!edData.settings) edData.settings = applyNostalgiaWorldDefaults({ skyColor: '
                         edDirectionalLight.shadow.bias = -0.0005;
                     }
                 }
+                editorMeshes.forEach((mesh) => {
+                    if (!mesh || mesh.userData?.isSpawn) return;
+                    const objData = edData.objects.find(o => o.id === mesh.userData?.id);
+                    if (!objData) return;
+                    mesh.castShadow = objectCastsShadow(objData, edData.settings);
+                    mesh.receiveShadow = shadow;
+                });
+                if (terrainMesh) terrainMesh.receiveShadow = shadow;
             }
         };
 
@@ -7363,6 +7412,7 @@ if (item.type === 'button' && item.onClickEvent) {
             objData.isAnchored = mesh.userData.isAnchored;
             objData.canCollide = mesh.userData.canCollide;
             objData.noCollide = mesh.userData.canCollide === false;
+            objData.castsShadow = mesh.userData.castsShadow !== false && objData.type !== 'floatingText';
             // ---------------------------
         }
     }
@@ -7381,7 +7431,7 @@ const promptClearEditor = () => {
         // --- Editor Core Engine ---
      const clearEditor = () => {
             currentEditGameId = null; 
-            edData = { settings: applyNostalgiaWorldDefaults({ skyColor: '#7fbeff', brightness: 0.72 }), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
+            edData = { settings: normalizeNostalgiaWorldSettings({ skyColor: '#7fbeff', brightness: 0.72 }), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
@@ -7437,12 +7487,16 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+                    const blockCastsShadow = objectCastsShadow(objData, edData.settings);
+                    mesh.castShadow = blockCastsShadow;
+                    mesh.receiveShadow = areGlobalShadowsEnabled(edData.settings);
                     mesh.userData = {
                 id: objData.id, 
                 isSpawn: false, 
                 type: objData.type,
                 isAnchored: objData.isAnchored !== false, // Defaults to true
-                canCollide: objData.canCollide !== false  // Defaults to true
+                canCollide: objData.canCollide !== false,  // Defaults to true
+                castsShadow: objData.castsShadow !== false && objData.type !== 'floatingText'
             };
                     if (objData.type === 'floatingText') applyFloatingTextVisual(mesh, objData);
 
@@ -7480,6 +7534,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     bumpScale: 0.8,
                     side: THREE.DoubleSide 
                 }));
+                terrainMesh.receiveShadow = areGlobalShadowsEnabled(edData.settings);
                 edScene.add(terrainMesh);
 
                 terrainCursor = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 4, 16), new THREE.MeshBasicMaterial({ color: 0xff0000, wireframe: true, transparent: true, opacity: 0.5 }));
@@ -8075,11 +8130,12 @@ const applyPlayGraphicsSettings = (settings = {}) => {
             playRenderer.toneMappingExposure = exposure;
             playRenderer.outputEncoding = THREE.sRGBEncoding;
             playRenderer.physicallyCorrectLights = true;
-            playRenderer.shadowMap.enabled = true;
+            const shadowsEnabled = areGlobalShadowsEnabled(settings);
+            playRenderer.shadowMap.enabled = shadowsEnabled;
             playRenderer.shadowMap.type = quality === 'ultra' ? THREE.PCFSoftShadowMap : THREE.PCFSoftShadowMap;
             if (playDirectionalLight) {
                 playDirectionalLight.intensity = Math.max(0.45, settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
-                playDirectionalLight.castShadow = playRenderer.shadowMap.enabled;
+                playDirectionalLight.castShadow = shadowsEnabled;
                 playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 1024 : 512, quality === 'ultra' ? 1024 : 512);
                 playDirectionalLight.shadow.radius = 3.4;
                 playDirectionalLight.shadow.bias = -0.0005;
@@ -8146,7 +8202,7 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
 
             stopGameLoop(); setupMobileControls();
             
-            activeLevel.settings = applyNostalgiaWorldDefaults(activeLevel.settings || {});
+            activeLevel.settings = normalizeNostalgiaWorldSettings(activeLevel.settings || {});
             
             playScene.background = new THREE.Color(activeLevel.settings.skyColor);
             playScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = activeLevel.settings.brightness; });
@@ -8591,8 +8647,8 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         childMesh.position.set(cData.position.x, cData.position.y, cData.position.z);
                         childMesh.rotation.set(cData.rotation.x, cData.rotation.y, cData.rotation.z);
                         childMesh.scale.set(cData.scale.x, cData.scale.y, cData.scale.z);
-                        childMesh.castShadow = true;
-                        childMesh.receiveShadow = true;
+                        childMesh.castShadow = objectCastsShadow(cData, activeLevel.settings);
+                        childMesh.receiveShadow = areGlobalShadowsEnabled(activeLevel.settings);
                         childMesh.userData = { type: cData.type };
                         group.add(childMesh);
                         playMeshes.push(childMesh); // Push children to playMeshes so seats can be detected!
@@ -8637,9 +8693,10 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         const objTransparency = Math.max(0, Math.min(1, objData.transparency || 0));
                         const chunkKey = chunkKeyFromPos(objData.position || {});
                         const matType = objData.material || 'Plastic';
-                        const key = `${chunkKey}|${objData.type}|${matType}|${objData.color || '#3498db'}|${objTransparency.toFixed(2)}`;
+                        const castsShadow = objectCastsShadow(objData, activeLevel.settings);
+                        const key = `${chunkKey}|${objData.type}|${matType}|${objData.color || '#3498db'}|${objTransparency.toFixed(2)}|${castsShadow ? 1 : 0}`;
                         if (!instancedBuckets.has(key)) {
-                            instancedBuckets.set(key, { chunkKey, type: objData.type, material: matType, color: objData.color || '#3498db', transparency: objTransparency, entries: [] });
+                            instancedBuckets.set(key, { chunkKey, type: objData.type, material: matType, color: objData.color || '#3498db', transparency: objTransparency, entries: [], castsShadow });
                         }
                         instancedBuckets.get(key).entries.push(objData);
                         const sx = Math.abs(objData.scale?.x || 1), sy = Math.abs(objData.scale?.y || 1), sz = Math.abs(objData.scale?.z || 1);
@@ -8655,8 +8712,8 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
-                    mesh.castShadow = objData.type !== 'floatingText';
-                    mesh.receiveShadow = true;
+                    mesh.castShadow = objectCastsShadow(objData, activeLevel.settings);
+                    mesh.receiveShadow = areGlobalShadowsEnabled(activeLevel.settings);
                     mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: (objData.noCollide || objData.canCollide === false), isAnchored: objData.isAnchored !== false, smart: objData.smart || null, smartState: {} };
                     if (objData.type === 'floatingText') applyFloatingTextVisual(mesh, objData);
 
@@ -8684,8 +8741,8 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mat.transparent = bucket.transparency > 0 || mat.transparent;
                     mat.opacity = Math.max(0.02, 1 - bucket.transparency);
                     const iMesh = new THREE.InstancedMesh(geo, mat, bucket.entries.length);
-                    iMesh.castShadow = true;
-                    iMesh.receiveShadow = true;
+                    iMesh.castShadow = !!bucket.castsShadow;
+                    iMesh.receiveShadow = areGlobalShadowsEnabled(activeLevel.settings);
                     iMesh.userData = { type: bucket.type, isInstancedStatic: true };
                     bucket.entries.forEach((objData, idx) => {
                         tempObj.position.set(objData.position.x, objData.position.y, objData.position.z);
@@ -8717,7 +8774,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     bumpMap: terrainTex,
                     bumpScale: 0.8
                 }));
-                playTerrain.receiveShadow = true;
+                playTerrain.receiveShadow = areGlobalShadowsEnabled(activeLevel.settings);
                 playScene.add(playTerrain); window.playTerrainMesh = playTerrain; 
             }
 
@@ -11378,6 +11435,21 @@ document.getElementById('prop-cancollide').addEventListener('change', (e) => {
             objData.canCollide = e.target.checked;
             objData.noCollide = !e.target.checked;
         }
+    });
+    recordEdit();
+});
+
+document.getElementById('prop-castshadow').addEventListener('change', (e) => {
+    if (selectedObjects.length === 0) return;
+    const enabled = !!e.target.checked;
+    selectedObjects.forEach(mesh => {
+        if (mesh.userData.isSpawn) return;
+        const objData = edData.objects.find(o => o.id === mesh.userData.id);
+        if (!objData) return;
+        objData.castsShadow = enabled && objData.type !== 'floatingText';
+        mesh.userData.castsShadow = objData.castsShadow;
+        mesh.castShadow = objectCastsShadow(objData, edData.settings);
+        mesh.receiveShadow = areGlobalShadowsEnabled(edData.settings);
     });
     recordEdit();
 });

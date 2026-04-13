@@ -218,7 +218,9 @@ const sanitizeGameData = (gameData) => {
             sunIntensity: sanitizeNumber(gameData?.settings?.sunIntensity, nostalgiaDefaults.sunIntensity, 0.2, 2),
             fogDistance: sanitizeNumber(gameData?.settings?.fogDistance, nostalgiaDefaults.fogDistance, 200, 3000),
             graphicsQuality: ['high', 'ultra'].includes(gameData?.settings?.graphicsQuality) ? gameData.settings.graphicsQuality : nostalgiaDefaults.graphicsQuality,
-            exposure: sanitizeNumber(gameData?.settings?.exposure, nostalgiaDefaults.exposure, 0.4, 2.5)
+            exposure: sanitizeNumber(gameData?.settings?.exposure, nostalgiaDefaults.exposure, 0.4, 2.5),
+            globalShadows: gameData?.settings?.globalShadows !== false,
+            graphicsProfileVersion: Number.isFinite(Number(gameData?.settings?.graphicsProfileVersion)) ? Number(gameData.settings.graphicsProfileVersion) : 1
         },
         spawn: gameData?.spawn ? {
             x: sanitizeNumber(gameData.spawn.x, 0, -5000, 5000),
@@ -261,7 +263,8 @@ const sanitizeGameData = (gameData) => {
             script: String(obj.script || '').slice(0, 12000),
             isAnchored: obj.isAnchored !== false,
             canCollide: obj.canCollide !== false,
-            noCollide: !!obj.noCollide
+            noCollide: !!obj.noCollide,
+            castsShadow: obj.castsShadow !== false && String(obj.type || '').trim() !== 'floatingText'
         };
 
         if (obj.smart && typeof obj.smart === 'object') {
