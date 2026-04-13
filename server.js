@@ -140,6 +140,7 @@ if (!g.analytics) {
         db.groups.forEach(gr => {
             if (typeof gr.level === 'undefined') gr.level = 1;
             if (typeof gr.xp === 'undefined') gr.xp = 0;
+            if (typeof gr.logo === 'undefined') gr.logo = '';
             if (!gr.events) gr.events = [];
 
             if (!gr.affiliates) gr.affiliates = [];
@@ -1525,7 +1526,7 @@ app.get('/api/groups/discover', (req, res) => {
 
         return {
             id: gr.id, name: gr.name, description: gr.description, 
-            members: gr.members.length, level: gr.level || 1,
+            members: gr.members.length, level: gr.level || 1, logo: gr.logo || '',
             createdAt: gr.createdAt || 0, activityScore
         };
     });
@@ -1541,17 +1542,22 @@ app.get('/api/groups/search', (req, res) => {
     const query = (req.query.q || '').toLowerCase();
     const results = db.groups
         .filter(gr => gr.name.toLowerCase().includes(query) || gr.description.toLowerCase().includes(query))
-        .map(gr => ({ id: gr.id, name: gr.name, description: gr.description, members: gr.members.length, level: gr.level || 1 }))
+        .map(gr => ({ id: gr.id, name: gr.name, description: gr.description, members: gr.members.length, level: gr.level || 1, logo: gr.logo || '' }))
         .slice(0, 20);
     res.json(results);
 });
 
 app.post('/api/groups', requireAuth, (req, res) => {
-    const { name, description } = req.body;
+    const { name, description, logo } = req.body;
+    const creator = db.users.find(u => u.id === req.userId);
+    if (!creator) return res.status(401).json({ error: 'Unauthorized.' });
     if (!name || name.trim().length < 3) return res.status(400).json({ error: 'Group name too short.' });
     if (db.groups.find(gr => gr.name.toLowerCase() === name.toLowerCase())) {
         return res.status(400).json({ error: 'Group name already taken.' });
     }
+    const GROUP_CREATE_COST = 100;
+    if ((creator.coins || 0) < GROUP_CREATE_COST) return res.status(400).json({ error: `You need ${GROUP_CREATE_COST} SC to create a group.` });
+    creator.coins -= GROUP_CREATE_COST;
 
     const rOwnerId = crypto.randomUUID();
     const rMemberId = crypto.randomUUID();
@@ -1562,6 +1568,7 @@ app.post('/api/groups', requireAuth, (req, res) => {
 
     const newGroup = {
         id: crypto.randomUUID(), name: name.trim(), description: description || '',
+        logo: typeof logo === 'string' ? logo.slice(0, 2000000) : '',
         ownerId: req.userId, shout: null,
         roles: [
             { id: rOwnerId, name: 'Owner', rank: 255, perms: ownerPerms },
@@ -1574,7 +1581,18 @@ app.post('/api/groups', requireAuth, (req, res) => {
     };
     db.groups.push(newGroup);
     saveDB();
-    res.json({ message: 'Group created!', groupId: newGroup.id });
+    res.json({ message: 'Group created!', groupId: newGroup.id, coins: creator.coins, cost: GROUP_CREATE_COST });
+});
+
+app.put('/api/groups/:id/logo', requireAuth, (req, res) => {
+    const group = db.groups.find(gr => gr.id === req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+    const perms = getGroupMemberPerms(group, req.userId);
+    if (!perms || !perms.manageRanks) return res.status(403).json({ error: 'Permission denied.' });
+    const logo = typeof req.body.logo === 'string' ? req.body.logo.slice(0, 2000000) : '';
+    group.logo = logo;
+    saveDB();
+    res.json({ success: true, logo: group.logo });
 });
 
 
@@ -1716,6 +1734,7 @@ res.json({
     id: group.id,
     name: group.name,
     description: group.description,
+    logo: group.logo || '',
     groupCoins: group.coins || 0,
     level: group.level,
     xp: group.xp,

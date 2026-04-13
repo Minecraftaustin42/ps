@@ -787,7 +787,10 @@
         <div id="view-group-detail" class="view">
             <div class="card">
                 <div class="card-title">
-                    <h2 style="margin: 0;" id="gd-name">Group Name</h2>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <img id="gd-logo" src="" alt="Group Logo" style="width:48px; height:48px; border-radius:8px; object-fit:cover; border:1px solid #ccd4dd; background:#f2f4f7; display:none;">
+                        <h2 style="margin: 0;" id="gd-name">Group Name</h2>
+                    </div>
                     <div style="display:flex; gap:10px;">
                         <button class="btn btn-sm btn-info" id="btn-group-join" style="display:none;" onclick="joinGroup()">Join Group</button>
                         <button class="btn btn-sm btn-danger" id="btn-group-leave" style="display:none;" onclick="leaveGroup()">Leave Group</button>
@@ -997,6 +1000,12 @@
                                     <input type="number" id="grp-payout-amount" class="form-control" placeholder="Amount" style="width:80px;">
                                     <button class="btn btn-sm btn-success" onclick="adminPayout()">Pay</button>
                                 </div>
+                            </div>
+
+                            <div id="grp-admin-logo" style="display:none; margin-top:15px; padding-top:15px; border-top:1px solid #eee;">
+                                <h4 style="margin-top:0; margin-bottom:10px;">Group Logo</h4>
+                                <input type="text" id="grp-logo-url" class="form-control mb-10" placeholder="https://... or data:image/...">
+                                <button class="btn btn-sm btn-info" onclick="saveGroupLogo()">Save Logo</button>
                             </div>
 
                         </div>
@@ -3291,8 +3300,10 @@ else if (viewId === 'groups') {
         let currentCategoryId = null;
 
     const renderGroupCard = (gr) => {
+            const logo = gr.logo ? `<img src="${gr.logo}" alt="${gr.name} logo" style="width:46px;height:46px;border-radius:8px;object-fit:cover;border:1px solid #d0d7de;background:#f3f5f7;margin:0 auto 8px auto;display:block;">` : `<div style="width:46px;height:46px;border-radius:8px;background:#e8eef5;border:1px solid #d0d7de;margin:0 auto 8px auto;display:flex;align-items:center;justify-content:center;font-weight:700;color:#6b7a8a;">${(gr.name || 'G').slice(0,1).toUpperCase()}</div>`;
             return `
                 <div class="game-card" onclick="loadGroupDetail('${gr.id}')" style="cursor:pointer; transition: transform 0.2s;">
+                    ${logo}
                     <h3 style="margin-bottom:5px; color:#2c3e50;">${gr.name}</h3>
                     <p style="font-size:12px; color:#777; margin-bottom:10px; height: 35px; overflow: hidden;">${gr.description || 'No description provided.'}</p>
                     <div style="display:flex; justify-content:space-between; font-size:11px; font-weight:bold; color:#f39c12;">
@@ -3459,12 +3470,16 @@ if (playAnimationId) cancelAnimationFrame(playAnimationId);
         
 
         const promptCreateGroup = () => {
-            showModal('Create a Group', 'Enter a name for your new group:', 'Create', async (name) => {
+            showModal('Create a Group (100 SC)', 'Enter a name for your new group:', 'Next', async (name) => {
                 if(!name) return;
-                try {
-                    const res = await apiCall('/groups', 'POST', { name, description: 'A brand new group!' });
-                    loadGroupDetail(res.groupId);
-                } catch(e) {}
+                showModal('Group Logo URL (Optional)', 'Paste a logo URL or data-image. Leave blank for default.', 'Create Group', async (logo) => {
+                    try {
+                        const res = await apiCall('/groups', 'POST', { name, description: 'A brand new group!', logo: (logo || '').trim() });
+                        if (currentUser && typeof res.coins === 'number') currentUser.coins = res.coins;
+                        updateCoinsUI();
+                        loadGroupDetail(res.groupId);
+                    } catch(e) {}
+                }, true, true);
             }, true, true);
         };
 
@@ -3635,6 +3650,16 @@ const openLuckySpin = () => {
                 // --- BASIC INFO & LEVEL REQS ---
                 document.getElementById('gd-name').innerText = group.name;
                 document.getElementById('gd-desc').innerText = group.description;
+                const gdLogo = document.getElementById('gd-logo');
+                if (gdLogo) {
+                    if (group.logo) {
+                        gdLogo.src = group.logo;
+                        gdLogo.style.display = 'block';
+                    } else {
+                        gdLogo.style.display = 'none';
+                        gdLogo.src = '';
+                    }
+                }
                 document.getElementById('gd-level').innerText = group.level || 1;
                 
                 document.getElementById('gd-xp').innerText = `${group.xp || 0} / ${group.nextLevelReqs.xp}`;
@@ -4008,6 +4033,30 @@ const openLuckySpin = () => {
             } else {
                 payoutsDiv.style.display = 'none';
             }
+
+            const logoDiv = document.getElementById('grp-admin-logo');
+            const logoInput = document.getElementById('grp-logo-url');
+            if (currentGroupData.myPerms && currentGroupData.myPerms.manageRanks) {
+                logoDiv.style.display = 'block';
+                if (logoInput) logoInput.value = currentGroupData.logo || '';
+            } else {
+                logoDiv.style.display = 'none';
+            }
+        };
+
+        const saveGroupLogo = async () => {
+            if (!currentGroupData) return;
+            const logo = ((document.getElementById('grp-logo-url') || {}).value || '').trim();
+            try {
+                const res = await apiCall(`/groups/${currentGroupData.id}/logo`, 'PUT', { logo });
+                currentGroupData.logo = res.logo || '';
+                const gdLogo = document.getElementById('gd-logo');
+                if (gdLogo) {
+                    if (currentGroupData.logo) { gdLogo.src = currentGroupData.logo; gdLogo.style.display = 'block'; }
+                    else { gdLogo.style.display = 'none'; gdLogo.src = ''; }
+                }
+                showModal('Success', 'Group logo updated.');
+            } catch(e) {}
         };
 
         const promptCreateRole = () => {
@@ -8448,7 +8497,7 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
             playerObj.z = chosenSpawn.z || 0;
             playerObj.vx = 0; playerObj.vy = 0; playerObj.vz = 0; playerObj.rotY = 0;
             playerObj.speed = 0.2;
-playerObj.jump = 4.8;
+playerObj.jump = 3.2;
             playerObj.health = 100;
             playerObj.blasterDamage = 20; playerObj.blasterSpeed = 2.5; playerObj.blasterSpread = 0; playerObj.blasterFireRate = 150; playerObj.blasterLifetime = 100; playerObj.blasterColor = '#ffff00'; playerObj.lastShotAt = 0;
             playerObj.sitting = false;
@@ -8664,7 +8713,7 @@ animatePlay();
                     teleport: (x, y, z) => { playerObj.x = safeNum(x, playerObj.x); playerObj.y = safeNum(y, playerObj.y); playerObj.z = safeNum(z, playerObj.z); },
                     addHealth: (amount = 0) => { playerObj.health = Math.max(0, Math.min(100, (playerObj.health || 100) + safeNum(amount, 0))); },
                     setWalkSpeed: (speed = 0.2) => { playerObj.speed = Math.max(0.05, Math.min(2, safeNum(speed, 0.2))); },
-                    setJumpPower: (jump = 4.8) => { playerObj.jump = Math.max(0.1, Math.min(12, safeNum(jump, 4.8))); }
+                    setJumpPower: (jump = 3.2) => { playerObj.jump = Math.max(0.1, Math.min(8, safeNum(jump, 3.2))); }
                 },
                 world: {
                     objects: () => playMeshes,
