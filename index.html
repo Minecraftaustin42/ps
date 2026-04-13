@@ -6224,7 +6224,7 @@ let edData = {
             genre: 'Sandbox' 
         };
         let currentEditGameId = null; 
-        let teamSyncInterval = null, lastLocalEditTime = 0;
+        let teamSyncInterval = null, lastLocalEditTime = 0, teamServerEditTime = 0;
         let edAnimationId = null;
 
 let edScene, edCamera, edRenderer, edControls; // Removed transformControl
@@ -6447,6 +6447,22 @@ let currentTransformSpace = 'local';
             };
         };
 
+        const teamSyncRequest = async (payload) => {
+            const token = localStorage.getItem('ps_token');
+            const res = await fetch(API_BASE + `/games/${currentEditGameId}/sync`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': token || '' },
+                body: JSON.stringify(payload)
+            });
+            const raw = await res.text();
+            let data = {};
+            try { data = raw ? JSON.parse(raw) : {}; } catch {
+                throw new Error(`Sync endpoint returned invalid response (${res.status}).`);
+            }
+            if (!res.ok) throw new Error(data.error || `Sync failed (${res.status}).`);
+            return data;
+        };
+
         const applyLocalOnlyHistoryState = (targetState) => {
             if (!targetState || !Array.isArray(targetState.objects)) return;
             const targetById = new Map((targetState.objects || []).map(o => [o.id, o]));
@@ -6494,6 +6510,7 @@ let currentTransformSpace = 'local';
                 if(game.groupId) document.getElementById('editor-group-publish').value = game.groupId;
                 edData = migrateLevelDataTo3D(game.gameData || {});
                 lastLocalEditTime = game.lastEditTime || Date.now();
+                teamServerEditTime = game.lastEditTime || 0;
                 historyStack = []; historyIndex = -1;
                 localContributionObjectIds = new Set();
                 localLockedObjectUntil = {};
@@ -8106,9 +8123,20 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                 teamSyncInFlight = true;
                 try {
                     const collabCursor = { x: edCamera.position.x, y: edCamera.position.y, z: edCamera.position.z };
-                    const res = await apiCall(`/games/${currentEditGameId}/sync`, 'POST', { gameData: edData, genre: document.getElementById('editor-genre').value, lastLocalEditTime: lastLocalEditTime, cursor: collabCursor });
-                    if (!res.acceptedLocalUpdate && res.lastEditTime > lastLocalEditTime) {
-                        mergeRemoteTeamData(res.gameData); lastLocalEditTime = res.lastEditTime; buildEditorScene();
+                    const res = await teamSyncRequest({
+                        gameData: edData,
+                        genre: document.getElementById('editor-genre').value,
+                        lastLocalEditTime: lastLocalEditTime,
+                        baseServerEditTime: teamServerEditTime,
+                        cursor: collabCursor
+                    });
+                    if (res.acceptedLocalUpdate) {
+                        teamServerEditTime = res.lastEditTime || teamServerEditTime;
+                    } else if (res.lastEditTime > teamServerEditTime) {
+                        mergeRemoteTeamData(res.gameData);
+                        teamServerEditTime = res.lastEditTime;
+                        lastLocalEditTime = res.lastEditTime;
+                        buildEditorScene();
                     }
                     renderCollaboratorCursors((res.activeEditorsData || res.cursors || res.teamCursors || res.collaborators || []).filter(c => c && c.username && c.username !== currentUser.username));
                     teamCollaboratorsOnline = (res.activeEditorsData || []).filter(c => c && c.username && c.username !== currentUser.username).length;

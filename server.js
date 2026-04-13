@@ -2967,7 +2967,7 @@ app.post('/api/games/:id/sync', requireAuth, (req, res) => {
 
         if (!canEdit) return res.status(403).json({ error: 'Not authorized.' });
 
-        const { gameData, genre, lastLocalEditTime, cursor } = req.body || {};
+        const { gameData, genre, lastLocalEditTime, cursor, baseServerEditTime } = req.body || {};
         if (!activeEditors[game.id]) activeEditors[game.id] = {};
         
         // Store their timestamp AND their 3D cursor position
@@ -2993,7 +2993,8 @@ app.post('/api/games/:id/sync', requireAuth, (req, res) => {
         }
 
         let appliedUpdate = false;
-        if (gameData && Number.isFinite(lastLocalEditTime) && lastLocalEditTime > game.lastEditTime) {
+        const hasMatchingBase = Number.isFinite(baseServerEditTime) && Number(baseServerEditTime) === Number(game.lastEditTime);
+        if (gameData && hasMatchingBase && Number.isFinite(lastLocalEditTime) && lastLocalEditTime > game.lastEditTime) {
             game.gameData = sanitizeGameData(gameData);
             if (genre) game.genre = genre;
             game.lastEditTime = lastLocalEditTime;
@@ -3001,7 +3002,15 @@ app.post('/api/games/:id/sync', requireAuth, (req, res) => {
         }
 
         // Return the new activeEditorsData array
-        res.json({ gameData: game.gameData, genre: game.genre, lastEditTime: game.lastEditTime, activeEditors: activeUsernames, activeEditorsData, acceptedLocalUpdate: appliedUpdate });
+        res.json({
+            gameData: game.gameData,
+            genre: game.genre,
+            lastEditTime: game.lastEditTime,
+            activeEditors: activeUsernames,
+            activeEditorsData,
+            acceptedLocalUpdate: appliedUpdate,
+            rejectedReason: appliedUpdate ? null : (!hasMatchingBase ? 'stale_base' : 'older_edit')
+        });
     } catch (error) {
         console.error('Team sync error:', error);
         res.status(500).json({ error: 'Team sync temporarily unavailable. Please retry.' });
