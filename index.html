@@ -6467,8 +6467,13 @@ let currentTransformSpace = 'local';
             if (!targetState || !Array.isArray(targetState.objects)) return;
             const targetById = new Map((targetState.objects || []).map(o => [o.id, o]));
             const nextById = new Map((edData.objects || []).map(o => [o.id, o]));
+            const ownedIds = new Set(
+                (edData.objects || [])
+                    .filter(o => o && o.ownerId && currentUser && o.ownerId === currentUser.userId)
+                    .map(o => o.id)
+            );
 
-            localContributionObjectIds.forEach(id => {
+            new Set([...localContributionObjectIds, ...ownedIds]).forEach(id => {
                 if (targetById.has(id)) nextById.set(id, JSON.parse(JSON.stringify(targetById.get(id))));
                 else nextById.delete(id);
             });

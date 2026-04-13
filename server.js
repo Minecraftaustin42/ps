@@ -249,6 +249,7 @@ const sanitizeGameData = (gameData) => {
         if (!obj || typeof obj !== 'object') return;
         const cleanObj = {
             id: typeof obj.id === 'string' ? obj.id.slice(0, 80) : crypto.randomUUID(),
+            ownerId: typeof obj.ownerId === 'string' ? obj.ownerId.slice(0, 80) : undefined,
             name: sanitizeText(obj.name || obj.type || 'Object', 48),
             type: sanitizeText(obj.type || 'block', 24),
             position: {
@@ -2995,7 +2996,33 @@ app.post('/api/games/:id/sync', requireAuth, (req, res) => {
         let appliedUpdate = false;
         const hasMatchingBase = Number.isFinite(baseServerEditTime) && Number(baseServerEditTime) === Number(game.lastEditTime);
         if (gameData && hasMatchingBase && Number.isFinite(lastLocalEditTime) && lastLocalEditTime > game.lastEditTime) {
-            game.gameData = sanitizeGameData(gameData);
+            const incomingData = sanitizeGameData(gameData);
+            const existingData = sanitizeGameData(game.gameData || {});
+            const existingById = new Map((existingData.objects || []).map(o => [o.id, o]));
+            const incomingById = new Map((incomingData.objects || []).map(o => [o.id, o]));
+            const mergedObjects = [];
+
+            existingById.forEach((oldObj, id) => {
+                const ownerId = oldObj.ownerId || game.authorId;
+                const incomingObj = incomingById.get(id);
+                if (!incomingObj) {
+                    if (ownerId !== req.userId) mergedObjects.push({ ...oldObj, ownerId });
+                    return;
+                }
+                if (ownerId !== req.userId) mergedObjects.push({ ...oldObj, ownerId });
+                else mergedObjects.push({ ...incomingObj, ownerId });
+                incomingById.delete(id);
+            });
+            incomingById.forEach((newObj) => {
+                mergedObjects.push({ ...newObj, ownerId: req.userId });
+            });
+
+            if (req.userId !== game.authorId) {
+                incomingData.settings = existingData.settings || incomingData.settings;
+                incomingData.spawn = existingData.spawn || incomingData.spawn;
+            }
+            incomingData.objects = mergedObjects;
+            game.gameData = incomingData;
             if (genre) game.genre = genre;
             game.lastEditTime = lastLocalEditTime;
             saveDB(); appliedUpdate = true;
