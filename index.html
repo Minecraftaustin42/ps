@@ -1628,15 +1628,15 @@
 
 <div id="script-editor-panel" style="display:none; position:absolute; top: 10px; left: 10px; right: 10px; bottom: 10px; background: rgba(30,30,30,0.95); padding: 15px; border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 200; flex-direction: column;">
                         <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap:10px; flex-wrap:wrap;">
-                            <h3 style="margin:0; color:#fff;" id="script-editor-title">JavaScript Editor</h3>
+                            <h3 style="margin:0; color:#fff;" id="script-editor-title">Sculpt Script Editor</h3>
                             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
                                 <button class="btn btn-sm btn-info" onclick="toggleUIDesigner()">UI Designer</button>
-                                <button class="btn btn-sm btn-success" onclick="saveScript()">Save JavaScript</button>
+                                <button class="btn btn-sm btn-success" onclick="saveScript()">Save Sculpt Script</button>
                                 <button class="btn btn-sm btn-danger" onclick="document.getElementById('script-editor-panel').style.display='none'">Close</button>
                             </div>
                         </div>
-                        <p style="color:#bfc9d4; font-size:12px; margin:0 0 8px 0;">Write JavaScript for play mode with <code>ctx.world</code>, <code>ctx.part</code>, <code>ctx.playerApi</code>, <code>ctx.leaderstats</code>, <code>ctx.guns</code>, <code>ctx.storage</code>, <code>ctx.input</code>, and more. Use <code>ctx.event</code> (start/update/interact/click/custom) to control execution timing.</p>
-                        <textarea id="sculptscript-editor" style="width:100%; flex:1; min-height:220px; resize:none; background:#111820; color:#dce9ff; border:1px solid #3b4e61; border-radius:6px; padding:10px; font-family:monospace; font-size:13px; line-height:1.45;" spellcheck="false" placeholder="if (ctx.event === &quot;start&quot;) {&#10;  ctx.leaderstats.set(&quot;Coins&quot;, 0);&#10;  ctx.storage.set(&quot;spawns&quot;, 0);&#10;}&#10;if (ctx.event === &quot;interact&quot;) {&#10;  ctx.guns.configurePlayer({ damage: 35, fireRate: 100, color: &quot;#ff5500&quot; });&#10;  ctx.leaderstats.add(&quot;Coins&quot;, 25);&#10;  ctx.world.message(&quot;Weapon equipped!&quot;, &quot;Loadout&quot;);&#10;}&#10;if (ctx.event === &quot;update&quot;) {&#10;  // per-frame logic here&#10;}"></textarea>
+                        <p style="color:#bfc9d4; font-size:12px; margin:0 0 8px 0;">Write simple <strong>Sculpt Script</strong> (or advanced JavaScript) for play mode. Sculpt Script lines transpile to JavaScript automatically. Trigger blocks with <code>when start</code>, <code>when click</code>, <code>when interact</code>, and <code>when update</code>. You can still use advanced <code>ctx.world</code>, <code>ctx.part</code>, <code>ctx.playerApi</code>, <code>ctx.leaderstats</code>, and <code>ctx.api</code> accessors for full power.</p>
+                        <textarea id="sculptscript-editor" style="width:100%; flex:1; min-height:220px; resize:none; background:#111820; color:#dce9ff; border:1px solid #3b4e61; border-radius:6px; padding:10px; font-family:monospace; font-size:13px; line-height:1.45;" spellcheck="false" placeholder="when start&#10;  set part.color to &#39;#22cc88&#39;&#10;  set part.name to &#39;Launch Pad&#39;&#10;end&#10;&#10;when click&#10;  say &quot;You clicked me!&quot; title &quot;Sculpt Script&quot;&#10;  add leaderboard.Coins by 5&#10;  move part by (0, 1, 0)&#10;end&#10;&#10;when update&#10;  rotate part by (0, 25, 0) deg&#10;end"></textarea>
                         <input type="hidden" id="script-editor-target-id">
                     </div>
 
@@ -6136,8 +6136,68 @@ Keep playing together for more daily rewards.`, 'Aww!');
         window.funExportNote = funExportNote;
         window.funKeyboardCheats = funKeyboardCheats;
         setInterval(() => { if (localStorage.getItem('ps_break_reminder') === '1') showModal('Break Reminder', 'Stand up, hydrate, and rest your eyes for a minute.'); }, 45 * 60 * 1000);
+        const compileSculptScript = (source = '') => {
+            const raw = String(source || '');
+            const trimmed = raw.trim();
+            if (!trimmed) return 'return;';
+            if (/\bctx\.|\bfunction\b|=>|\bconst\b|\blet\b|\bvar\b|;|\{/.test(trimmed)) return raw;
 
-        class JavaScriptEngine {
+            const lines = raw.split(/\r?\n/);
+            const out = ['const _say=(msg,title)=>ctx.world.message(String(msg||""), title||"Sculpt Script");'];
+            const stack = [];
+            const eventMap = { start: 'start', update: 'update', tick: 'update', interact: 'interact', click: 'click', equip: 'equip', unequip: 'unequip' };
+            const emit = (line) => out.push(line);
+            const parseVec3 = (txt) => {
+                const bits = String(txt || '').split(',').map(v => Number(v.trim()));
+                return [bits[0] || 0, bits[1] || 0, bits[2] || 0];
+            };
+            const toValueExpr = (value = '') => {
+                const v = String(value || '').trim();
+                if (!v) return "''";
+                if (/^['"`].*['"`]$/.test(v)) return v;
+                if (/^-?\d+(\.\d+)?$/.test(v)) return v;
+                if (/^(true|false|null|undefined)$/i.test(v)) return v.toLowerCase();
+                if (/^(ctx\.|Math\.|\{|\[)/.test(v)) return v;
+                return JSON.stringify(v);
+            };
+
+            lines.forEach((rawLine) => {
+                const line = rawLine.trim();
+                if (!line || line.startsWith('//') || line.startsWith('#')) return;
+                let m;
+                if (/^end\b/i.test(line)) { if (stack.length) stack.pop(); emit('}'); return; }
+                if ((m = line.match(/^when\s+([a-zA-Z_][\w-]*)\s*:?$/i))) {
+                    const key = m[1].toLowerCase();
+                    const ev = eventMap[key] || key;
+                    emit(`if (ctx.event === ${JSON.stringify(ev)}) {`);
+                    stack.push('when');
+                    return;
+                }
+                if ((m = line.match(/^if\s+(.+)$/i))) {
+                    let cond = m[1].trim();
+                    cond = cond.replace(/\bevent\b/gi, 'ctx.event').replace(/\bclicked\b/gi, 'ctx.input.clickPressed()').replace(/\binteractPressed\b/gi, 'ctx.input.interactPressed()').replace(/\bjumpPressed\b/gi, 'ctx.input.jumpPressed()').replace(/\bplayer\.health\b/gi, 'ctx.player.health');
+                    emit(`if (${cond}) {`);
+                    stack.push('if');
+                    return;
+                }
+                if (/^else$/i.test(line)) { emit('} else {'); return; }
+                if ((m = line.match(/^say\s+"([\s\S]+)"(?:\s+title\s+"([\s\S]+)")?$/i))) { emit(`_say(${JSON.stringify(m[1])}, ${m[2] ? JSON.stringify(m[2]) : 'undefined'});`); return; }
+                if ((m = line.match(/^set\s+([a-zA-Z][\w.]+)\s+to\s+(.+)$/i))) { emit(`ctx.api.setPath(${JSON.stringify(m[1].trim())}, ${toValueExpr(m[2])});`); return; }
+                if ((m = line.match(/^add\s+([a-zA-Z][\w.]*)\s+by\s+(.+)$/i))) { emit(`ctx.api.addPath(${JSON.stringify(m[1].trim())}, Number(${m[2].trim()}) || 0);`); return; }
+                if ((m = line.match(/^move\s+part\s+by\s*\(([^)]+)\)$/i))) { const [x,y,z] = parseVec3(m[1]); emit(`ctx.part.move(${x}, ${y}, ${z});`); return; }
+                if ((m = line.match(/^rotate\s+part\s+by\s*\(([^)]+)\)(?:\s*deg)?$/i))) { const [x,y,z] = parseVec3(m[1]); emit(`ctx.part.rotate(ctx.math.degToRad(${x}), ctx.math.degToRad(${y}), ctx.math.degToRad(${z}));`); return; }
+                if ((m = line.match(/^scale\s+part\s+to\s*\(([^)]+)\)$/i))) { const [x,y,z] = parseVec3(m[1]); emit(`ctx.part.setScale(${x}, ${y}, ${z});`); return; }
+                if ((m = line.match(/^spawn\s+([a-zA-Z][\w-]*)\s+named\s+"([^"]+)"$/i))) { emit(`ctx.world.spawnPart({ type: ${JSON.stringify(m[1])}, name: ${JSON.stringify(m[2])} });`); return; }
+                if ((m = line.match(/^on\s+click\s+say\s+"([\s\S]+)"$/i))) { emit(`if (ctx.event === 'click') _say(${JSON.stringify(m[1])});`); return; }
+                if ((m = line.match(/^sound\s+"([^"]+)"(?:\s+volume\s+([\d.]+))?$/i))) { emit(`ctx.effects.sound(${JSON.stringify(m[1])}, ${m[2] || '0.5'});`); return; }
+                if ((m = line.match(/^shoot(?:\s+color\s+"([#a-zA-Z0-9]+)")?$/i))) { emit(`ctx.effects.shoot(${m[1] ? JSON.stringify(m[1]) : "'#ffff00'"});`); return; }
+                emit(`// Sculpt Script passthrough\n${line}`);
+            });
+            while (stack.length) { stack.pop(); emit('}'); }
+            return out.join('\n');
+        };
+
+        class SculptScriptEngine {
             constructor(scriptText, contextFactory) {
                 this.rawScript = String(scriptText || '');
                 this.contextFactory = contextFactory;
@@ -6146,11 +6206,12 @@ Keep playing together for more daily rewards.`, 'Aww!');
             }
 
             compile(source) {
-                const wrapped = `"use strict";\nreturn (function runUserScript(ctx){\n${String(source || '')}\n});`;
+                const transpiled = compileSculptScript(source);
+                const wrapped = `"use strict";\nreturn (function runUserScript(ctx){\n${String(transpiled || '')}\n});`;
                 try {
                     return new Function(wrapped)();
                 } catch (e) {
-                    printOutput(`JavaScript compile error: ${e.message}`, 'error');
+                    printOutput(`Sculpt Script compile error: ${e.message}`, 'error');
                     return null;
                 }
             }
@@ -6163,7 +6224,7 @@ Keep playing together for more daily rewards.`, 'Aww!');
                 } catch (e) {
                     const now = Date.now();
                     if (now - this.lastError > 600) {
-                        printOutput(`JavaScript runtime error (${eventName}): ${e.message}`, 'error');
+                        printOutput(`Sculpt Script runtime error (${eventName}): ${e.message}`, 'error');
                         this.lastError = now;
                     }
                 }
@@ -6172,8 +6233,6 @@ Keep playing together for more daily rewards.`, 'Aww!');
             triggerEvent(eventName) { this.run(eventName || 'update'); }
             invokeHook(name) { this.run(name || 'interact'); }
         }
-
-        const SculptScriptEngine = JavaScriptEngine;
 
 
 
@@ -7663,7 +7722,7 @@ if (item.type === 'button' && item.onClickEvent) {
         const openScriptEditor = (id) => {
             const obj = edData.objects.find(o => o.id === id);
             if (!obj) return;
-            document.getElementById('script-editor-title').innerText = `JavaScript: ${obj.name}`;
+            document.getElementById('script-editor-title').innerText = `Sculpt Script: ${obj.name}`;
             document.getElementById('script-editor-target-id').value = id;
             document.getElementById('script-editor-panel').style.display = 'flex';
             document.getElementById('sculptscript-editor').value = obj.script || '';
@@ -8290,11 +8349,12 @@ playerObj = {
         window.addEventListener('pointerdown', (e) => {
             if (document.getElementById('view-play').classList.contains('active') && e.button === 0) {
                 const playEl = document.getElementById('play-container-3d');
-                if (playEl) {
-                    const rect = playEl.getBoundingClientRect();
-                    playAimNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-                    playAimNdc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
-                }
+                if (!playEl) return;
+                const rect = playEl.getBoundingClientRect();
+                const inside = e.clientX >= rect.left && e.clientX <= rect.right && e.clientY >= rect.top && e.clientY <= rect.bottom;
+                if (!inside) return;
+                playAimNdc.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+                playAimNdc.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
                 playInput.justClicked = true;
             }
         });
@@ -8822,6 +8882,53 @@ animatePlay();
                 }
                 return target;
             };
+            const pathReaders = {
+                part: () => mesh,
+                player: () => playerObj,
+                leaderboard: () => leaderboard,
+                world: () => (activeLevel?.settings || {}),
+                object: () => linkedData || {}
+            };
+            const resolvePath = (path = '') => {
+                const bits = String(path || '').split('.').filter(Boolean);
+                if (!bits.length) return { target: null, key: null, value: undefined };
+                const rootName = bits.shift();
+                const rootFactory = pathReaders[rootName] || (() => null);
+                let target = rootFactory();
+                if (target == null) return { target: null, key: null, value: undefined };
+                while (bits.length > 1) {
+                    const bit = bits.shift();
+                    if (typeof target[bit] === 'undefined' || target[bit] === null) target[bit] = {};
+                    target = target[bit];
+                }
+                const key = bits.length ? bits[0] : null;
+                return { target, key, value: key == null ? target : target?.[key] };
+            };
+            const setPath = (path, value) => {
+                const normalized = String(path || '');
+                if (normalized === 'part.color') { if (mesh?.material?.color) mesh.material.color.set(String(value)); return value; }
+                if (normalized === 'part.transparency') { applyRuntimeProperties(mesh, { transparency: safeNum(value, 0) }); return value; }
+                if (normalized === 'part.canCollide') { applyRuntimeProperties(mesh, { canCollide: !!value }); return !!value; }
+                if (normalized === 'part.isAnchored') { applyRuntimeProperties(mesh, { isAnchored: !!value }); return !!value; }
+                if (normalized === 'part.name' && linkedData) { linkedData.name = String(value || 'Part').slice(0, 48); return linkedData.name; }
+                const { target, key } = resolvePath(path);
+                if (!target) return null;
+                if (key == null && typeof value === 'object' && value) {
+                    Object.assign(target, value);
+                    return target;
+                }
+                target[key] = value;
+                if (normalized.startsWith('part.') || normalized.startsWith('object.')) {
+                    applyRuntimeProperties(mesh, { position: { ...mesh.position }, rotation: { ...mesh.rotation }, scale: { ...mesh.scale }, color: mesh.material?.color ? `#${mesh.material.color.getHexString()}` : undefined });
+                }
+                return target[key];
+            };
+            const addPath = (path, amount = 1) => {
+                const { value } = resolvePath(path);
+                const next = (Number(value) || 0) + (Number(amount) || 0);
+                setPath(path, next);
+                return next;
+            };
             return {
                 mesh,
                 event: eventName,
@@ -8834,6 +8941,16 @@ animatePlay();
                     clickPressed: () => !!playInput.justClicked,
                     jumpPressed: () => !!playInput.justJumped,
                     keysDown: () => ({ ...keys })
+                },
+                api: {
+                    getPath: (path, fallback = null) => {
+                        const { value } = resolvePath(path);
+                        return typeof value === 'undefined' ? fallback : value;
+                    },
+                    setPath,
+                    addPath,
+                    listPartProperties: () => ['part.position.x','part.position.y','part.position.z','part.rotation.x','part.rotation.y','part.rotation.z','part.scale.x','part.scale.y','part.scale.z','part.material','part.color','part.transparency','part.canCollide','part.isAnchored','part.name','part.type'],
+                    listStudioProperties: () => ['world.gravity','world.skyColor','leaderboard.<name>','player.health','player.speed','player.jump']
                 },
                 random: (min = 0, max = 1) => {
                     const a = Number(min) || 0;
@@ -9807,6 +9924,21 @@ const updateChatBubbles = () => {
             }
         };
 
+        const triggerPointerClickScripts = () => {
+            if (!playInput.justClicked || !playScene || !playCamera) return;
+            if (!raycaster) raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(new THREE.Vector2(playAimNdc.x, playAimNdc.y), playCamera);
+            const candidates = playMeshes.filter(m => m && m.userData && m.userData.sculptEngine && !m.userData.isTool);
+            const hits = raycaster.intersectObjects(candidates, true);
+            const first = hits.find(h => h.distance <= 140 && h.object);
+            if (!first) return;
+            let hitMesh = first.object;
+            while (hitMesh && !(hitMesh.userData && hitMesh.userData.sculptEngine) && hitMesh.parent) hitMesh = hitMesh.parent;
+            if (hitMesh && hitMesh.userData && hitMesh.userData.sculptEngine) {
+                hitMesh.userData.sculptEngine.triggerEvent('click');
+            }
+        };
+
         const toTriMesh = (mesh) => {
             if (!mesh?.geometry || !window.CANNON) return null;
             const geo = mesh.geometry.clone();
@@ -10397,15 +10529,18 @@ const animatePlay = () => {
                 playCamera.getWorldDirection(ctx.cameraDir);
                 window.__playShoot = ctx.shoot;
                 window.playFxContext = ctx;
-                if (playInput.justClicked && equippedToolIndex !== -1) {
-                    const eqTool = playerInventory[equippedToolIndex] ? playerInventory[equippedToolIndex].mesh : null;
-                    if (eqTool && eqTool.userData && eqTool.userData.sculptEngine) eqTool.userData.sculptEngine.triggerEvent('click');
-                    ctx.shoot(playerObj.blasterColor || '#ffff00', playerObj.blasterSpeed || 2.5, {
-                        damage: playerObj.blasterDamage || 20,
-                        spread: playerObj.blasterSpread || 0,
-                        lifetime: playerObj.blasterLifetime || 100,
-                        fireRate: playerObj.blasterFireRate || 150
-                    });
+                if (playInput.justClicked) {
+                    triggerPointerClickScripts();
+                    if (equippedToolIndex !== -1) {
+                        const eqTool = playerInventory[equippedToolIndex] ? playerInventory[equippedToolIndex].mesh : null;
+                        if (eqTool && eqTool.userData && eqTool.userData.sculptEngine) eqTool.userData.sculptEngine.triggerEvent('click');
+                        ctx.shoot(playerObj.blasterColor || '#ffff00', playerObj.blasterSpeed || 2.5, {
+                            damage: playerObj.blasterDamage || 20,
+                            spread: playerObj.blasterSpread || 0,
+                            lifetime: playerObj.blasterLifetime || 100,
+                            fireRate: playerObj.blasterFireRate || 150
+                        });
+                    }
                 }
 
                 if (window.activeBullets) {
