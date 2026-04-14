@@ -3358,7 +3358,7 @@ else if (viewId === 'groups') {
             showModal(`Message ${targetUser}`, 'Type your message below:', 'Send', async (text) => {
                 if(!text || text.trim() === '') return;
                 try {
-                    await apiCall(`/users/${targetUser}/message`, 'POST', { text });
+                    await apiCall(`/users/${encodeURIComponent(targetUser)}/message`, 'POST', { text });
                     showModal('Sent', 'Your message has been sent!');
                 } catch(e) {}
             }, true, true);
@@ -3408,14 +3408,14 @@ else if (viewId === 'groups') {
 
         const respondFriendReq = async (username, accept) => {
             try {
-                if (accept) await apiCall(`/users/${username}/accept-friend`, 'POST');
-                else await apiCall(`/users/${username}/reject-friend`, 'POST');
+                if (accept) await apiCall(`/users/${encodeURIComponent(username)}/accept-friend`, 'POST');
+                else await apiCall(`/users/${encodeURIComponent(username)}/reject-friend`, 'POST');
                 loadFriendsTab(); 
             } catch(e) {}
         };
 
         const removeFriend = async (username) => {
-            try { await apiCall(`/users/${username}/remove-friend`, 'POST'); loadFriendsTab(); } catch(e) {}
+            try { await apiCall(`/users/${encodeURIComponent(username)}/remove-friend`, 'POST'); loadFriendsTab(); } catch(e) {}
         };
 
         // --- Groups System (Advanced) ---
@@ -4946,7 +4946,9 @@ const dom = edRenderer.domElement;
 
         const loadProfile = async (username) => {
             try {
-                const profile = await apiCall(`/users/${username}`);
+                username = String(username || '').trim();
+                if (!username) return;
+                const profile = await apiCall(`/users/${encodeURIComponent(username)}`);
                 currentProfileData = profile;
                 
                 document.getElementById('prof-username').innerText = profile.username;
@@ -5054,15 +5056,15 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
 
         const toggleFollow = async () => {
             if (!currentProfileData || !currentUser) return;
-            try { await apiCall(`/users/${currentProfileData.username}/${currentProfileData.isFollowing ? 'unfollow' : 'follow'}`, 'POST'); loadProfile(currentProfileData.username); } catch (e) {}
+            try { await apiCall(`/users/${encodeURIComponent(currentProfileData.username)}/${currentProfileData.isFollowing ? 'unfollow' : 'follow'}`, 'POST'); loadProfile(currentProfileData.username); } catch (e) {}
         };
 
         const toggleFriend = async () => {
             if (!currentProfileData || !currentUser) return;
             let endpoint = '';
-            if (currentProfileData.friendStatus === 'friends') endpoint = `/users/${currentProfileData.username}/remove-friend`;
-            else if (currentProfileData.friendStatus === 'pending_received') endpoint = `/users/${currentProfileData.username}/accept-friend`;
-            else if (currentProfileData.friendStatus === 'none') endpoint = `/users/${currentProfileData.username}/friend-request`;
+            if (currentProfileData.friendStatus === 'friends') endpoint = `/users/${encodeURIComponent(currentProfileData.username)}/remove-friend`;
+            else if (currentProfileData.friendStatus === 'pending_received') endpoint = `/users/${encodeURIComponent(currentProfileData.username)}/accept-friend`;
+            else if (currentProfileData.friendStatus === 'none') endpoint = `/users/${encodeURIComponent(currentProfileData.username)}/friend-request`;
             else return; 
             try { await apiCall(endpoint, 'POST'); loadProfile(currentProfileData.username); } catch (e) {}
         };
