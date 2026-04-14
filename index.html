@@ -1628,15 +1628,15 @@
 
 <div id="script-editor-panel" style="display:none; position:absolute; top: 10px; left: 10px; right: 10px; bottom: 10px; background: rgba(30,30,30,0.95); padding: 15px; border-radius: 6px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); z-index: 200; flex-direction: column;">
                         <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom: 10px; gap:10px; flex-wrap:wrap;">
-                            <h3 style="margin:0; color:#fff;" id="script-editor-title">Sculpt Script Editor</h3>
+                            <h3 style="margin:0; color:#fff;" id="script-editor-title">Three.js + JavaScript Editor</h3>
                             <div style="display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
                                 <button class="btn btn-sm btn-info" onclick="toggleUIDesigner()">UI Designer</button>
-                                <button class="btn btn-sm btn-success" onclick="saveScript()">Save Sculpt Script</button>
+                                <button class="btn btn-sm btn-success" onclick="saveScript()">Save JavaScript</button>
                                 <button class="btn btn-sm btn-danger" onclick="document.getElementById('script-editor-panel').style.display='none'">Close</button>
                             </div>
                         </div>
-                        <p style="color:#bfc9d4; font-size:12px; margin:0 0 8px 0;">Write simple <strong>Sculpt Script</strong> (or advanced JavaScript) for play mode. Sculpt Script lines transpile to JavaScript automatically. Trigger blocks with <code>when start</code>, <code>when click</code>, <code>when interact</code>, and <code>when update</code>. You can still use advanced <code>ctx.world</code>, <code>ctx.part</code>, <code>ctx.playerApi</code>, <code>ctx.leaderstats</code>, and <code>ctx.api</code> accessors for full power.</p>
-                        <textarea id="sculptscript-editor" style="width:100%; flex:1; min-height:220px; resize:none; background:#111820; color:#dce9ff; border:1px solid #3b4e61; border-radius:6px; padding:10px; font-family:monospace; font-size:13px; line-height:1.45;" spellcheck="false" placeholder="when start&#10;  set part.color to &#39;#22cc88&#39;&#10;  set part.name to &#39;Launch Pad&#39;&#10;end&#10;&#10;when click&#10;  say &quot;You clicked me!&quot; title &quot;Sculpt Script&quot;&#10;  add leaderboard.Coins by 5&#10;  move part by (0, 1, 0)&#10;end&#10;&#10;when update&#10;  rotate part by (0, 25, 0) deg&#10;end"></textarea>
+                        <p style="color:#bfc9d4; font-size:12px; margin:0 0 8px 0;">Write plain <strong>JavaScript</strong> powered by <strong>Three.js</strong>. Your code runs inside the live game world with access to <code>THREE</code>, <code>ctx.world</code>, <code>ctx.part</code>, <code>ctx.playerApi</code>, <code>ctx.leaderstats</code>, and <code>ctx.api</code>. Use <code>if (ctx.event === "start")</code>, <code>click</code>, <code>interact</code>, <code>equip</code>, <code>unequip</code>, and <code>update</code> to drive behavior.</p>
+                        <textarea id="sculptscript-editor" style="width:100%; flex:1; min-height:220px; resize:none; background:#111820; color:#dce9ff; border:1px solid #3b4e61; border-radius:6px; padding:10px; font-family:monospace; font-size:13px; line-height:1.45;" spellcheck="false" placeholder="if (ctx.event === 'start') {&#10;  ctx.part.setColor('#22cc88');&#10;  ctx.api.setPath('part.name', 'Launch Pad');&#10;}&#10;&#10;if (ctx.event === 'click') {&#10;  ctx.world.message('You clicked me!', 'JavaScript Object');&#10;  ctx.leaderstats.add('Coins', 5);&#10;}&#10;&#10;if (ctx.event === 'update') {&#10;  ctx.part.rotate(0, ctx.math.degToRad(25) * ctx.deltaTime(), 0);&#10;}"></textarea>
                         <input type="hidden" id="script-editor-target-id">
                     </div>
 
@@ -3358,7 +3358,7 @@ else if (viewId === 'groups') {
             showModal(`Message ${targetUser}`, 'Type your message below:', 'Send', async (text) => {
                 if(!text || text.trim() === '') return;
                 try {
-                    await apiCall(`/users/${targetUser}/message`, 'POST', { text });
+                    await apiCall(`/users/${encodeURIComponent(targetUser)}/message`, 'POST', { text });
                     showModal('Sent', 'Your message has been sent!');
                 } catch(e) {}
             }, true, true);
@@ -3408,14 +3408,14 @@ else if (viewId === 'groups') {
 
         const respondFriendReq = async (username, accept) => {
             try {
-                if (accept) await apiCall(`/users/${username}/accept-friend`, 'POST');
-                else await apiCall(`/users/${username}/reject-friend`, 'POST');
+                if (accept) await apiCall(`/users/${encodeURIComponent(username)}/accept-friend`, 'POST');
+                else await apiCall(`/users/${encodeURIComponent(username)}/reject-friend`, 'POST');
                 loadFriendsTab(); 
             } catch(e) {}
         };
 
         const removeFriend = async (username) => {
-            try { await apiCall(`/users/${username}/remove-friend`, 'POST'); loadFriendsTab(); } catch(e) {}
+            try { await apiCall(`/users/${encodeURIComponent(username)}/remove-friend`, 'POST'); loadFriendsTab(); } catch(e) {}
         };
 
         // --- Groups System (Advanced) ---
@@ -4946,7 +4946,9 @@ const dom = edRenderer.domElement;
 
         const loadProfile = async (username) => {
             try {
-                const profile = await apiCall(`/users/${username}`);
+                username = String(username || '').trim();
+                if (!username) return;
+                const profile = await apiCall(`/users/${encodeURIComponent(username)}`);
                 currentProfileData = profile;
                 
                 document.getElementById('prof-username').innerText = profile.username;
@@ -5054,15 +5056,15 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
 
         const toggleFollow = async () => {
             if (!currentProfileData || !currentUser) return;
-            try { await apiCall(`/users/${currentProfileData.username}/${currentProfileData.isFollowing ? 'unfollow' : 'follow'}`, 'POST'); loadProfile(currentProfileData.username); } catch (e) {}
+            try { await apiCall(`/users/${encodeURIComponent(currentProfileData.username)}/${currentProfileData.isFollowing ? 'unfollow' : 'follow'}`, 'POST'); loadProfile(currentProfileData.username); } catch (e) {}
         };
 
         const toggleFriend = async () => {
             if (!currentProfileData || !currentUser) return;
             let endpoint = '';
-            if (currentProfileData.friendStatus === 'friends') endpoint = `/users/${currentProfileData.username}/remove-friend`;
-            else if (currentProfileData.friendStatus === 'pending_received') endpoint = `/users/${currentProfileData.username}/accept-friend`;
-            else if (currentProfileData.friendStatus === 'none') endpoint = `/users/${currentProfileData.username}/friend-request`;
+            if (currentProfileData.friendStatus === 'friends') endpoint = `/users/${encodeURIComponent(currentProfileData.username)}/remove-friend`;
+            else if (currentProfileData.friendStatus === 'pending_received') endpoint = `/users/${encodeURIComponent(currentProfileData.username)}/accept-friend`;
+            else if (currentProfileData.friendStatus === 'none') endpoint = `/users/${encodeURIComponent(currentProfileData.username)}/friend-request`;
             else return; 
             try { await apiCall(endpoint, 'POST'); loadProfile(currentProfileData.username); } catch (e) {}
         };
@@ -6136,65 +6138,12 @@ Keep playing together for more daily rewards.`, 'Aww!');
         window.funExportNote = funExportNote;
         window.funKeyboardCheats = funKeyboardCheats;
         setInterval(() => { if (localStorage.getItem('ps_break_reminder') === '1') showModal('Break Reminder', 'Stand up, hydrate, and rest your eyes for a minute.'); }, 45 * 60 * 1000);
-        const compileSculptScript = (source = '') => {
-            const raw = String(source || '');
-            const trimmed = raw.trim();
-            if (!trimmed) return 'return;';
-            if (/\bctx\.|\bfunction\b|=>|\bconst\b|\blet\b|\bvar\b|;|\{/.test(trimmed)) return raw;
-
-            const lines = raw.split(/\r?\n/);
-            const out = ['const _say=(msg,title)=>ctx.world.message(String(msg||""), title||"Sculpt Script");'];
-            const stack = [];
-            const eventMap = { start: 'start', update: 'update', tick: 'update', interact: 'interact', click: 'click', equip: 'equip', unequip: 'unequip' };
-            const emit = (line) => out.push(line);
-            const parseVec3 = (txt) => {
-                const bits = String(txt || '').split(',').map(v => Number(v.trim()));
-                return [bits[0] || 0, bits[1] || 0, bits[2] || 0];
-            };
-            const toValueExpr = (value = '') => {
-                const v = String(value || '').trim();
-                if (!v) return "''";
-                if (/^['"`].*['"`]$/.test(v)) return v;
-                if (/^-?\d+(\.\d+)?$/.test(v)) return v;
-                if (/^(true|false|null|undefined)$/i.test(v)) return v.toLowerCase();
-                if (/^(ctx\.|Math\.|\{|\[)/.test(v)) return v;
-                return JSON.stringify(v);
-            };
-
-            lines.forEach((rawLine) => {
-                const line = rawLine.trim();
-                if (!line || line.startsWith('//') || line.startsWith('#')) return;
-                let m;
-                if (/^end\b/i.test(line)) { if (stack.length) stack.pop(); emit('}'); return; }
-                if ((m = line.match(/^when\s+([a-zA-Z_][\w-]*)\s*:?$/i))) {
-                    const key = m[1].toLowerCase();
-                    const ev = eventMap[key] || key;
-                    emit(`if (ctx.event === ${JSON.stringify(ev)}) {`);
-                    stack.push('when');
-                    return;
-                }
-                if ((m = line.match(/^if\s+(.+)$/i))) {
-                    let cond = m[1].trim();
-                    cond = cond.replace(/\bevent\b/gi, 'ctx.event').replace(/\bclicked\b/gi, 'ctx.input.clickPressed()').replace(/\binteractPressed\b/gi, 'ctx.input.interactPressed()').replace(/\bjumpPressed\b/gi, 'ctx.input.jumpPressed()').replace(/\bplayer\.health\b/gi, 'ctx.player.health');
-                    emit(`if (${cond}) {`);
-                    stack.push('if');
-                    return;
-                }
-                if (/^else$/i.test(line)) { emit('} else {'); return; }
-                if ((m = line.match(/^say\s+"([\s\S]+)"(?:\s+title\s+"([\s\S]+)")?$/i))) { emit(`_say(${JSON.stringify(m[1])}, ${m[2] ? JSON.stringify(m[2]) : 'undefined'});`); return; }
-                if ((m = line.match(/^set\s+([a-zA-Z][\w.]+)\s+to\s+(.+)$/i))) { emit(`ctx.api.setPath(${JSON.stringify(m[1].trim())}, ${toValueExpr(m[2])});`); return; }
-                if ((m = line.match(/^add\s+([a-zA-Z][\w.]*)\s+by\s+(.+)$/i))) { emit(`ctx.api.addPath(${JSON.stringify(m[1].trim())}, Number(${m[2].trim()}) || 0);`); return; }
-                if ((m = line.match(/^move\s+part\s+by\s*\(([^)]+)\)$/i))) { const [x,y,z] = parseVec3(m[1]); emit(`ctx.part.move(${x}, ${y}, ${z});`); return; }
-                if ((m = line.match(/^rotate\s+part\s+by\s*\(([^)]+)\)(?:\s*deg)?$/i))) { const [x,y,z] = parseVec3(m[1]); emit(`ctx.part.rotate(ctx.math.degToRad(${x}), ctx.math.degToRad(${y}), ctx.math.degToRad(${z}));`); return; }
-                if ((m = line.match(/^scale\s+part\s+to\s*\(([^)]+)\)$/i))) { const [x,y,z] = parseVec3(m[1]); emit(`ctx.part.setScale(${x}, ${y}, ${z});`); return; }
-                if ((m = line.match(/^spawn\s+([a-zA-Z][\w-]*)\s+named\s+"([^"]+)"$/i))) { emit(`ctx.world.spawnPart({ type: ${JSON.stringify(m[1])}, name: ${JSON.stringify(m[2])} });`); return; }
-                if ((m = line.match(/^on\s+click\s+say\s+"([\s\S]+)"$/i))) { emit(`if (ctx.event === 'click') _say(${JSON.stringify(m[1])});`); return; }
-                if ((m = line.match(/^sound\s+"([^"]+)"(?:\s+volume\s+([\d.]+))?$/i))) { emit(`ctx.effects.sound(${JSON.stringify(m[1])}, ${m[2] || '0.5'});`); return; }
-                if ((m = line.match(/^shoot(?:\s+color\s+"([#a-zA-Z0-9]+)")?$/i))) { emit(`ctx.effects.shoot(${m[1] ? JSON.stringify(m[1]) : "'#ffff00'"});`); return; }
-                emit(`// Sculpt Script passthrough\n${line}`);
-            });
-            while (stack.length) { stack.pop(); emit('}'); }
-            return out.join('\n');
+        const KNOWN_SCULPT_SCRIPT_TOKENS = [/^\s*when\s+/im, /^\s*end\s*$/im, /^\s*say\s+/im, /^\s*set\s+[a-zA-Z][\w.]+\s+to\s+/im, /^\s*add\s+[a-zA-Z][\w.]*\s+by\s+/im, /^\s*move\s+part\s+by\s*\(/im, /^\s*rotate\s+part\s+by\s*\(/im, /^\s*scale\s+part\s+to\s*\(/im];
+        const looksLikeLegacySculptScript = (source = '') => {
+            const raw = String(source || '').trim();
+            if (!raw) return false;
+            if (/\bctx\.|\bfunction\b|=>|\bconst\b|\blet\b|\bvar\b|;|\{/.test(raw)) return false;
+            return KNOWN_SCULPT_SCRIPT_TOKENS.some((rx) => rx.test(raw));
         };
 
         class SculptScriptEngine {
@@ -6206,12 +6155,17 @@ Keep playing together for more daily rewards.`, 'Aww!');
             }
 
             compile(source) {
-                const transpiled = compileSculptScript(source);
-                const wrapped = `"use strict";\nreturn (function runUserScript(ctx){\n${String(transpiled || '')}\n});`;
+                const raw = String(source || '');
+                if (!raw.trim()) return null;
+                if (looksLikeLegacySculptScript(raw)) {
+                    printOutput('Legacy Sculpt Script detected. Create mode now supports JavaScript + Three.js only. Please rewrite this script in JavaScript.', 'warning');
+                    return null;
+                }
+                const wrapped = `"use strict";\nreturn (function runUserCode(ctx, THREE){\n${raw}\n});`;
                 try {
                     return new Function(wrapped)();
                 } catch (e) {
-                    printOutput(`Sculpt Script compile error: ${e.message}`, 'error');
+                    printOutput(`JavaScript compile error: ${e.message}`, 'error');
                     return null;
                 }
             }
@@ -6220,11 +6174,11 @@ Keep playing together for more daily rewards.`, 'Aww!');
                 if (typeof this.compiled !== 'function') return;
                 try {
                     const ctx = this.contextFactory(eventName);
-                    this.compiled(ctx);
+                    this.compiled(ctx, THREE);
                 } catch (e) {
                     const now = Date.now();
                     if (now - this.lastError > 600) {
-                        printOutput(`Sculpt Script runtime error (${eventName}): ${e.message}`, 'error');
+                        printOutput(`JavaScript runtime error (${eventName}): ${e.message}`, 'error');
                         this.lastError = now;
                     }
                 }
@@ -6236,7 +6190,7 @@ Keep playing together for more daily rewards.`, 'Aww!');
 
 
 
-// The SculptCode Transpiler (With Services)
+// Runtime scripting entrypoint (JavaScript + Three.js)
      
 
 
@@ -7722,7 +7676,7 @@ if (item.type === 'button' && item.onClickEvent) {
         const openScriptEditor = (id) => {
             const obj = edData.objects.find(o => o.id === id);
             if (!obj) return;
-            document.getElementById('script-editor-title').innerText = `Sculpt Script: ${obj.name}`;
+            document.getElementById('script-editor-title').innerText = `JavaScript: ${obj.name}`;
             document.getElementById('script-editor-target-id').value = id;
             document.getElementById('script-editor-panel').style.display = 'flex';
             document.getElementById('sculptscript-editor').value = obj.script || '';
@@ -8931,6 +8885,7 @@ animatePlay();
             };
             return {
                 mesh,
+                THREE,
                 event: eventName,
                 explorer: activeLevel.objects || [],
                 player: playerObj,
