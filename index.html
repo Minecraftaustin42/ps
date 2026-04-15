@@ -266,6 +266,7 @@
         #studio-mobile-controls { display:none; position:absolute; left:0; right:0; bottom:10px; z-index:260; pointer-events:none; }
         .studio-mobile-pill { background:rgba(0,0,0,0.62); color:#fff; padding:6px 10px; border-radius:16px; font-size:12px; font-weight:700; }
         .studio-mobile-btn { pointer-events:auto; background:rgba(52,152,219,0.9); color:#fff; border:1px solid rgba(255,255,255,0.55); border-radius:14px; padding:8px 12px; font-size:12px; font-weight:700; min-width:66px; text-align:center; box-shadow: 0 6px 16px rgba(0,0,0,0.24); }
+        .studio-mobile-btn.active { background:rgba(41,128,185,1); box-shadow: 0 4px 16px rgba(52,152,219,0.65); transform: translateY(-1px); }
         #studio-mobile-quick-insert { display:none; position:absolute; top:10px; right:10px; z-index:270; width:170px; pointer-events:auto; }
         #studio-joystick-base { pointer-events:auto; width:142px; height:142px; border-radius:50%; background:radial-gradient(circle at 30% 30%, rgba(255,255,255,0.25), rgba(0,0,0,0.45)); border:2px solid rgba(255,255,255,0.35); position:relative; touch-action:none; }
         #studio-joystick-stick { width:64px; height:64px; border-radius:50%; background:rgba(255,255,255,0.9); position:absolute; left:39px; top:39px; transition:transform .08s; box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
@@ -1808,6 +1809,8 @@
                                 <div class="studio-mobile-actions">
                                     <button class="studio-mobile-btn" id="studio-fly-up">Up</button>
                                     <button class="studio-mobile-btn" id="studio-fly-down">Down</button>
+                                    <button class="studio-mobile-btn" id="studio-mobile-boost">Boost</button>
+                                    <button class="studio-mobile-btn" id="studio-mobile-recenter">Recenter</button>
                                     <button class="studio-mobile-btn" onclick="setTransformMode('select')">Select</button>
                                     <button class="studio-mobile-btn" onclick="setTransformMode('translate')">Move</button>
                                     <button class="studio-mobile-btn" onclick="setTransformMode('rotate')">Rotate</button>
@@ -2963,6 +2966,7 @@ const toggleMultiSelect = () => {
                 let activeTouchId = null;
                 let lookTouchId = null;
                 let lookPrev = null;
+                let pinchDistancePrev = null;
 
                 const resetJoystick = () => {
                     stick.style.transition = 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
@@ -3032,9 +3036,20 @@ const toggleMultiSelect = () => {
                     window.playControls.update();
                     lookPrev = { x: touch.clientX, y: touch.clientY };
                 };
+                const getPinchDistance = (a, b) => {
+                    const dx = a.clientX - b.clientX;
+                    const dy = a.clientY - b.clientY;
+                    return Math.hypot(dx, dy);
+                };
 
                 lookZone.addEventListener('touchstart', (e) => {
                     e.preventDefault();
+                    if (e.touches.length >= 2) {
+                        pinchDistancePrev = getPinchDistance(e.touches[0], e.touches[1]);
+                        lookTouchId = null;
+                        lookPrev = null;
+                        return;
+                    }
                     if (lookTouchId !== null) return;
                     const touch = e.changedTouches[0];
                     lookTouchId = touch.identifier;
@@ -3042,6 +3057,16 @@ const toggleMultiSelect = () => {
                 }, { passive: false });
                 lookZone.addEventListener('touchmove', (e) => {
                     e.preventDefault();
+                    if (e.touches.length >= 2) {
+                        const pinchDist = getPinchDistance(e.touches[0], e.touches[1]);
+                        if (pinchDistancePrev !== null) {
+                            const pinchDelta = pinchDistancePrev - pinchDist;
+                            adjustPlayCameraDistance(pinchDelta * 0.04);
+                        }
+                        pinchDistancePrev = pinchDist;
+                        return;
+                    }
+                    pinchDistancePrev = null;
                     for (let i = 0; i < e.changedTouches.length; i++) {
                         const t = e.changedTouches[i];
                         if (t.identifier === lookTouchId) onLookMove(t);
@@ -3055,6 +3080,7 @@ const toggleMultiSelect = () => {
                             lookPrev = null;
                         }
                     }
+                    if (e.touches.length < 2) pinchDistancePrev = null;
                 };
                 lookZone.addEventListener('touchend', endLook, { passive: false });
                 lookZone.addEventListener('touchcancel', endLook, { passive: false });
@@ -4650,7 +4676,9 @@ let customGizmo = null;
             const lookZone = document.getElementById('studio-look-zone');
             const flyUpBtn = document.getElementById('studio-fly-up');
             const flyDownBtn = document.getElementById('studio-fly-down');
-            if (!base || !stick || !lookZone || !flyUpBtn || !flyDownBtn) return;
+            const boostBtn = document.getElementById('studio-mobile-boost');
+            const recenterBtn = document.getElementById('studio-mobile-recenter');
+            if (!base || !stick || !lookZone || !flyUpBtn || !flyDownBtn || !boostBtn || !recenterBtn) return;
 
             studioMobileState.initialized = true;
             const resetStick = () => {
@@ -4737,8 +4765,9 @@ let customGizmo = null;
                     if (t.identifier !== studioMobileState.lookTouchId || !studioMobileState.lookPrev || !window.StudioCamera) continue;
                     const dx = t.clientX - studioMobileState.lookPrev.x;
                     const dy = t.clientY - studioMobileState.lookPrev.y;
-                    window.StudioCamera.yaw -= dx * 0.0048;
-                    window.StudioCamera.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, window.StudioCamera.pitch - dy * 0.0039));
+                    const lookScale = Math.min(1.75, 0.9 + Math.hypot(dx, dy) * 0.018);
+                    window.StudioCamera.yaw -= dx * 0.0048 * lookScale;
+                    window.StudioCamera.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, window.StudioCamera.pitch - dy * 0.0039 * lookScale));
                     window.StudioCamera.updateCamera();
                     studioMobileState.lookPrev = { x: t.clientX, y: t.clientY };
                 }
@@ -4758,6 +4787,24 @@ let customGizmo = null;
             };
             bindFlyButton(flyUpBtn, 'e', 'flyUp');
             bindFlyButton(flyDownBtn, 'q', 'flyDown');
+
+            const setBoostState = (pressed) => {
+                studioMobileState.boost = pressed;
+                boostBtn.classList.toggle('active', pressed);
+            };
+            boostBtn.addEventListener('touchstart', (e) => { e.preventDefault(); setBoostState(true); }, { passive: false });
+            boostBtn.addEventListener('touchend', (e) => { e.preventDefault(); setBoostState(false); }, { passive: false });
+            boostBtn.addEventListener('touchcancel', (e) => { e.preventDefault(); setBoostState(false); }, { passive: false });
+
+            recenterBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (!window.StudioCamera || !edCamera) return;
+                window.StudioCamera.yaw = Math.atan2(edCamera.position.x, edCamera.position.z);
+                window.StudioCamera.pitch = -0.28;
+                window.StudioCamera.updateCamera();
+                recenterBtn.classList.add('active');
+                setTimeout(() => recenterBtn.classList.remove('active'), 140);
+            }, { passive: false });
 
             if (localStorage.getItem('ps_hide_landscape_hint') === '1') {
                 const pill = document.getElementById('studio-landscape-pill');
@@ -6394,7 +6441,7 @@ let edScene, edCamera, edRenderer, edControls; // Removed transformControl
 let edAmbientLight = null, edDirectionalLight = null;
 let playAmbientLight = null, playDirectionalLight = null;
 let autosaveRecoveryPrompted = false;
-const studioMobileState = { initialized: false, moveActive: false, moveTouchId: null, moveX: 0, moveY: 0, moveXSmooth: 0, moveYSmooth: 0, lookTouchId: null, lookPrev: null, flyUp: false, flyDown: false };
+const studioMobileState = { initialized: false, moveActive: false, moveTouchId: null, moveX: 0, moveY: 0, moveXSmooth: 0, moveYSmooth: 0, lookTouchId: null, lookPrev: null, flyUp: false, flyDown: false, boost: false };
 const studioPointerState = { lastX: 0, lastY: 0 };
 const studioWindowSelect = { active: false, startX: 0, startY: 0, rect: null };
 
@@ -8231,7 +8278,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     const moveSpeed = 0.5;
                     const dir = new THREE.Vector3();
                     edCamera.getWorldDirection(dir);
-                    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), dir).normalize();
+                    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0,1,0)).normalize();
 
                     const tag = document.activeElement ? document.activeElement.tagName : '';
                     
@@ -8254,7 +8301,8 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                         if (mobileForward.lengthSq() > 0) mobileForward.normalize();
                         const mobileRight = new THREE.Vector3().crossVectors(mobileForward, new THREE.Vector3(0,1,0)).normalize();
                         const stickStrength = Math.min(1, Math.hypot(studioMobileState.moveXSmooth, studioMobileState.moveYSmooth));
-                        const mobileSpeed = 0.28 + stickStrength * 0.52;
+                        const boostMultiplier = studioMobileState.boost ? 1.65 : 1;
+                        const mobileSpeed = (0.28 + stickStrength * 0.52) * boostMultiplier;
                         edCamera.position.addScaledVector(mobileForward, -studioMobileState.moveYSmooth * mobileSpeed);
                         edCamera.position.addScaledVector(mobileRight, studioMobileState.moveXSmooth * mobileSpeed);
                     } else {
@@ -8453,9 +8501,18 @@ playerObj = {
         let playAimNdc = { x: 0, y: 0 };
         let jumpBufferFrames = 0;
         let coyoteFrames = 0;
+        const playCameraOrbitState = { distance: 12, minDistance: 7, maxDistance: 26 };
 
         const keys = { w: false, a: false, s: false, d: false, q: false, e: false, space: false };
         const playTouchMove = { x: 0, y: 0 };
+        const adjustPlayCameraDistance = (delta) => {
+            if (!window.playControls) return;
+            playCameraOrbitState.distance = THREE.MathUtils.clamp(
+                playCameraOrbitState.distance + delta,
+                playCameraOrbitState.minDistance,
+                playCameraOrbitState.maxDistance
+            );
+        };
 
 
         
@@ -8871,9 +8928,15 @@ window.playControls.enablePan = false;
 window.playControls.enableDamping = true;
 window.playControls.minDistance = 6;
 window.playControls.maxDistance = 45;
-window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+window.playControls.enableZoom = false;
+window.playControls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.NONE, RIGHT: THREE.MOUSE.ROTATE };
 window.playControls.minPolarAngle = THREE.MathUtils.degToRad(8);
 window.playControls.maxPolarAngle = THREE.MathUtils.degToRad(82);
+playRenderer.domElement.addEventListener('wheel', (e) => {
+    if (!document.getElementById('view-play').classList.contains('active')) return;
+    e.preventDefault();
+    adjustPlayCameraDistance(e.deltaY * 0.01);
+}, { passive: false });
             }
 
             stopGameLoop(); setupMobileControls();
@@ -8894,7 +8957,7 @@ window.playControls.maxPolarAngle = THREE.MathUtils.degToRad(82);
             playerObj.z = chosenSpawn.z || 0;
             playerObj.vx = 0; playerObj.vy = 0; playerObj.vz = 0; playerObj.rotY = 0;
             playTouchMove.x = 0; playTouchMove.y = 0;
-            playerObj.speed = 0.2;
+playerObj.speed = 0.26;
 playerObj.jump = 3.2;
             playerObj.health = 100;
             playerObj.blasterDamage = 20; playerObj.blasterSpeed = 2.5; playerObj.blasterSpread = 0; playerObj.blasterFireRate = 150; playerObj.blasterLifetime = 100; playerObj.blasterColor = '#ffff00'; playerObj.lastShotAt = 0;
@@ -8913,10 +8976,10 @@ playCamera.position.set(playerObj.x, playerObj.y + 8, playerObj.z + 12);
 window.playControls.enablePan = false;
 window.playControls.enableDamping = true;
 window.playControls.dampingFactor = 0.14;
-window.playControls.minDistance = 7;
-window.playControls.maxDistance = 20;
-window.playControls.rotateSpeed = 0.7;
-window.playControls.zoomSpeed = 1.0;
+window.playControls.minDistance = playCameraOrbitState.minDistance;
+window.playControls.maxDistance = playCameraOrbitState.maxDistance;
+window.playControls.rotateSpeed = 0.95;
+playCameraOrbitState.distance = 12;
 
 window.playControls.target.set(playerObj.x, playerObj.y + playCameraFollowHeight, playerObj.z);
 window.playControls.update();
@@ -10418,9 +10481,9 @@ const updateChatBubbles = () => {
             if (camForward.lengthSq() > 0) camForward.normalize();
             const camRight = new THREE.Vector3().crossVectors(camForward, new THREE.Vector3(0,1,0)).normalize();
 
-            const keyboardX = (keys.a ? 1 : 0) - (keys.d ? 1 : 0);
+            const keyboardX = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
             const keyboardY = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
-            const inputX = Math.max(-1, Math.min(1, keyboardX - playTouchMove.x));
+            const inputX = Math.max(-1, Math.min(1, keyboardX + playTouchMove.x));
             const inputY = Math.max(-1, Math.min(1, keyboardY - playTouchMove.y));
             const moveDir = new THREE.Vector3();
 
@@ -10429,8 +10492,8 @@ const updateChatBubbles = () => {
                 moveDir.addScaledVector(camRight, inputX);
             }
 
-            const baseWalkSpeed = 0.38;
-            const airControlSpeed = 0.26;
+            const baseWalkSpeed = 0.46;
+            const airControlSpeed = 0.32;
             const targetSpeed = playerObj.grounded ? baseWalkSpeed : airControlSpeed;
             if (moveDir.lengthSq() > 0) {
                 moveDir.normalize();
@@ -10779,18 +10842,11 @@ if (window.playControls) {
         playerObj.z
     );
 
-    // Smooth target follow like Roblox camera spring
-    window.playControls.target.lerp(targetPos, 0.22);
-
-    // Keep camera from getting too close to the player
+    window.playControls.target.lerp(targetPos, 0.28);
     const offset = playCamera.position.clone().sub(window.playControls.target);
-    const distance = offset.length();
-    const minDist = 6.2;
-
-    if (distance < minDist) {
-        offset.normalize().multiplyScalar(minDist);
-        playCamera.position.copy(window.playControls.target.clone().add(offset));
-    }
+    if (offset.lengthSq() < 0.0001) offset.set(0, 0.45, 1);
+    offset.normalize().multiplyScalar(playCameraOrbitState.distance);
+    playCamera.position.copy(window.playControls.target.clone().add(offset));
 
     window.playControls.update();
 }
