@@ -200,10 +200,19 @@
         .studio-toolbar-actions { display:flex; gap:6px; flex-wrap:wrap; }
         #studio-mobile-controls { display:none; position:absolute; left:0; right:0; bottom:10px; z-index:260; pointer-events:none; }
         .studio-mobile-pill { background:rgba(0,0,0,0.62); color:#fff; padding:6px 10px; border-radius:16px; font-size:12px; font-weight:700; }
-        .studio-mobile-btn { pointer-events:auto; background:rgba(52,152,219,0.86); color:#fff; border:2px solid rgba(255,255,255,0.7); border-radius:14px; padding:6px 10px; font-size:12px; font-weight:700; min-width:66px; text-align:center; }
+        .studio-mobile-btn { pointer-events:auto; background:rgba(52,152,219,0.9); color:#fff; border:1px solid rgba(255,255,255,0.55); border-radius:14px; padding:8px 12px; font-size:12px; font-weight:700; min-width:66px; text-align:center; box-shadow: 0 6px 16px rgba(0,0,0,0.24); }
         #studio-mobile-quick-insert { display:none; position:absolute; top:10px; right:10px; z-index:270; width:170px; pointer-events:auto; }
-        #studio-joystick-base { pointer-events:auto; width:120px; height:120px; border-radius:50%; background:rgba(0,0,0,0.38); border:2px solid rgba(255,255,255,0.28); position:relative; touch-action:none; }
-        #studio-joystick-stick { width:58px; height:58px; border-radius:50%; background:rgba(255,255,255,0.85); position:absolute; left:31px; top:31px; transition:transform .12s; }
+        #studio-joystick-base { pointer-events:auto; width:142px; height:142px; border-radius:50%; background:radial-gradient(circle at 30% 30%, rgba(255,255,255,0.25), rgba(0,0,0,0.45)); border:2px solid rgba(255,255,255,0.35); position:relative; touch-action:none; }
+        #studio-joystick-stick { width:64px; height:64px; border-radius:50%; background:rgba(255,255,255,0.9); position:absolute; left:39px; top:39px; transition:transform .08s; box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
+        .studio-mobile-shell { display:flex; justify-content:space-between; align-items:flex-end; padding:0 12px; gap:10px; }
+        .studio-mobile-right { display:flex; flex-direction:column; gap:7px; align-items:flex-end; max-width:62%; }
+        .studio-mobile-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; pointer-events:auto; }
+        .studio-mobile-actions .studio-mobile-btn { min-width:72px; }
+        #studio-quick-insert-menu { display:none; position:absolute; z-index:320; min-width:160px; background:rgba(15,20,30,0.95); border:1px solid rgba(255,255,255,0.2); border-radius:8px; padding:8px; box-shadow:0 10px 24px rgba(0,0,0,0.32); }
+        #studio-quick-insert-menu button { width:100%; margin-bottom:4px; }
+        #studio-quick-insert-menu button:last-child { margin-bottom:0; }
+        #studio-window-select { display:none; position:absolute; border:1px solid #4aa3ff; background:rgba(74,163,255,0.18); z-index:315; pointer-events:none; }
+        #admin-delete-panel { margin-top:16px; padding:12px; border:1px solid #f3cccc; border-radius:8px; background:#fff4f4; display:none; }
         .dash-friends-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(230px,1fr)); gap:12px; }
 
         .landing-welcome { text-align:center; margin-bottom:18px; }
@@ -276,6 +285,7 @@
             .modal-box { width: 100%; max-width: 96vw; padding: 16px; }
             #studio-mobile-controls { display:block; }
             #studio-mobile-quick-insert { display:block; }
+            .studio-mobile-right { max-width:66%; }
         }
     </style>
 </head>
@@ -711,6 +721,12 @@
                     <input type="password" id="setting-password" class="form-control mt-10" placeholder="Leave blank to keep current password">
                 </div>
                 <button class="btn btn-success mt-10" onclick="saveSettings()">Save Changes</button>
+                <div id="admin-delete-panel">
+                    <h3 style="margin:0 0 8px 0; color:#b33939;">Admin Account Deletion</h3>
+                    <p style="font-size:12px; margin:0 0 8px 0;">Completely removes a user's account and linked data from the database.</p>
+                    <input type="text" id="admin-delete-username" class="form-control" placeholder="Exact username to delete">
+                    <button class="btn btn-danger mt-10" onclick="adminDeleteAccount()">Delete Account Permanently</button>
+                </div>
             </div>
         </div>
 
@@ -1536,6 +1552,8 @@
 
             <div class="studio-layout">
                 <div id="editor-container-3d" tabindex="0">
+<div id="studio-window-select"></div>
+<div id="studio-quick-insert-menu"></div>
 <select id="studio-mobile-quick-insert" class="form-control" onchange="if(this.value){ addPart(this.value); this.value=''; }">
     <option value="">+ Quick Insert Part...</option>
     <option value="block">Cube</option>
@@ -1725,14 +1743,14 @@
                     </div>
 
                     <div id="studio-mobile-controls">
-                        <div id="studio-look-zone" style="position:absolute; top:0; right:0; width:52%; height:76%; pointer-events:auto; touch-action:none;"></div>
-                        <div style="display:flex; justify-content:space-between; align-items:flex-end; padding:0 10px; gap:8px;">
+                        <div id="studio-look-zone" style="position:absolute; top:0; right:0; width:68%; height:84%; pointer-events:auto; touch-action:none;"></div>
+                        <div class="studio-mobile-shell">
                             <div id="studio-joystick-base">
                                 <div id="studio-joystick-stick"></div>
                             </div>
-                            <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-end;">
+                            <div class="studio-mobile-right">
                                 <div class="studio-mobile-pill" id="studio-landscape-pill">Move: left stick • Look: right side <button onclick="closeStudioLandscapeHint()" style="margin-left:6px; background:transparent; color:#fff; border:none; font-weight:700; pointer-events:auto;">✕</button></div>
-                                <div style="display:flex; gap:6px; pointer-events:auto;">
+                                <div class="studio-mobile-actions">
                                     <button class="studio-mobile-btn" id="studio-fly-up">Up</button>
                                     <button class="studio-mobile-btn" id="studio-fly-down">Down</button>
                                     <button class="studio-mobile-btn" onclick="setTransformMode('select')">Select</button>
@@ -2869,7 +2887,7 @@ const toggleMultiSelect = () => {
                     <div id="joystick-base" style="position: absolute; bottom: 30px; left: 30px; width: 140px; height: 140px; background: rgba(0,0,0,0.4); border-radius: 50%; pointer-events: auto; touch-action: none; border: 3px solid rgba(255,255,255,0.2);">
                         <div id="joystick-stick" style="position: absolute; top: 35px; left: 35px; width: 70px; height: 70px; background: rgba(255,255,255,0.8); border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: transform 0.1s ease-out;"></div>
                     </div>
-                    <div id="mobile-look-zone" style="position:absolute; top:0; right:0; width:52%; height:78%; pointer-events:auto; touch-action:none;"></div>
+                    <div id="mobile-look-zone" style="position:absolute; top:0; right:0; width:66%; height:86%; pointer-events:auto; touch-action:none;"></div>
                     <div id="mobile-jump-btn" style="position: absolute; bottom: 40px; right: 30px; width: 90px; height: 90px; background: rgba(46, 204, 113, 0.6); border-radius: 50%; pointer-events: auto; touch-action: none; border: 3px solid rgba(46, 204, 113, 0.9); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 32px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: background 0.1s;">?</div>
                 `;
                 ui.style.position = 'absolute';
@@ -2893,7 +2911,8 @@ const toggleMultiSelect = () => {
                 const resetJoystick = () => {
                     stick.style.transition = 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
                     stick.style.transform = `translate(0px, 0px)`;
-                    keys.w = false; keys.s = false; keys.a = false; keys.d = false; 
+                    playTouchMove.x = 0;
+                    playTouchMove.y = 0;
                     activeTouchId = null;
                 };
 
@@ -2935,12 +2954,11 @@ const toggleMultiSelect = () => {
                     }
                     
                     stick.style.transform = `translate(${dx}px, ${dy}px)`;
-                    
-                    const magnitude = Math.sqrt(dx * dx + dy * dy);
-                    keys.w = magnitude > 16;
-                    keys.s = false;
-                    keys.a = false;
-                    keys.d = false;
+                    const nx = Math.max(-1, Math.min(1, dx / baseRadius));
+                    const ny = Math.max(-1, Math.min(1, dy / baseRadius));
+                    const dead = 0.12;
+                    playTouchMove.x = Math.abs(nx) < dead ? 0 : nx;
+                    playTouchMove.y = Math.abs(ny) < dead ? 0 : ny;
                 };
 
                 jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playInput.justJumped = true; jumpBufferFrames = 8; jumpBtn.style.background = 'rgba(46, 204, 113, 0.9)'; }, { passive: false });
@@ -3170,6 +3188,8 @@ else if (viewId === 'groups') {
                 loadFunLab();
             } else if (viewId === 'settings') {
                 if (currentUser) document.getElementById('setting-username').value = currentUser.username;
+                const adminPanel = document.getElementById('admin-delete-panel');
+                if (adminPanel) adminPanel.style.display = (currentUser && String(currentUser.username || '').toLowerCase() === 'admin') ? 'block' : 'none';
            } else if (viewId === 'create') {
                 if (!currentEditGameId) {
                     setTimeout(() => { initEditor(); window.dispatchEvent(new Event('resize')); populateGroupPublishDropdown(); promptStudioAutosaveRecovery(); }, 50);
@@ -3328,6 +3348,18 @@ else if (viewId === 'groups') {
                     updateNav();
                 }
                 document.getElementById('setting-password').value = '';
+            } catch (e) {}
+        };
+
+        const adminDeleteAccount = async () => {
+            if (!currentUser || String(currentUser.username || '').toLowerCase() !== 'admin') return showModal('Denied', 'Only Admin can do this.');
+            const targetUsername = (document.getElementById('admin-delete-username') || {}).value ? document.getElementById('admin-delete-username').value.trim() : '';
+            if (!targetUsername) return showModal('Missing Username', 'Enter the exact username to delete.');
+            if (!confirm(`Delete "${targetUsername}" permanently? This cannot be undone.`)) return;
+            try {
+                const res = await apiCall(`/admin/users/${encodeURIComponent(targetUsername)}`, 'DELETE');
+                showModal('Deleted', `${res.deletedUser} was deleted from the database.`);
+                document.getElementById('admin-delete-username').value = '';
             } catch (e) {}
         };
 
@@ -4586,6 +4618,9 @@ let customGizmo = null;
                     dx = (dx / dist) * radius;
                     dy = (dy / dist) * radius;
                 }
+                const deadZone = radius * 0.12;
+                if (Math.abs(dx) < deadZone) dx = 0;
+                if (Math.abs(dy) < deadZone) dy = 0;
                 studioMobileState.moveActive = true;
                 studioMobileState.moveX = dx / radius;
                 studioMobileState.moveY = dy / radius;
@@ -4623,8 +4658,8 @@ let customGizmo = null;
                     if (t.identifier !== studioMobileState.lookTouchId || !studioMobileState.lookPrev || !window.StudioCamera) continue;
                     const dx = t.clientX - studioMobileState.lookPrev.x;
                     const dy = t.clientY - studioMobileState.lookPrev.y;
-                    window.StudioCamera.yaw -= dx * 0.0055;
-                    window.StudioCamera.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, window.StudioCamera.pitch - dy * 0.0045));
+                    window.StudioCamera.yaw -= dx * 0.0048;
+                    window.StudioCamera.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, window.StudioCamera.pitch - dy * 0.0039));
                     window.StudioCamera.updateCamera();
                     studioMobileState.lookPrev = { x: t.clientX, y: t.clientY };
                 }
@@ -4656,6 +4691,38 @@ let customGizmo = null;
             if (pill) pill.style.display = 'none';
         };
         window.closeStudioLandscapeHint = closeStudioLandscapeHint;
+
+        const hideStudioQuickInsertMenu = () => {
+            const menu = document.getElementById('studio-quick-insert-menu');
+            if (menu) menu.style.display = 'none';
+        };
+
+        const showStudioQuickInsertMenuAt = (clientX, clientY) => {
+            const container = document.getElementById('editor-container-3d');
+            const menu = document.getElementById('studio-quick-insert-menu');
+            if (!container || !menu) return;
+            const partTypes = ['block', 'sphere', 'cylinder', 'cone', 'triangle', 'wedge', 'spawn'];
+            menu.innerHTML = partTypes.map(t => `<button class="btn btn-sm btn-info" onclick="addPart('${t}'); hideStudioQuickInsertMenu();">${t[0].toUpperCase() + t.slice(1)}</button>`).join('');
+            const rect = container.getBoundingClientRect();
+            const relX = Math.max(8, Math.min(clientX - rect.left, rect.width - 180));
+            const relY = Math.max(8, Math.min(clientY - rect.top, rect.height - 260));
+            menu.style.left = `${relX}px`;
+            menu.style.top = `${relY}px`;
+            menu.style.display = 'block';
+        };
+        window.hideStudioQuickInsertMenu = hideStudioQuickInsertMenu;
+
+        const updateStudioWindowSelectVisual = (x, y) => {
+            if (!studioWindowSelect.rect) return;
+            const minX = Math.min(studioWindowSelect.startX, x);
+            const minY = Math.min(studioWindowSelect.startY, y);
+            const width = Math.abs(x - studioWindowSelect.startX);
+            const height = Math.abs(y - studioWindowSelect.startY);
+            studioWindowSelect.rect.style.left = `${minX}px`;
+            studioWindowSelect.rect.style.top = `${minY}px`;
+            studioWindowSelect.rect.style.width = `${width}px`;
+            studioWindowSelect.rect.style.height = `${height}px`;
+        };
 
         const initEditor = () => {
             const container = document.getElementById('editor-container-3d');
@@ -4722,6 +4789,11 @@ window.EnvironmentEngine.generateClouds(edScene, '#ffffff');
 
 const dom = edRenderer.domElement;
             dom.addEventListener('contextmenu', e => e.preventDefault());
+            studioWindowSelect.rect = document.getElementById('studio-window-select');
+            dom.addEventListener('pointermove', (e) => {
+                studioPointerState.lastX = e.clientX;
+                studioPointerState.lastY = e.clientY;
+            });
 
             // Mouse Wheel Listener for "Zoom to Cursor"
           // Mouse Wheel Listener for "Zoom to Cursor"
@@ -4745,6 +4817,8 @@ const dom = edRenderer.domElement;
                 if (e.button !== 0) return; 
 
                 const rect = dom.getBoundingClientRect();
+                const localX = e.clientX - rect.left;
+                const localY = e.clientY - rect.top;
                 mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
                 mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
                 raycaster.setFromCamera(mouse, edCamera);
@@ -4788,11 +4862,27 @@ const dom = edRenderer.domElement;
                         draggedMesh = obj;
                     }
                 } else {
-                    selectObject(null);
+                    if (currentEditMode === 'select' && !window.StudioCamera.isRightClicking) {
+                        studioWindowSelect.active = true;
+                        studioWindowSelect.startX = localX;
+                        studioWindowSelect.startY = localY;
+                        if (studioWindowSelect.rect) {
+                            studioWindowSelect.rect.style.display = 'block';
+                            updateStudioWindowSelectVisual(localX, localY);
+                        }
+                    } else {
+                        selectObject(null);
+                    }
                 }
             });
 
             dom.addEventListener('pointermove', (e) => {
+                const rect = dom.getBoundingClientRect();
+                const localX = e.clientX - rect.left;
+                const localY = e.clientY - rect.top;
+                if (studioWindowSelect.active && studioWindowSelect.rect) {
+                    updateStudioWindowSelectVisual(localX, localY);
+                }
                 if (window.StudioCamera.isRightClicking) {
                     window.StudioCamera.yaw -= e.movementX * 0.005;
                     window.StudioCamera.pitch -= e.movementY * 0.005;
@@ -4801,7 +4891,6 @@ const dom = edRenderer.domElement;
                     return;
                 }
 
-                const rect = dom.getBoundingClientRect();
                 mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
                 mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
                 raycaster.setFromCamera(mouse, edCamera);
@@ -4888,6 +4977,38 @@ const dom = edRenderer.domElement;
                 if (isPhysicalDragging) {
                     isPhysicalDragging = false; 
                     recordEdit(true);
+                }
+                if (studioWindowSelect.active) {
+                    studioWindowSelect.active = false;
+                    const rect = dom.getBoundingClientRect();
+                    const x1 = Math.min(studioWindowSelect.startX, (e.clientX - rect.left));
+                    const y1 = Math.min(studioWindowSelect.startY, (e.clientY - rect.top));
+                    const x2 = Math.max(studioWindowSelect.startX, (e.clientX - rect.left));
+                    const y2 = Math.max(studioWindowSelect.startY, (e.clientY - rect.top));
+                    if (studioWindowSelect.rect) studioWindowSelect.rect.style.display = 'none';
+                    const hits = editorMeshes.filter(mesh => {
+                        const p = mesh.position.clone().project(edCamera);
+                        if (p.z < -1 || p.z > 1) return false;
+                        const sx = ((p.x + 1) / 2) * rect.width;
+                        const sy = ((-p.y + 1) / 2) * rect.height;
+                        return sx >= x1 && sx <= x2 && sy >= y1 && sy <= y2;
+                    });
+                    selectedObjects = hits;
+                    if (selectedObjects.length > 0) {
+                        const primary = selectedObjects[selectedObjects.length - 1];
+                        if (selectionBoxHelper) {
+                            selectionBoxHelper.setFromObject(primary);
+                            selectionBoxHelper.visible = true;
+                        }
+                        if (customGizmo) {
+                            customGizmo.position.copy(primary.position);
+                            customGizmo.visible = currentEditMode !== 'select';
+                        }
+                    } else {
+                        if (selectionBoxHelper) selectionBoxHelper.visible = false;
+                        if (customGizmo) customGizmo.visible = false;
+                    }
+                    updateExplorerSelection();
                 }
             });
 
@@ -6245,6 +6366,8 @@ let edAmbientLight = null, edDirectionalLight = null;
 let playAmbientLight = null, playDirectionalLight = null;
 let autosaveRecoveryPrompted = false;
 const studioMobileState = { initialized: false, moveActive: false, moveX: 0, moveY: 0, lookTouchId: null, lookPrev: null, flyUp: false, flyDown: false };
+const studioPointerState = { lastX: 0, lastY: 0 };
+const studioWindowSelect = { active: false, startX: 0, startY: 0, rect: null };
 
         let raycaster, mouse;
         let editorMeshes = []; 
@@ -8296,11 +8419,20 @@ playerObj = {
         let coyoteFrames = 0;
 
         const keys = { w: false, a: false, s: false, d: false, q: false, e: false, space: false };
+        const playTouchMove = { x: 0, y: 0 };
 
 
         
        // Capture Mouse Clicks for Guns/Tools
         window.addEventListener('pointerdown', (e) => {
+            const qiMenu = document.getElementById('studio-quick-insert-menu');
+            const editorWrap = document.getElementById('editor-container-3d');
+            if (qiMenu && qiMenu.style.display === 'block' && editorWrap && document.getElementById('view-create').classList.contains('active')) {
+                if (!qiMenu.contains(e.target)) {
+                    const insideEditor = editorWrap.contains(e.target);
+                    if (!insideEditor || !e.target.closest('#studio-quick-insert-menu')) hideStudioQuickInsertMenu();
+                }
+            }
             if (document.getElementById('view-play').classList.contains('active') && e.button === 0) {
                 const playEl = document.getElementById('play-container-3d');
                 if (!playEl) return;
@@ -8330,16 +8462,9 @@ playerObj = {
                 else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
                 else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); redo(); }
                 else if (e.key === 'Delete' || e.key === 'Backspace') { deleteSelectedParts(); }
-                else if (e.key.toLowerCase() === 'f') { 
-                    if (selectedObjects.length > 0) {
-                        const targetPos = selectedObjects[selectedObjects.length - 1].position.clone();
-                        edCamera.position.set(targetPos.x, targetPos.y + 10, targetPos.z + 15);
-                        edCamera.lookAt(targetPos);
-                        // Sync internal FreeCam rotations
-                        const euler = new THREE.Euler().setFromQuaternion(edCamera.quaternion, 'YXZ');
-                        window.StudioCamera.yaw = euler.y;
-                        window.StudioCamera.pitch = euler.x;
-                    }
+                else if (e.key.toLowerCase() === 'f') {
+                    e.preventDefault();
+                    showStudioQuickInsertMenuAt(studioPointerState.lastX || window.innerWidth / 2, studioPointerState.lastY || window.innerHeight / 2);
                 } else if (e.key.toLowerCase() === 'r' && selectedObjects.length > 0) {
                     const randomColor = '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0');
                     document.getElementById('prop-color').value = randomColor;
@@ -8707,10 +8832,12 @@ const startGame = () => {
 
 window.playControls = new THREE.OrbitControls(playCamera, playRenderer.domElement);
 window.playControls.enablePan = false;
-window.playControls.enableDamping = false;
+window.playControls.enableDamping = true;
 window.playControls.minDistance = 6;
 window.playControls.maxDistance = 45;
 window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+window.playControls.minPolarAngle = THREE.MathUtils.degToRad(8);
+window.playControls.maxPolarAngle = THREE.MathUtils.degToRad(82);
             }
 
             stopGameLoop(); setupMobileControls();
@@ -8730,6 +8857,7 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
             playerObj.y = (chosenSpawn.y || 7) + 3;
             playerObj.z = chosenSpawn.z || 0;
             playerObj.vx = 0; playerObj.vy = 0; playerObj.vz = 0; playerObj.rotY = 0;
+            playTouchMove.x = 0; playTouchMove.y = 0;
             playerObj.speed = 0.2;
 playerObj.jump = 3.2;
             playerObj.health = 100;
@@ -8748,11 +8876,11 @@ playCamera.position.set(playerObj.x, playerObj.y + 8, playerObj.z + 12);
 
 window.playControls.enablePan = false;
 window.playControls.enableDamping = true;
-window.playControls.dampingFactor = 0.12;
-window.playControls.minDistance = 6;
-window.playControls.maxDistance = 16;
-window.playControls.rotateSpeed = 0.85;
-window.playControls.zoomSpeed = 1.1;
+window.playControls.dampingFactor = 0.14;
+window.playControls.minDistance = 7;
+window.playControls.maxDistance = 20;
+window.playControls.rotateSpeed = 0.7;
+window.playControls.zoomSpeed = 1.0;
 
 window.playControls.target.set(playerObj.x, playerObj.y + playCameraFollowHeight, playerObj.z);
 window.playControls.update();
@@ -10247,22 +10375,44 @@ const updateChatBubbles = () => {
                 }
             }
 
-            // --- Standard Walking Physics ---
-            const camForward = new THREE.Vector3(); playCamera.getWorldDirection(camForward); camForward.y = 0; camForward.normalize();
+            // --- Roblox-style camera-relative movement ---
+            const camForward = new THREE.Vector3(); 
+            playCamera.getWorldDirection(camForward); 
+            camForward.y = 0; 
+            if (camForward.lengthSq() > 0) camForward.normalize();
             const camRight = new THREE.Vector3().crossVectors(camForward, new THREE.Vector3(0,1,0)).normalize();
+
+            const keyboardX = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+            const keyboardY = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
+            const inputX = Math.max(-1, Math.min(1, keyboardX + playTouchMove.x));
+            const inputY = Math.max(-1, Math.min(1, keyboardY - playTouchMove.y));
             const moveDir = new THREE.Vector3();
-            
-            if (keys.w) moveDir.add(camForward); 
-            if (keys.s) moveDir.sub(camForward);
-            if (keys.a) moveDir.sub(camRight); 
-            if (keys.d) moveDir.add(camRight);
-            
-            if (moveDir.lengthSq() > 0) { 
-                moveDir.normalize(); 
-                playerObj.vx += moveDir.x * playerObj.speed; 
-                playerObj.vz += moveDir.z * playerObj.speed; 
-                playerObj.rotY = Math.atan2(moveDir.x, moveDir.z); 
+
+            if (Math.abs(inputX) > 0.01 || Math.abs(inputY) > 0.01) {
+                moveDir.addScaledVector(camForward, inputY);
+                moveDir.addScaledVector(camRight, inputX);
+            }
+
+            const baseWalkSpeed = 0.38;
+            const airControlSpeed = 0.26;
+            const targetSpeed = playerObj.grounded ? baseWalkSpeed : airControlSpeed;
+            if (moveDir.lengthSq() > 0) {
+                moveDir.normalize();
+                const targetVx = moveDir.x * targetSpeed;
+                const targetVz = moveDir.z * targetSpeed;
+                const accel = playerObj.grounded ? 0.18 : 0.1;
+                playerObj.vx += (targetVx - playerObj.vx) * accel;
+                playerObj.vz += (targetVz - playerObj.vz) * accel;
+                const targetYaw = Math.atan2(moveDir.x, moveDir.z);
+                let yawDiff = targetYaw - playerObj.rotY;
+                while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
+                while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+                playerObj.rotY += yawDiff * 0.22;
                 resolveSlopeLift(playerObj.x, playerObj.y, playerObj.z);
+            } else {
+                const drag = playerObj.grounded ? 0.82 : 0.94;
+                playerObj.vx *= drag;
+                playerObj.vz *= drag;
             }
 
             const maxStepHeight = DEFAULT_STEP_HEIGHT;
@@ -10303,9 +10453,6 @@ const updateChatBubbles = () => {
                 }
             }
             
-            playerObj.vx *= 0.75; 
-            playerObj.vz *= 0.75;
-
             // --- Ladders & Gravity ---
            // --- Ladders & Gravity ---
             let onLadder = false;
@@ -10323,8 +10470,8 @@ const updateChatBubbles = () => {
 
             if (onLadder) {
                 // MOBILE & PC CLIMBING: Joystick UP triggers keys.w natively
-                if (keys.w) playerObj.vy = 0.25; 
-                else if (keys.s) playerObj.vy = -0.25; 
+                if (inputY > 0.1) playerObj.vy = 0.25; 
+                else if (inputY < -0.1) playerObj.vy = -0.25; 
                 else playerObj.vy = 0; // Stick to the ladder
                 
                 // JUMPING OFF LADDERS
@@ -10596,13 +10743,13 @@ if (window.playControls) {
         playerObj.z
     );
 
-    // Follow position only — do NOT auto-rotate toward walk direction
-    window.playControls.target.copy(targetPos);
+    // Smooth target follow like Roblox camera spring
+    window.playControls.target.lerp(targetPos, 0.22);
 
     // Keep camera from getting too close to the player
     const offset = playCamera.position.clone().sub(window.playControls.target);
     const distance = offset.length();
-    const minDist = 5.5;
+    const minDist = 6.2;
 
     if (distance < minDist) {
         offset.normalize().multiplyScalar(minDist);
