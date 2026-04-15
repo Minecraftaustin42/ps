@@ -16,22 +16,23 @@
         /* 2016 Nostalgic CSS / Flat Design Era */
         @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Audiowide&display=swap');
 
-        body { font-family: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; background-color: #e9ebee; margin: 0; padding: 0; color: #333; overflow-x: hidden; touch-action: manipulation; }
+        body { font-family: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; background: linear-gradient(180deg, #edf0ff 0%, #e8edff 45%, #e7f1ff 100%); margin: 0; padding: 0; color: #27243d; overflow-x: hidden; touch-action: manipulation; }
 
         /* Navbar */
-        .navbar { background-color: #2c3e50; padding: 0 20px; height: 60px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow-x: auto; white-space: nowrap; }
-        .navbar-brand { color: #ecf0f1; font-size: 24px; font-weight: 700; text-decoration: none; cursor: pointer; letter-spacing: 1px; margin-right: 20px; }
-        .nav-links { display: flex; gap: 15px; align-items: center; }
-        .nav-links a { color: #bdc3c7; text-decoration: none; font-weight: 600; cursor: pointer; transition: color 0.2s ease; line-height: 60px; }
-        .nav-links a:hover, .nav-links a.active { color: #fff; }
+        .navbar { position: sticky; top: 0; z-index: 900; background: linear-gradient(90deg, #4f46e5, #2563eb); padding: 8px 14px; min-height: 60px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 6px 18px rgba(37, 57, 163, 0.28); gap: 12px; flex-wrap: wrap; }
+        .navbar-brand { color: #eef4ff; font-size: 24px; font-weight: 800; text-decoration: none; cursor: pointer; letter-spacing: 1px; margin-right: 10px; padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,0.1); }
+        .nav-links { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+        #nav-logged-in { justify-content: flex-end; flex: 1; }
+        .nav-links a { color: #dbe7ff; text-decoration: none; font-weight: 700; cursor: pointer; transition: all 0.2s ease; line-height: 1.2; padding: 7px 10px; border-radius: 999px; }
+        .nav-links a:hover, .nav-links a.active { color: #fff; background: rgba(255,255,255,0.16); }
 
-        .search-bar { padding: 6px 10px; border-radius: 3px; border: none; outline: none; font-size: 14px; width: 150px; }
+        .search-bar { padding: 7px 12px; border-radius: 999px; border: none; outline: none; font-size: 14px; width: 170px; background: rgba(255,255,255,0.95); }
         .sculpt-coins { color: #f1c40f; font-weight: 700; margin-right: 10px; display: flex; align-items: center; }
 
         /* Container & Cards */
-        .container { max-width: 1000px; margin: 30px auto; padding: 10px; }
-        .card { background: #fff; border-radius: 4px; border: 1px solid #d8dee2; padding: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .card-title { margin-top: 0; border-bottom: 1px solid #eee; padding-bottom: 15px; margin-bottom: 20px; color: #2c3e50; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;}
+        .container { max-width: 1080px; margin: 20px auto; padding: 12px; }
+        .card { background: #fff; border-radius: 10px; border: 1px solid #d5dcff; padding: 22px; box-shadow: 0 8px 24px rgba(68, 84, 175, 0.08); margin-bottom: 16px; }
+        .card-title { margin-top: 0; border-bottom: 1px solid #e5eaff; padding-bottom: 12px; margin-bottom: 16px; color: #342f63; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;}
 
 
 /* Studio Explorer & Layout */
@@ -60,8 +61,8 @@
         .form-control { width: 100%; padding: 10px 12px; border: 1px solid #ccc; border-radius: 3px; font-size: 14px; box-sizing: border-box; transition: border-color 0.2s; }
         .form-control:focus { border-color: #3498db; outline: none; }
 
-        .btn { background-color: #3498db; color: white; border: none; padding: 10px 20px; border-radius: 3px; font-size: 14px; font-weight: 600; cursor: pointer; border-bottom: 3px solid #2980b9; transition: all 0.1s; display: inline-flex; align-items: center; justify-content: center; }
-        .btn:active { transform: translateY(2px); border-bottom: 1px solid #2980b9; margin-bottom: 2px; }
+        .btn { background-color: #4f46e5; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; border-bottom: 3px solid #3730a3; transition: all 0.1s; display: inline-flex; align-items: center; justify-content: center; }
+        .btn:active { transform: translateY(2px); border-bottom: 1px solid #3730a3; margin-bottom: 2px; }
         .btn-sm { padding: 6px 12px; font-size: 12px; }
         .btn-success { background-color: #2ecc71; border-bottom-color: #27ae60; }
         .btn-success:active { border-bottom-color: #27ae60; }
@@ -69,8 +70,8 @@
         .btn-warning:active { border-bottom-color: #f39c12; }
         .btn-danger { background-color: #e74c3c; border-bottom-color: #c0392b; }
         .btn-danger:active { border-bottom-color: #c0392b; }
-        .btn-info { background-color: #9b59b6; border-bottom-color: #8e44ad; }
-        .btn-info:active { border-bottom-color: #8e44ad; }
+        .btn-info { background-color: #2563eb; border-bottom-color: #1d4ed8; }
+        .btn-info:active { border-bottom-color: #1d4ed8; }
 
         .mb-10 { margin-bottom: 10px; }
 
@@ -10382,9 +10383,9 @@ const updateChatBubbles = () => {
             if (camForward.lengthSq() > 0) camForward.normalize();
             const camRight = new THREE.Vector3().crossVectors(camForward, new THREE.Vector3(0,1,0)).normalize();
 
-            const keyboardX = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+            const keyboardX = (keys.a ? 1 : 0) - (keys.d ? 1 : 0);
             const keyboardY = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
-            const inputX = Math.max(-1, Math.min(1, keyboardX + playTouchMove.x));
+            const inputX = Math.max(-1, Math.min(1, keyboardX - playTouchMove.x));
             const inputY = Math.max(-1, Math.min(1, keyboardY - playTouchMove.y));
             const moveDir = new THREE.Vector3();
 
@@ -10704,7 +10705,7 @@ if (playerMesh) {
                         const speed = Math.sqrt(playerObj.vx**2 + playerObj.vz**2);
 
                         if (speed > 0.1 && playerObj.grounded) {
-                            playerMesh.userData.swingTime += speed * 0.2; const st = playerMesh.userData.swingTime;
+                            playerMesh.userData.swingTime += speed * 0.32; const st = playerMesh.userData.swingTime;
                             playerMesh.userData.lArmPivot.rotation.x = Math.sin(st) * 0.5; playerMesh.userData.rArmPivot.rotation.x = -Math.sin(st) * 0.5;
                             playerMesh.userData.lLegPivot.rotation.x = -Math.sin(st) * 0.5; playerMesh.userData.rLegPivot.rotation.x = Math.sin(st) * 0.5;
                         } else {
