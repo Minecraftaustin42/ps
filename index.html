@@ -8230,7 +8230,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                         edCamera.getWorldDirection(mobileForward);
                         mobileForward.y = 0;
                         if (mobileForward.lengthSq() > 0) mobileForward.normalize();
-                        const mobileRight = new THREE.Vector3().crossVectors(mobileForward, new THREE.Vector3(0,1,0)).normalize();
+                        const mobileRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), mobileForward).normalize();
                         edCamera.position.addScaledVector(mobileForward, -studioMobileState.moveY * 0.55);
                         edCamera.position.addScaledVector(mobileRight, studioMobileState.moveX * 0.55);
                     }
