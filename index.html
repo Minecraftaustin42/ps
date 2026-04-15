@@ -271,7 +271,7 @@
         #studio-joystick-base { pointer-events:auto; width:142px; height:142px; border-radius:50%; background:radial-gradient(circle at 30% 30%, rgba(255,255,255,0.25), rgba(0,0,0,0.45)); border:2px solid rgba(255,255,255,0.35); position:relative; touch-action:none; }
         #studio-joystick-stick { width:64px; height:64px; border-radius:50%; background:rgba(255,255,255,0.9); position:absolute; left:39px; top:39px; transition:transform .08s; box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
         .studio-mobile-shell { display:flex; justify-content:space-between; align-items:flex-end; padding:0 12px; gap:10px; }
-        .studio-mobile-right { display:flex; flex-direction:column; gap:7px; align-items:flex-end; max-width:62%; }
+        .studio-mobile-right { display:flex; flex-direction:column; gap:7px; align-items:flex-end; max-width:62%; position:relative; z-index:2; }
         .studio-mobile-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:6px; pointer-events:auto; }
         .studio-mobile-actions .studio-mobile-btn { min-width:72px; }
         #studio-quick-insert-menu { display:none; position:absolute; z-index:320; min-width:160px; background:rgba(15,20,30,0.95); border:1px solid rgba(255,255,255,0.2); border-radius:8px; padding:8px; box-shadow:0 10px 24px rgba(0,0,0,0.32); }
@@ -315,7 +315,7 @@
             .card { padding: 16px; margin-bottom: 12px; }
             .card-title { flex-direction: column; align-items: flex-start; }
 
-            .navbar { min-height: 56px; padding: 8px 10px; gap: 8px; align-items:center; }
+            .navbar { position: static; top: auto; min-height: 50px; padding: 6px 8px; gap: 6px; align-items:center; }
             .navbar-brand { font-size: 20px; margin-right: 0; }
             #nav-logged-in { width:100%; }
             .nav-utility-row, .navbar-links { justify-content:flex-start; }
@@ -332,7 +332,7 @@
             .play-layout { gap: 12px; }
             .play-game-card { padding: 10px; }
             .play-sidebar { height: auto; max-height: 260px; width: 100%; max-width: none; }
-            #play-container-3d { aspect-ratio: 4/3; min-height: 320px; }
+            #play-container-3d { aspect-ratio: 4/3; min-height: 320px; margin-top: 6px; }
             #play-toolbar { gap: 6px; bottom: 10px; }
             .toolbar-slot { width: 52px; height: 52px; }
             .mobile-btn { width: 58px; height: 58px; font-size: 20px; }
@@ -1799,7 +1799,7 @@
                     </div>
 
                     <div id="studio-mobile-controls">
-                        <div id="studio-look-zone" style="position:absolute; top:0; right:0; width:68%; height:84%; pointer-events:auto; touch-action:none;"></div>
+                        <div id="studio-look-zone" style="position:absolute; top:0; right:0; width:100%; height:62%; pointer-events:auto; touch-action:none; z-index:1;"></div>
                         <div class="studio-mobile-shell">
                             <div id="studio-joystick-base">
                                 <div id="studio-joystick-stick"></div>
@@ -8280,14 +8280,18 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     const moveSpeed = 0.5;
                     const dir = new THREE.Vector3();
                     edCamera.getWorldDirection(dir);
-                    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0,1,0)).normalize();
+                    const flatForward = dir.clone();
+                    flatForward.y = 0;
+                    if (flatForward.lengthSq() > 0) flatForward.normalize();
+                    else flatForward.set(0, 0, -1);
+                    const right = new THREE.Vector3().crossVectors(flatForward, new THREE.Vector3(0,1,0)).normalize();
 
                     const tag = document.activeElement ? document.activeElement.tagName : '';
                     
                     if (tag !== 'INPUT' && tag !== 'TEXTAREA') {
                         // WASD Freecam Flight
-                        if (keys.w) edCamera.position.addScaledVector(dir, moveSpeed);
-                        if (keys.s) edCamera.position.addScaledVector(dir, -moveSpeed);
+                        if (keys.w) edCamera.position.addScaledVector(flatForward, moveSpeed);
+                        if (keys.s) edCamera.position.addScaledVector(flatForward, -moveSpeed);
                         if (keys.a) edCamera.position.addScaledVector(right, -moveSpeed);
                         if (keys.d) edCamera.position.addScaledVector(right, moveSpeed);
                         if (keys.e) edCamera.position.y += moveSpeed;
