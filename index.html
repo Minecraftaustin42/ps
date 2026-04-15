@@ -19,7 +19,7 @@
         body { font-family: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #e9edfb; margin: 0; padding: 0; color: #27243d; overflow-x: hidden; touch-action: manipulation; }
 
         /* Navbar */
-        .navbar { position: sticky; top: 0; z-index: 900; background: #4651cf; border-bottom: 3px solid #2f378d; padding: 10px 14px; min-height: 64px; display: flex; align-items: flex-start; gap: 12px; box-shadow: 0 8px 18px rgba(32,40,110,0.28); }
+        .navbar { position: static; top: 0; z-index: 900; background: #4651cf; border-bottom: 3px solid #2f378d; padding: 10px 14px; min-height: 64px; display: flex; align-items: flex-start; gap: 12px; box-shadow: 0 8px 18px rgba(32,40,110,0.28); }
         .navbar-left { display:flex; align-items:center; }
         .navbar-brand { color: #eef4ff; font-size: 24px; font-weight: 800; text-decoration: none; cursor: pointer; letter-spacing: 1px; padding: 6px 12px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.22); background: #3d47ba; }
         #nav-logged-out { margin-left:auto; display:flex; align-items:center; }
@@ -1799,7 +1799,7 @@
                     </div>
 
                     <div id="studio-mobile-controls">
-                        <div id="studio-look-zone" style="position:absolute; top:0; right:0; width:100%; height:62%; pointer-events:auto; touch-action:none; z-index:1;"></div>
+                        <div id="studio-look-zone" style="position:absolute; top:0; right:0; width:100%; height:82%; pointer-events:auto; touch-action:none; z-index:1;"></div>
                         <div class="studio-mobile-shell">
                             <div id="studio-joystick-base">
                                 <div id="studio-joystick-stick"></div>
@@ -4675,12 +4675,13 @@ let customGizmo = null;
             if (!isTouch) return;
             const base = document.getElementById('studio-joystick-base');
             const stick = document.getElementById('studio-joystick-stick');
+            const mobileControls = document.getElementById('studio-mobile-controls');
             const lookZone = document.getElementById('studio-look-zone');
             const flyUpBtn = document.getElementById('studio-fly-up');
             const flyDownBtn = document.getElementById('studio-fly-down');
             const boostBtn = document.getElementById('studio-mobile-boost');
             const recenterBtn = document.getElementById('studio-mobile-recenter');
-            if (!base || !stick || !lookZone || !flyUpBtn || !flyDownBtn || !boostBtn || !recenterBtn) return;
+            if (!base || !stick || !mobileControls || !lookZone || !flyUpBtn || !flyDownBtn || !boostBtn || !recenterBtn) return;
 
             studioMobileState.initialized = true;
             const resetStick = () => {
@@ -4703,22 +4704,49 @@ let customGizmo = null;
                     dx = (dx / dist) * radius;
                     dy = (dy / dist) * radius;
                 }
-                const deadZone = radius * 0.12;
+                const deadZone = radius * 0.06;
                 if (Math.abs(dx) < deadZone) dx = 0;
                 if (Math.abs(dy) < deadZone) dy = 0;
                 studioMobileState.moveActive = true;
-                studioMobileState.moveX = dx / radius;
-                studioMobileState.moveY = dy / radius;
+                studioMobileState.moveX = THREE.MathUtils.clamp((dx / radius) * 1.28, -1, 1);
+                studioMobileState.moveY = THREE.MathUtils.clamp((dy / radius) * 1.28, -1, 1);
                 stick.style.transform = `translate(${dx}px, ${dy}px)`;
+            };
+
+            const touchCanMoveStudio = (touch) => {
+                const controlsRect = mobileControls.getBoundingClientRect();
+                const relX = touch.clientX - controlsRect.left;
+                const relY = touch.clientY - controlsRect.top;
+                return relX < controlsRect.width * 0.58 && relY > controlsRect.height * 0.26;
+            };
+            const touchCanLookStudio = (touch) => {
+                const controlsRect = mobileControls.getBoundingClientRect();
+                const relX = touch.clientX - controlsRect.left;
+                const relY = touch.clientY - controlsRect.top;
+                return relY < controlsRect.height * 0.84 && (relX > controlsRect.width * 0.2 || relY < controlsRect.height * 0.52);
+            };
+            const beginMoveTouch = (touch) => {
+                if (!touch || studioMobileState.moveTouchId !== null || !touchCanMoveStudio(touch)) return;
+                studioMobileState.moveTouchId = touch.identifier;
+                updateFromTouch(touch);
             };
 
             base.addEventListener('touchstart', (e) => {
                 e.preventDefault();
-                if (studioMobileState.moveTouchId !== null) return;
                 const t = e.changedTouches && e.changedTouches[0];
-                if (!t) return;
-                studioMobileState.moveTouchId = t.identifier;
-                updateFromTouch(t);
+                beginMoveTouch(t);
+            }, { passive: false });
+            mobileControls.addEventListener('touchstart', (e) => {
+                if (studioMobileState.moveTouchId !== null) return;
+                const touches = e.changedTouches || [];
+                for (let i = 0; i < touches.length; i++) {
+                    const t = touches[i];
+                    if (touchCanMoveStudio(t) && (!touchCanLookStudio(t) || t.clientY > (mobileControls.getBoundingClientRect().top + mobileControls.getBoundingClientRect().height * 0.6))) {
+                        e.preventDefault();
+                        beginMoveTouch(t);
+                        break;
+                    }
+                }
             }, { passive: false });
             base.addEventListener('touchmove', (e) => {
                 e.preventDefault();
@@ -4756,7 +4784,7 @@ let customGizmo = null;
             lookZone.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 const t = e.changedTouches[0];
-                if (!t || studioMobileState.lookTouchId !== null) return;
+                if (!t || studioMobileState.lookTouchId !== null || !touchCanLookStudio(t)) return;
                 studioMobileState.lookTouchId = t.identifier;
                 studioMobileState.lookPrev = { x: t.clientX, y: t.clientY };
             }, { passive: false });
@@ -7868,9 +7896,45 @@ if (item.type === 'button' && item.onClickEvent) {
         };
 
         const resetCharacter = () => {
-            if (!isPlayActive || isDeathAnimating) return;
-            playerObj.health = 0;
-            updatePlayerHealthHUD();
+            if (!isPlayActive || isDeathAnimating || isResettingCharacter) return;
+            isResettingCharacter = true;
+            playerObj.sitting = false;
+            playerObj.vehicleSeat = null;
+            playerObj.seatCooldown = 0;
+
+            const finishReset = () => {
+                playerObj.x = playSpawnPoint.x || 0;
+                playerObj.y = (playSpawnPoint.y || 7) + 3;
+                playerObj.z = playSpawnPoint.z || 0;
+                playerObj.vx = 0; playerObj.vy = 0; playerObj.vz = 0;
+                playerObj.grounded = false;
+                playerObj.rotY = 0;
+                playerObj.health = 100;
+                if (playerMesh) {
+                    playerMesh.visible = true;
+                    playerMesh.scale.set(0.5, 0.5, 0.5);
+                    playerMesh.position.set(playerObj.x, playerObj.y + 3, playerObj.z);
+                }
+                if (window.playControls) {
+                    window.playControls.target.set(playerObj.x, playerObj.y + playCameraFollowHeight, playerObj.z);
+                    window.playControls.update();
+                }
+                updatePlayerHealthHUD();
+                isResettingCharacter = false;
+            };
+
+            if (!playerMesh) { finishReset(); return; }
+            const startAt = performance.now();
+            const duration = 320;
+            const animateReset = (now) => {
+                const t = Math.min(1, (now - startAt) / duration);
+                const pulse = 0.5 + 0.22 * Math.sin(t * Math.PI);
+                playerMesh.scale.setScalar(Math.max(0.24, pulse * (1 - t * 0.35)));
+                playerMesh.rotation.y += 0.22;
+                if (t < 1) requestAnimationFrame(animateReset);
+                else finishReset();
+            };
+            requestAnimationFrame(animateReset);
         };
         window.resetCharacter = resetCharacter;
 
@@ -8443,6 +8507,8 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
         // --- 3D Game Play Engine & Physics ---
         let playScene, playCamera, playRenderer;
         let playCameraFollowHeight = 5;
+        let playSpawnPoint = { x: 0, y: 7, z: 0 };
+        let isResettingCharacter = false;
         let playerMesh;
 playerObj = {
         x: 0, y: 10, z: 0,
@@ -8958,6 +9024,7 @@ playRenderer.domElement.addEventListener('wheel', (e) => {
             if (activeLevel.spawn) spawnChoices.push({ x: activeLevel.spawn.x, y: activeLevel.spawn.y, z: activeLevel.spawn.z });
             (activeLevel.objects || []).forEach(o => { if (o.type === 'spawn' && o.position) spawnChoices.push({ x: o.position.x, y: o.position.y, z: o.position.z }); });
             const chosenSpawn = spawnChoices.length ? spawnChoices[Math.floor(Math.random() * spawnChoices.length)] : { x: 0, y: 7, z: 0 };
+            playSpawnPoint = { x: chosenSpawn.x || 0, y: chosenSpawn.y || 7, z: chosenSpawn.z || 0 };
             playerObj.x = chosenSpawn.x || 0; 
             playerObj.y = (chosenSpawn.y || 7) + 3;
             playerObj.z = chosenSpawn.z || 0;
