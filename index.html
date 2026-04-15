@@ -44,7 +44,7 @@
         .explorer-item { padding: 8px 10px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px; user-select: none; }
         .explorer-item:hover { background: #f1f8ff; }
         .explorer-item.selected { background: #3498db; color: white; }
-        .studio-layout { display: flex; position: relative; width: 100%; height: 500px; background: #87CEEB; text-align: left;}
+        .studio-layout { display: flex; position: relative; width: 100%; height: 68vh; min-height: 540px; background: #87CEEB; text-align: left;}
         #editor-container-3d { touch-action: none; flex-grow: 1; height: 100%; position: relative; outline: none; margin-right: 250px;}
 
 
@@ -2943,11 +2943,11 @@ const toggleMultiSelect = () => {
                 const ui = document.createElement('div');
                 ui.id = 'mobile-controls';
                 ui.innerHTML = `
-                    <div id="joystick-base" style="position: absolute; bottom: 30px; left: 30px; width: 140px; height: 140px; background: rgba(0,0,0,0.4); border-radius: 50%; pointer-events: auto; touch-action: none; border: 3px solid rgba(255,255,255,0.2);">
-                        <div id="joystick-stick" style="position: absolute; top: 35px; left: 35px; width: 70px; height: 70px; background: rgba(255,255,255,0.8); border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: transform 0.1s ease-out;"></div>
+                    <div id="joystick-base" style="position: absolute; bottom: 18px; left: 18px; width: 108px; height: 108px; background: rgba(0,0,0,0.3); border-radius: 50%; pointer-events: auto; touch-action: none; border: 2px solid rgba(255,255,255,0.22); backdrop-filter: blur(1px);">
+                        <div id="joystick-stick" style="position: absolute; top: 29px; left: 29px; width: 50px; height: 50px; background: rgba(255,255,255,0.82); border-radius: 50%; box-shadow: 0 3px 8px rgba(0,0,0,0.45); transition: transform 0.1s ease-out;"></div>
                     </div>
-                    <div id="mobile-look-zone" style="position:absolute; top:0; right:0; width:66%; height:86%; pointer-events:auto; touch-action:none;"></div>
-                    <div id="mobile-jump-btn" style="position: absolute; bottom: 40px; right: 30px; width: 90px; height: 90px; background: rgba(46, 204, 113, 0.6); border-radius: 50%; pointer-events: auto; touch-action: none; border: 3px solid rgba(46, 204, 113, 0.9); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 32px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: background 0.1s;">?</div>
+                    <div id="mobile-look-zone" style="position:absolute; top:0; right:0; width:76%; height:100%; pointer-events:auto; touch-action:none;"></div>
+                    <div id="mobile-jump-btn" style="position: absolute; bottom: 24px; right: 18px; width: 68px; height: 68px; background: rgba(46, 204, 113, 0.58); border-radius: 50%; pointer-events: auto; touch-action: none; border: 2px solid rgba(46, 204, 113, 0.88); display: flex; align-items: center; justify-content: center; color: white; font-weight: 800; font-size: 14px; letter-spacing: 0.2px; box-shadow: 0 4px 10px rgba(0,0,0,0.42); transition: background 0.1s;">Jump</div>
                 `;
                 ui.style.position = 'absolute';
                 ui.style.top = '0'; ui.style.left = '0'; ui.style.width = '100%'; ui.style.height = '100%';
@@ -2961,7 +2961,7 @@ const toggleMultiSelect = () => {
                 const jumpBtn = document.getElementById('mobile-jump-btn');
                 const lookZone = document.getElementById('mobile-look-zone');
 
-                let baseRadius = 70;
+                let baseRadius = 54;
                 let baseCenter = { x: 0, y: 0 };
                 let activeTouchId = null;
                 let lookTouchId = null;
@@ -3016,13 +3016,15 @@ const toggleMultiSelect = () => {
                     stick.style.transform = `translate(${dx}px, ${dy}px)`;
                     const nx = Math.max(-1, Math.min(1, dx / baseRadius));
                     const ny = Math.max(-1, Math.min(1, dy / baseRadius));
-                    const dead = 0.12;
-                    playTouchMove.x = Math.abs(nx) < dead ? 0 : nx;
-                    playTouchMove.y = Math.abs(ny) < dead ? 0 : ny;
+                    const dead = 0.08;
+                    const scaledX = THREE.MathUtils.clamp(nx * 1.18, -1, 1);
+                    const scaledY = THREE.MathUtils.clamp(ny * 1.18, -1, 1);
+                    playTouchMove.x = Math.abs(scaledX) < dead ? 0 : scaledX;
+                    playTouchMove.y = Math.abs(scaledY) < dead ? 0 : scaledY;
                 };
 
-                jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playInput.justJumped = true; jumpBufferFrames = 8; jumpBtn.style.background = 'rgba(46, 204, 113, 0.9)'; }, { passive: false });
-                jumpBtn.addEventListener('touchend', (e) => { e.preventDefault(); jumpBtn.style.background = 'rgba(46, 204, 113, 0.6)'; }, { passive: false });
+                jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playInput.justJumped = true; jumpBufferFrames = 8; jumpBtn.style.background = 'rgba(46, 204, 113, 0.88)'; }, { passive: false });
+                jumpBtn.addEventListener('touchend', (e) => { e.preventDefault(); jumpBtn.style.background = 'rgba(46, 204, 113, 0.58)'; }, { passive: false });
 
                 const onLookMove = (touch) => {
                     if (!lookPrev || !window.playControls) {
@@ -9806,11 +9808,17 @@ const updateChatBubbles = () => {
 };
 // --- STUDIO FULLSCREEN LOGIC ---
         let isStudioFullscreen = false;
+        const applyStudioExpandedHeight = () => {
+            if (!isStudioFullscreen) return;
+            const layout = document.querySelector('.studio-layout');
+            if (!layout) return;
+            const top = layout.getBoundingClientRect().top;
+            const available = Math.max(480, window.innerHeight - top - 10);
+            layout.style.height = `${available}px`;
+        };
         const toggleStudioFullscreen = () => {
             const layout = document.querySelector('.studio-layout');
-            const nav = document.querySelector('.navbar');
             const container = document.querySelector('.container');
-            const toolbars = document.querySelectorAll('#view-create .toolbar');
             const explorer = document.getElementById('project-explorer');
             const props = document.getElementById('properties-panel');
             const editor3d = document.getElementById('editor-container-3d');
@@ -9819,27 +9827,21 @@ const updateChatBubbles = () => {
             isStudioFullscreen = !isStudioFullscreen;
             
             if (isStudioFullscreen) {
-                // Hide nav and remove constraints to fill the screen
-                nav.style.display = 'none';
-                container.style.margin = '0';
-                container.style.padding = '0';
+                // Expand workspace while keeping toolbar/explorer/properties visible
+                container.style.margin = '0 auto';
+                container.style.padding = '8px';
                 container.style.maxWidth = '100%';
-                
-                // Dynamically calculate the remaining height
-                let tbHeight = 0;
-                toolbars.forEach(tb => tbHeight += tb.offsetHeight);
-                layout.style.height = `calc(100vh - ${tbHeight + 10}px)`;
+                applyStudioExpandedHeight();
                 if (explorer) explorer.style.display = '';
                 if (props) props.style.display = '';
                 if (editor3d) editor3d.style.marginRight = '250px';
                 if (output) output.style.width = 'calc(100% - 250px)';
             } else {
                 // Restore standard view
-                nav.style.display = 'flex';
-                container.style.margin = '30px auto';
-                container.style.padding = '10px';
-                container.style.maxWidth = '1000px';
-                layout.style.height = '500px';
+                container.style.margin = '';
+                container.style.padding = '';
+                container.style.maxWidth = '';
+                layout.style.height = '';
                 if (explorer) explorer.style.display = '';
                 if (props) props.style.display = '';
                 if (editor3d) editor3d.style.marginRight = '250px';
@@ -9849,6 +9851,7 @@ const updateChatBubbles = () => {
             // Force the 3D engine to recalculate the canvas size
             setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
         };
+        window.addEventListener('resize', applyStudioExpandedHeight);
 
 
 
