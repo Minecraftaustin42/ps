@@ -1743,7 +1743,7 @@
                     </div>
 
                     <div id="studio-mobile-controls">
-                        <div id="studio-look-zone" style="position:absolute; top:0; right:0; width:52%; height:76%; pointer-events:auto; touch-action:none;"></div>
+                        <div id="studio-look-zone" style="position:absolute; top:0; right:0; width:68%; height:84%; pointer-events:auto; touch-action:none;"></div>
                         <div class="studio-mobile-shell">
                             <div id="studio-joystick-base">
                                 <div id="studio-joystick-stick"></div>
@@ -2887,7 +2887,7 @@ const toggleMultiSelect = () => {
                     <div id="joystick-base" style="position: absolute; bottom: 30px; left: 30px; width: 140px; height: 140px; background: rgba(0,0,0,0.4); border-radius: 50%; pointer-events: auto; touch-action: none; border: 3px solid rgba(255,255,255,0.2);">
                         <div id="joystick-stick" style="position: absolute; top: 35px; left: 35px; width: 70px; height: 70px; background: rgba(255,255,255,0.8); border-radius: 50%; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: transform 0.1s ease-out;"></div>
                     </div>
-                    <div id="mobile-look-zone" style="position:absolute; top:0; right:0; width:52%; height:78%; pointer-events:auto; touch-action:none;"></div>
+                    <div id="mobile-look-zone" style="position:absolute; top:0; right:0; width:66%; height:86%; pointer-events:auto; touch-action:none;"></div>
                     <div id="mobile-jump-btn" style="position: absolute; bottom: 40px; right: 30px; width: 90px; height: 90px; background: rgba(46, 204, 113, 0.6); border-radius: 50%; pointer-events: auto; touch-action: none; border: 3px solid rgba(46, 204, 113, 0.9); display: flex; align-items: center; justify-content: center; color: white; font-weight: bold; font-size: 32px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: background 0.1s;">?</div>
                 `;
                 ui.style.position = 'absolute';
@@ -2911,7 +2911,8 @@ const toggleMultiSelect = () => {
                 const resetJoystick = () => {
                     stick.style.transition = 'transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275)';
                     stick.style.transform = `translate(0px, 0px)`;
-                    keys.w = false; keys.s = false; keys.a = false; keys.d = false; 
+                    playTouchMove.x = 0;
+                    playTouchMove.y = 0;
                     activeTouchId = null;
                 };
 
@@ -2953,12 +2954,11 @@ const toggleMultiSelect = () => {
                     }
                     
                     stick.style.transform = `translate(${dx}px, ${dy}px)`;
-                    
-                    const magnitude = Math.sqrt(dx * dx + dy * dy);
-                    keys.w = magnitude > 16;
-                    keys.s = false;
-                    keys.a = false;
-                    keys.d = false;
+                    const nx = Math.max(-1, Math.min(1, dx / baseRadius));
+                    const ny = Math.max(-1, Math.min(1, dy / baseRadius));
+                    const dead = 0.12;
+                    playTouchMove.x = Math.abs(nx) < dead ? 0 : nx;
+                    playTouchMove.y = Math.abs(ny) < dead ? 0 : ny;
                 };
 
                 jumpBtn.addEventListener('touchstart', (e) => { e.preventDefault(); playInput.justJumped = true; jumpBufferFrames = 8; jumpBtn.style.background = 'rgba(46, 204, 113, 0.9)'; }, { passive: false });
@@ -8419,6 +8419,7 @@ playerObj = {
         let coyoteFrames = 0;
 
         const keys = { w: false, a: false, s: false, d: false, q: false, e: false, space: false };
+        const playTouchMove = { x: 0, y: 0 };
 
 
         
@@ -8831,10 +8832,12 @@ const startGame = () => {
 
 window.playControls = new THREE.OrbitControls(playCamera, playRenderer.domElement);
 window.playControls.enablePan = false;
-window.playControls.enableDamping = false;
+window.playControls.enableDamping = true;
 window.playControls.minDistance = 6;
 window.playControls.maxDistance = 45;
 window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE.DOLLY, RIGHT: THREE.MOUSE.ROTATE };
+window.playControls.minPolarAngle = THREE.MathUtils.degToRad(8);
+window.playControls.maxPolarAngle = THREE.MathUtils.degToRad(82);
             }
 
             stopGameLoop(); setupMobileControls();
@@ -8854,6 +8857,7 @@ window.playControls.mouseButtons = { LEFT: THREE.MOUSE.NONE, MIDDLE: THREE.MOUSE
             playerObj.y = (chosenSpawn.y || 7) + 3;
             playerObj.z = chosenSpawn.z || 0;
             playerObj.vx = 0; playerObj.vy = 0; playerObj.vz = 0; playerObj.rotY = 0;
+            playTouchMove.x = 0; playTouchMove.y = 0;
             playerObj.speed = 0.2;
 playerObj.jump = 3.2;
             playerObj.health = 100;
@@ -8872,11 +8876,11 @@ playCamera.position.set(playerObj.x, playerObj.y + 8, playerObj.z + 12);
 
 window.playControls.enablePan = false;
 window.playControls.enableDamping = true;
-window.playControls.dampingFactor = 0.12;
-window.playControls.minDistance = 6;
-window.playControls.maxDistance = 16;
-window.playControls.rotateSpeed = 0.85;
-window.playControls.zoomSpeed = 1.1;
+window.playControls.dampingFactor = 0.14;
+window.playControls.minDistance = 7;
+window.playControls.maxDistance = 20;
+window.playControls.rotateSpeed = 0.7;
+window.playControls.zoomSpeed = 1.0;
 
 window.playControls.target.set(playerObj.x, playerObj.y + playCameraFollowHeight, playerObj.z);
 window.playControls.update();
@@ -10371,22 +10375,44 @@ const updateChatBubbles = () => {
                 }
             }
 
-            // --- Standard Walking Physics ---
-            const camForward = new THREE.Vector3(); playCamera.getWorldDirection(camForward); camForward.y = 0; camForward.normalize();
+            // --- Roblox-style camera-relative movement ---
+            const camForward = new THREE.Vector3(); 
+            playCamera.getWorldDirection(camForward); 
+            camForward.y = 0; 
+            if (camForward.lengthSq() > 0) camForward.normalize();
             const camRight = new THREE.Vector3().crossVectors(camForward, new THREE.Vector3(0,1,0)).normalize();
+
+            const keyboardX = (keys.d ? 1 : 0) - (keys.a ? 1 : 0);
+            const keyboardY = (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
+            const inputX = Math.max(-1, Math.min(1, keyboardX + playTouchMove.x));
+            const inputY = Math.max(-1, Math.min(1, keyboardY - playTouchMove.y));
             const moveDir = new THREE.Vector3();
-            
-            if (keys.w) moveDir.add(camForward); 
-            if (keys.s) moveDir.sub(camForward);
-            if (keys.a) moveDir.sub(camRight); 
-            if (keys.d) moveDir.add(camRight);
-            
-            if (moveDir.lengthSq() > 0) { 
-                moveDir.normalize(); 
-                playerObj.vx += moveDir.x * playerObj.speed; 
-                playerObj.vz += moveDir.z * playerObj.speed; 
-                playerObj.rotY = Math.atan2(moveDir.x, moveDir.z); 
+
+            if (Math.abs(inputX) > 0.01 || Math.abs(inputY) > 0.01) {
+                moveDir.addScaledVector(camForward, inputY);
+                moveDir.addScaledVector(camRight, inputX);
+            }
+
+            const baseWalkSpeed = 0.38;
+            const airControlSpeed = 0.26;
+            const targetSpeed = playerObj.grounded ? baseWalkSpeed : airControlSpeed;
+            if (moveDir.lengthSq() > 0) {
+                moveDir.normalize();
+                const targetVx = moveDir.x * targetSpeed;
+                const targetVz = moveDir.z * targetSpeed;
+                const accel = playerObj.grounded ? 0.18 : 0.1;
+                playerObj.vx += (targetVx - playerObj.vx) * accel;
+                playerObj.vz += (targetVz - playerObj.vz) * accel;
+                const targetYaw = Math.atan2(moveDir.x, moveDir.z);
+                let yawDiff = targetYaw - playerObj.rotY;
+                while (yawDiff > Math.PI) yawDiff -= Math.PI * 2;
+                while (yawDiff < -Math.PI) yawDiff += Math.PI * 2;
+                playerObj.rotY += yawDiff * 0.22;
                 resolveSlopeLift(playerObj.x, playerObj.y, playerObj.z);
+            } else {
+                const drag = playerObj.grounded ? 0.82 : 0.94;
+                playerObj.vx *= drag;
+                playerObj.vz *= drag;
             }
 
             const maxStepHeight = DEFAULT_STEP_HEIGHT;
@@ -10427,9 +10453,6 @@ const updateChatBubbles = () => {
                 }
             }
             
-            playerObj.vx *= 0.75; 
-            playerObj.vz *= 0.75;
-
             // --- Ladders & Gravity ---
            // --- Ladders & Gravity ---
             let onLadder = false;
@@ -10447,8 +10470,8 @@ const updateChatBubbles = () => {
 
             if (onLadder) {
                 // MOBILE & PC CLIMBING: Joystick UP triggers keys.w natively
-                if (keys.w) playerObj.vy = 0.25; 
-                else if (keys.s) playerObj.vy = -0.25; 
+                if (inputY > 0.1) playerObj.vy = 0.25; 
+                else if (inputY < -0.1) playerObj.vy = -0.25; 
                 else playerObj.vy = 0; // Stick to the ladder
                 
                 // JUMPING OFF LADDERS
@@ -10720,13 +10743,13 @@ if (window.playControls) {
         playerObj.z
     );
 
-    // Follow position only — do NOT auto-rotate toward walk direction
-    window.playControls.target.copy(targetPos);
+    // Smooth target follow like Roblox camera spring
+    window.playControls.target.lerp(targetPos, 0.22);
 
     // Keep camera from getting too close to the player
     const offset = playCamera.position.clone().sub(window.playControls.target);
     const distance = offset.length();
-    const minDist = 5.5;
+    const minDist = 6.2;
 
     if (distance < minDist) {
         offset.normalize().multiplyScalar(minDist);
