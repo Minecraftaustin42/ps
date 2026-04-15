@@ -4655,6 +4655,7 @@ let customGizmo = null;
             studioMobileState.initialized = true;
             const resetStick = () => {
                 studioMobileState.moveActive = false;
+                studioMobileState.moveTouchId = null;
                 studioMobileState.moveX = 0;
                 studioMobileState.moveY = 0;
                 stick.style.transform = 'translate(0px, 0px)';
@@ -4683,16 +4684,40 @@ let customGizmo = null;
 
             base.addEventListener('touchstart', (e) => {
                 e.preventDefault();
-                if (!e.touches[0]) return;
-                updateFromTouch(e.touches[0]);
+                if (studioMobileState.moveTouchId !== null) return;
+                const t = e.changedTouches && e.changedTouches[0];
+                if (!t) return;
+                studioMobileState.moveTouchId = t.identifier;
+                updateFromTouch(t);
             }, { passive: false });
             base.addEventListener('touchmove', (e) => {
                 e.preventDefault();
-                if (!e.touches[0]) return;
-                updateFromTouch(e.touches[0]);
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    const t = e.changedTouches[i];
+                    if (t.identifier === studioMobileState.moveTouchId) {
+                        updateFromTouch(t);
+                        break;
+                    }
+                }
             }, { passive: false });
-            base.addEventListener('touchend', (e) => { e.preventDefault(); resetStick(); }, { passive: false });
-            base.addEventListener('touchcancel', (e) => { e.preventDefault(); resetStick(); }, { passive: false });
+            base.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === studioMobileState.moveTouchId) {
+                        resetStick();
+                        break;
+                    }
+                }
+            }, { passive: false });
+            base.addEventListener('touchcancel', (e) => {
+                e.preventDefault();
+                for (let i = 0; i < e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === studioMobileState.moveTouchId) {
+                        resetStick();
+                        break;
+                    }
+                }
+            }, { passive: false });
 
             const endLookTouch = () => {
                 studioMobileState.lookTouchId = null;
@@ -6369,7 +6394,7 @@ let edScene, edCamera, edRenderer, edControls; // Removed transformControl
 let edAmbientLight = null, edDirectionalLight = null;
 let playAmbientLight = null, playDirectionalLight = null;
 let autosaveRecoveryPrompted = false;
-const studioMobileState = { initialized: false, moveActive: false, moveX: 0, moveY: 0, lookTouchId: null, lookPrev: null, flyUp: false, flyDown: false };
+const studioMobileState = { initialized: false, moveActive: false, moveTouchId: null, moveX: 0, moveY: 0, moveXSmooth: 0, moveYSmooth: 0, lookTouchId: null, lookPrev: null, flyUp: false, flyDown: false };
 const studioPointerState = { lastX: 0, lastY: 0 };
 const studioWindowSelect = { active: false, startX: 0, startY: 0, rect: null };
 
@@ -8221,13 +8246,20 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     }
 
                     if (studioMobileState.moveActive) {
+                        studioMobileState.moveXSmooth += (studioMobileState.moveX - studioMobileState.moveXSmooth) * 0.22;
+                        studioMobileState.moveYSmooth += (studioMobileState.moveY - studioMobileState.moveYSmooth) * 0.22;
                         const mobileForward = new THREE.Vector3();
                         edCamera.getWorldDirection(mobileForward);
                         mobileForward.y = 0;
                         if (mobileForward.lengthSq() > 0) mobileForward.normalize();
-                        const mobileRight = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), mobileForward).normalize();
-                        edCamera.position.addScaledVector(mobileForward, -studioMobileState.moveY * 0.55);
-                        edCamera.position.addScaledVector(mobileRight, studioMobileState.moveX * 0.55);
+                        const mobileRight = new THREE.Vector3().crossVectors(mobileForward, new THREE.Vector3(0,1,0)).normalize();
+                        const stickStrength = Math.min(1, Math.hypot(studioMobileState.moveXSmooth, studioMobileState.moveYSmooth));
+                        const mobileSpeed = 0.28 + stickStrength * 0.52;
+                        edCamera.position.addScaledVector(mobileForward, -studioMobileState.moveYSmooth * mobileSpeed);
+                        edCamera.position.addScaledVector(mobileRight, studioMobileState.moveXSmooth * mobileSpeed);
+                    } else {
+                        studioMobileState.moveXSmooth *= 0.75;
+                        studioMobileState.moveYSmooth *= 0.75;
                     }
                 }
                 updateChunkVisibility(edCamera, editorChunkGroups, 5200);
