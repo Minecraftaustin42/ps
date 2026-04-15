@@ -339,6 +339,66 @@ const isUserOnline = (userId) => {
     return onlineUsers[userId] && (Date.now() - onlineUsers[userId] < 15000);
 };
 
+const isPrimaryAdmin = (user) => !!user && String(user.username || '').toLowerCase() === 'admin';
+
+const deleteUserAccountCompletely = (user) => {
+    if (!user) return;
+    const userId = user.id;
+    const username = user.username;
+    const usernameLower = String(username || '').toLowerCase();
+
+    db.users = db.users.filter(u => u.id !== userId);
+    Object.keys(db.sessions || {}).forEach(token => {
+        if (db.sessions[token] === userId) delete db.sessions[token];
+    });
+    delete onlineUsers[userId];
+    delete chatActivity[userId];
+    delete chatSuspensions[userId];
+    delete db.friendPetDaily[userId];
+    if (db.moderation?.bans) delete db.moderation.bans[userId];
+    if (db.moderation?.warnings) delete db.moderation.warnings[userId];
+
+    db.notifications = (db.notifications || []).filter(n => n.userId !== userId);
+    db.reports = (db.reports || []).filter(r => {
+        const byUser = String(r.reporterId || '').toLowerCase() === String(userId).toLowerCase() || String(r.reporterName || '').toLowerCase() === usernameLower;
+        const targetUser = String(r.targetType || '').toLowerCase().includes('user') && (String(r.targetId || '').toLowerCase() === String(userId).toLowerCase() || String(r.targetName || '').toLowerCase() === usernameLower);
+        return !byUser && !targetUser;
+    });
+
+    (db.users || []).forEach(other => {
+        other.friends = (other.friends || []).filter(f => (typeof f === 'string' ? f : f.id) !== userId);
+        other.friendRequests = (other.friendRequests || []).filter(r => r !== username);
+        other.followers = (other.followers || []).filter(f => f !== username);
+        other.messages = (other.messages || []).filter(m => String(m.fromUsername || '').toLowerCase() !== usernameLower);
+        if (other.primaryGroupId && !(db.groups || []).some(g => g.id === other.primaryGroupId)) other.primaryGroupId = null;
+    });
+
+    db.games = (db.games || []).filter(g => g.authorId !== userId);
+    (db.games || []).forEach(g => {
+        g.collaborators = (g.collaborators || []).filter(id => id !== userId);
+        g.likes = (g.likes || []).filter(id => id !== userId);
+        if (g.analytics?.uniquePlayers) g.analytics.uniquePlayers = g.analytics.uniquePlayers.filter(id => id !== userId);
+    });
+    db.shopItems = (db.shopItems || []).filter(i => i.authorId !== userId);
+    db.clothingItems = (db.clothingItems || []).filter(i => i.authorId !== userId);
+    db.toolboxItems = (db.toolboxItems || []).filter(i => i.authorId !== userId);
+    db.blueprints = (db.blueprints || []).filter(b => b.authorId !== userId);
+
+    (db.groups || []).forEach(group => {
+        group.members = (group.members || []).filter(m => m.userId !== userId);
+        group.banned = (group.banned || []).filter(b => b.userId !== userId);
+        group.posts = (group.posts || []).filter(p => p.authorId !== userId);
+        group.threads = (group.threads || []).filter(t => t.authorId !== userId);
+        (group.threads || []).forEach(t => {
+            t.replies = (t.replies || []).filter(r => r.authorId !== userId);
+        });
+        group.events = (group.events || []).filter(ev => ev.creatorId !== userId);
+        if (group.ownerId === userId && group.members.length > 0) {
+            group.ownerId = group.members[0].userId;
+        }
+    });
+};
+
 
 const getFriendLink = (user, friendId) => {
     if (!user || !Array.isArray(user.friends)) return null;
@@ -926,6 +986,22 @@ app.put('/api/me/settings', requireAuth, (req, res) => {
 
     saveDB();
     res.json({ message: 'Settings updated successfully!', username: user.username });
+});
+
+app.delete('/api/admin/users/:username', requireAuth, (req, res) => {
+    const actingUser = db.users.find(u => u.id === req.userId);
+    if (!isPrimaryAdmin(actingUser)) return res.status(403).json({ error: 'Admin only.' });
+
+    const targetUsername = String(req.params.username || '').trim();
+    if (!targetUsername) return res.status(400).json({ error: 'Target username is required.' });
+
+    const target = db.users.find(u => String(u.username || '').toLowerCase() === targetUsername.toLowerCase());
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+    if (isPrimaryAdmin(target)) return res.status(400).json({ error: 'Cannot delete the Admin account.' });
+
+    deleteUserAccountCompletely(target);
+    saveDB();
+    res.json({ success: true, deletedUser: target.username });
 });
 
 app.put('/api/me/primary-group', requireAuth, (req, res) => {
