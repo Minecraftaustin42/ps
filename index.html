@@ -604,6 +604,11 @@
 <div id="online-modal" class="modal-overlay">
         <div class="modal-box" style="border: 4px solid #3498db; background: #fdfdfd; text-align: center; max-width: 400px;">
             <h2 style="color: #2c3e50; margin-top:0;">Global Network</h2>
+            <div class="popup-character-group">
+                <div class="popup-character"></div>
+                <div class="popup-character alt"></div>
+                <div class="popup-character"></div>
+            </div>
             
             <div style="background: #eee; padding: 15px; border-radius: 8px; margin-top: 20px; text-align: left;">
                 <h3 style="margin: 0 0 10px 0; color: #333;">Total Online: <span id="modal-total-online" style="float:right; color:#27ae60;">1</span></h3>
@@ -850,6 +855,11 @@
             <div class="card">
                 <div class="card-title">
                     <h2 style="margin: 0;">Discover Groups</h2>
+                    <div class="popup-character-group" style="margin:0;">
+                        <div class="popup-character"></div>
+                        <div class="popup-character alt"></div>
+                        <div class="popup-character"></div>
+                    </div>
                     <div style="display: flex; gap: 10px;">
                         <input type="text" id="group-search" class="form-control" style="width: 200px;" placeholder="Search Groups..." onkeydown="if(event.key==='Enter') searchGroups()">
                         <button class="btn btn-success btn-sm" onclick="promptCreateGroup()">Create Group</button>
@@ -8221,7 +8231,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     const moveSpeed = 0.5;
                     const dir = new THREE.Vector3();
                     edCamera.getWorldDirection(dir);
-                    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0,1,0)).normalize();
+                    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), dir).normalize();
 
                     const tag = document.activeElement ? document.activeElement.tagName : '';
                     
