@@ -266,6 +266,7 @@
         #studio-mobile-controls { display:none; position:absolute; left:0; right:0; bottom:10px; z-index:260; pointer-events:none; }
         .studio-mobile-pill { background:rgba(0,0,0,0.62); color:#fff; padding:6px 10px; border-radius:16px; font-size:12px; font-weight:700; }
         .studio-mobile-btn { pointer-events:auto; background:rgba(52,152,219,0.9); color:#fff; border:1px solid rgba(255,255,255,0.55); border-radius:14px; padding:8px 12px; font-size:12px; font-weight:700; min-width:66px; text-align:center; box-shadow: 0 6px 16px rgba(0,0,0,0.24); }
+        .studio-mobile-btn.active { background:rgba(41,128,185,1); box-shadow: 0 4px 16px rgba(52,152,219,0.65); transform: translateY(-1px); }
         #studio-mobile-quick-insert { display:none; position:absolute; top:10px; right:10px; z-index:270; width:170px; pointer-events:auto; }
         #studio-joystick-base { pointer-events:auto; width:142px; height:142px; border-radius:50%; background:radial-gradient(circle at 30% 30%, rgba(255,255,255,0.25), rgba(0,0,0,0.45)); border:2px solid rgba(255,255,255,0.35); position:relative; touch-action:none; }
         #studio-joystick-stick { width:64px; height:64px; border-radius:50%; background:rgba(255,255,255,0.9); position:absolute; left:39px; top:39px; transition:transform .08s; box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
@@ -1808,6 +1809,8 @@
                                 <div class="studio-mobile-actions">
                                     <button class="studio-mobile-btn" id="studio-fly-up">Up</button>
                                     <button class="studio-mobile-btn" id="studio-fly-down">Down</button>
+                                    <button class="studio-mobile-btn" id="studio-mobile-boost">Boost</button>
+                                    <button class="studio-mobile-btn" id="studio-mobile-recenter">Recenter</button>
                                     <button class="studio-mobile-btn" onclick="setTransformMode('select')">Select</button>
                                     <button class="studio-mobile-btn" onclick="setTransformMode('translate')">Move</button>
                                     <button class="studio-mobile-btn" onclick="setTransformMode('rotate')">Rotate</button>
@@ -4650,7 +4653,9 @@ let customGizmo = null;
             const lookZone = document.getElementById('studio-look-zone');
             const flyUpBtn = document.getElementById('studio-fly-up');
             const flyDownBtn = document.getElementById('studio-fly-down');
-            if (!base || !stick || !lookZone || !flyUpBtn || !flyDownBtn) return;
+            const boostBtn = document.getElementById('studio-mobile-boost');
+            const recenterBtn = document.getElementById('studio-mobile-recenter');
+            if (!base || !stick || !lookZone || !flyUpBtn || !flyDownBtn || !boostBtn || !recenterBtn) return;
 
             studioMobileState.initialized = true;
             const resetStick = () => {
@@ -4737,8 +4742,9 @@ let customGizmo = null;
                     if (t.identifier !== studioMobileState.lookTouchId || !studioMobileState.lookPrev || !window.StudioCamera) continue;
                     const dx = t.clientX - studioMobileState.lookPrev.x;
                     const dy = t.clientY - studioMobileState.lookPrev.y;
-                    window.StudioCamera.yaw -= dx * 0.0048;
-                    window.StudioCamera.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, window.StudioCamera.pitch - dy * 0.0039));
+                    const lookScale = Math.min(1.75, 0.9 + Math.hypot(dx, dy) * 0.018);
+                    window.StudioCamera.yaw -= dx * 0.0048 * lookScale;
+                    window.StudioCamera.pitch = Math.max(-Math.PI/2+0.01, Math.min(Math.PI/2-0.01, window.StudioCamera.pitch - dy * 0.0039 * lookScale));
                     window.StudioCamera.updateCamera();
                     studioMobileState.lookPrev = { x: t.clientX, y: t.clientY };
                 }
@@ -4758,6 +4764,24 @@ let customGizmo = null;
             };
             bindFlyButton(flyUpBtn, 'e', 'flyUp');
             bindFlyButton(flyDownBtn, 'q', 'flyDown');
+
+            const setBoostState = (pressed) => {
+                studioMobileState.boost = pressed;
+                boostBtn.classList.toggle('active', pressed);
+            };
+            boostBtn.addEventListener('touchstart', (e) => { e.preventDefault(); setBoostState(true); }, { passive: false });
+            boostBtn.addEventListener('touchend', (e) => { e.preventDefault(); setBoostState(false); }, { passive: false });
+            boostBtn.addEventListener('touchcancel', (e) => { e.preventDefault(); setBoostState(false); }, { passive: false });
+
+            recenterBtn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (!window.StudioCamera || !edCamera) return;
+                window.StudioCamera.yaw = Math.atan2(edCamera.position.x, edCamera.position.z);
+                window.StudioCamera.pitch = -0.28;
+                window.StudioCamera.updateCamera();
+                recenterBtn.classList.add('active');
+                setTimeout(() => recenterBtn.classList.remove('active'), 140);
+            }, { passive: false });
 
             if (localStorage.getItem('ps_hide_landscape_hint') === '1') {
                 const pill = document.getElementById('studio-landscape-pill');
@@ -6394,7 +6418,7 @@ let edScene, edCamera, edRenderer, edControls; // Removed transformControl
 let edAmbientLight = null, edDirectionalLight = null;
 let playAmbientLight = null, playDirectionalLight = null;
 let autosaveRecoveryPrompted = false;
-const studioMobileState = { initialized: false, moveActive: false, moveTouchId: null, moveX: 0, moveY: 0, moveXSmooth: 0, moveYSmooth: 0, lookTouchId: null, lookPrev: null, flyUp: false, flyDown: false };
+const studioMobileState = { initialized: false, moveActive: false, moveTouchId: null, moveX: 0, moveY: 0, moveXSmooth: 0, moveYSmooth: 0, lookTouchId: null, lookPrev: null, flyUp: false, flyDown: false, boost: false };
 const studioPointerState = { lastX: 0, lastY: 0 };
 const studioWindowSelect = { active: false, startX: 0, startY: 0, rect: null };
 
@@ -8231,7 +8255,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     const moveSpeed = 0.5;
                     const dir = new THREE.Vector3();
                     edCamera.getWorldDirection(dir);
-                    const right = new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0), dir).normalize();
+                    const right = new THREE.Vector3().crossVectors(dir, new THREE.Vector3(0,1,0)).normalize();
 
                     const tag = document.activeElement ? document.activeElement.tagName : '';
                     
@@ -8254,7 +8278,8 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                         if (mobileForward.lengthSq() > 0) mobileForward.normalize();
                         const mobileRight = new THREE.Vector3().crossVectors(mobileForward, new THREE.Vector3(0,1,0)).normalize();
                         const stickStrength = Math.min(1, Math.hypot(studioMobileState.moveXSmooth, studioMobileState.moveYSmooth));
-                        const mobileSpeed = 0.28 + stickStrength * 0.52;
+                        const boostMultiplier = studioMobileState.boost ? 1.65 : 1;
+                        const mobileSpeed = (0.28 + stickStrength * 0.52) * boostMultiplier;
                         edCamera.position.addScaledVector(mobileForward, -studioMobileState.moveYSmooth * mobileSpeed);
                         edCamera.position.addScaledVector(mobileRight, studioMobileState.moveXSmooth * mobileSpeed);
                     } else {
