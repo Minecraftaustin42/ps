@@ -157,27 +157,22 @@
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
         .modal-box { position: relative; background: #fff; padding: 25px; border-radius: 10px; box-shadow: 0 10px 28px rgba(39,46,90,0.26); text-align: center; min-width: 300px; max-width: 90vw; overflow: hidden; }
         .modal-box h3 { margin-top: 0; }
-        .modal-box::before { content:''; position:absolute; right:13px; bottom:10px; width:62px; height:82px; border:2px solid #29337f; background:
-            linear-gradient(#f9d3ae 0 26px, transparent 26px),
-            linear-gradient(90deg, transparent 6px, #4f69ff 6px 56px, transparent 56px),
-            linear-gradient(90deg, #4f69ff 0 8px, transparent 8px 54px, #4f69ff 54px 100%),
-            linear-gradient(90deg, transparent 14px, #22388d 14px 24px, transparent 24px 38px, #22388d 38px 48px, transparent 48px);
-            box-shadow: inset 0 -9px 0 rgba(255,255,255,0.12); }
-        .modal-box::after { content:''; position:absolute; right:18px; bottom:10px; width:52px; height:10px; background:linear-gradient(90deg,#1f2e66 0 42%, transparent 42% 58%, #1f2e66 58% 100%); }
-        .popup-character-group { display:flex; gap:12px; justify-content:center; margin:8px 0 10px 0; }
-        .popup-character { width:38px; height:62px; border:2px solid #25337f; position:relative; background:
-            linear-gradient(#f9d3ae 0 18px, transparent 18px),
-            linear-gradient(90deg, transparent 3px, #6a63ff 3px 35px, transparent 35px),
-            linear-gradient(90deg, #6a63ff 0 6px, transparent 6px 32px, #6a63ff 32px 100%),
-            linear-gradient(90deg, transparent 10px, #263b93 10px 16px, transparent 16px 22px, #263b93 22px 28px, transparent 28px);
-            box-shadow: inset 0 -6px 0 rgba(255,255,255,0.14); }
-        .popup-character::before { content:''; position:absolute; left:8px; top:-14px; width:18px; height:14px; background:#f9d3ae; border:2px solid #25337f; }
-        .popup-character::after { content:''; position:absolute; left:8px; bottom:2px; width:20px; height:8px; background:linear-gradient(90deg,#1d2b63 0 43%, transparent 43% 57%, #1d2b63 57% 100%); }
-        .popup-character.alt { background:
-            linear-gradient(#f9d3ae 0 18px, transparent 18px),
-            linear-gradient(90deg, transparent 3px, #2f82ff 3px 35px, transparent 35px),
-            linear-gradient(90deg, #2f82ff 0 6px, transparent 6px 32px, #2f82ff 32px 100%),
-            linear-gradient(90deg, transparent 10px, #1c4d99 10px 16px, transparent 16px 22px, #1c4d99 22px 28px, transparent 28px); }
+        .modal-box::before { content:''; position:absolute; right:14px; bottom:12px; width:46px; height:36px; border-radius:8px 8px 6px 6px; background:#7f8cff; border:2px solid #343f95; box-shadow: inset 0 -8px 0 rgba(255,255,255,0.15); }
+        .modal-box::after { content:''; position:absolute; right:24px; bottom:38px; width:0; height:0; border-left:14px solid transparent; border-right:14px solid transparent; border-bottom:14px solid #5867dd; }
+        #online-modal .modal-box::before { width:52px; height:20px; border-radius:8px 12px 6px 6px; background:#4d86ff; border-color:#2450a8; box-shadow:none; bottom:14px; right:14px; }
+        #online-modal .modal-box::after { width:42px; height:8px; right:19px; bottom:8px; border:none; background:linear-gradient(90deg,#26356f 0 40%, transparent 40% 60%, #26356f 60%); border-radius:6px; }
+        #inventory-modal .modal-box::before { width:38px; height:34px; border-radius:4px; background:#d69c55; border-color:#8a5b28; }
+        #inventory-modal .modal-box::after { width:40px; height:10px; right:13px; bottom:38px; border:none; background:#b0773d; border-radius:3px; }
+        #city-help-modal .modal-box::before { width:18px; height:18px; border-radius:50%; background:#5ea7ff; border-color:#2e5ca0; right:27px; bottom:20px; }
+        #city-help-modal .modal-box::after { width:0; height:0; right:30px; bottom:8px; border-left:7px solid transparent; border-right:7px solid transparent; border-top:12px solid #5ea7ff; border-bottom:none; }
+        #lucky-spin-modal .modal-box::before { width:38px; height:38px; border-radius:50%; background:#ffcf4e; border-color:#ad7e18; }
+        #lucky-spin-modal .modal-box::after { width:26px; height:26px; right:20px; bottom:18px; border:none; border-radius:50%; background:rgba(255,255,255,0.35); }
+        #daily-reward-modal .modal-box::before { width:36px; height:30px; border-radius:6px; background:#ff718a; border-color:#a63254; }
+        #daily-reward-modal .modal-box::after { width:38px; height:8px; right:13px; bottom:24px; border:none; background:#ffe28a; border-radius:6px; }
+        #invite-modal .modal-box::before { width:34px; height:22px; border-radius:6px; background:#b7dcff; border-color:#4f80b4; }
+        #invite-modal .modal-box::after { width:0; height:0; right:24px; bottom:17px; border-left:11px solid transparent; border-right:11px solid transparent; border-top:11px solid #85b9e6; border-bottom:none; }
+        #message-modal .modal-box::before { width:40px; height:26px; border-radius:4px; background:#ffffff; border-color:#6f78a5; }
+        #message-modal .modal-box::after { width:0; height:0; right:15px; bottom:24px; border-left:20px solid transparent; border-right:20px solid transparent; border-top:12px solid #d7ddf4; border-bottom:none; }
         .report-police-car { width:96px; height:34px; background:#1e56bf; border:2px solid #0f2e73; border-radius:8px 16px 8px 8px; position:relative; margin:4px 0 10px auto; }
         .report-police-car::before { content:''; position:absolute; left:16px; top:-12px; width:44px; height:14px; background:#cce4ff; border:2px solid #0f2e73; border-bottom:none; border-radius:8px 8px 0 0; }
         .report-police-car::after { content:''; position:absolute; left:34px; top:-18px; width:26px; height:6px; border-radius:6px; background:linear-gradient(90deg,#ff4d4d 0 50%, #4dc6ff 50% 100%); animation:sirenFlash 0.8s linear infinite; }
