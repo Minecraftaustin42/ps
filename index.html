@@ -693,6 +693,7 @@
                 <a onclick="navigate('avatar')">Avatar</a>
                 <a onclick="navigate('friends')">Friends</a>
                 <a onclick="navigate('messages')">Messages</a>
+                <a id="nav-chat-logs" onclick="navigate('chat-logs')" style="display:none;">Chat Logs</a>
                 <a onclick="navigate('academy')">Academy</a>
                 <a onclick="navigate('jams')">Jams</a>
                 <a onclick="navigate('funlab')">Fun Lab</a>
@@ -1392,6 +1393,21 @@
                     <button class="btn btn-success" onclick="sendGlobalChat()">Send</button>
                 </div>
                 <p id="chat-error" style="color: #e74c3c; font-size: 13px; font-weight: bold; margin-top: 10px; display: none;"></p>
+            </div>
+        </div>
+
+        <div id="view-chat-logs" class="view">
+            <div class="card">
+                <h2 class="card-title">Moderator Chat Logs</h2>
+                <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:8px; margin-bottom:10px;">
+                    <input id="chatlogs-filter-username" class="form-control" placeholder="Filter username">
+                    <select id="chatlogs-filter-channel" class="form-control"></select>
+                    <input id="chatlogs-filter-game" class="form-control" placeholder="Filter game ID">
+                    <input id="chatlogs-filter-group" class="form-control" placeholder="Filter group ID">
+                    <button class="btn btn-info" onclick="refreshAdminChatLogs(true)">Apply Filters</button>
+                </div>
+                <div id="chatlogs-status" style="font-size:12px; color:#667; margin-bottom:8px;">Live updating every 2s.</div>
+                <div id="chatlogs-list" style="max-height:520px; overflow:auto; border:1px solid #d7def2; border-radius:8px; padding:8px; background:#fbfcff;"></div>
             </div>
         </div>
 
@@ -3101,6 +3117,8 @@ const toggleMultiSelect = () => {
         };
 
         const updateNav = () => {
+            const modChatLink = document.getElementById('nav-chat-logs');
+            const canSeeChatLogs = !!currentUser && ['admin','nick','austin'].includes(String(currentUser.username || '').toLowerCase());
             if (currentUser) {
                 document.getElementById('nav-logged-out').style.display = 'none';
                 document.getElementById('nav-logged-in').style.display = 'flex';
@@ -3110,6 +3128,7 @@ checkDailyReward(); // <-- ADDED HERE
                 document.getElementById('nav-logged-out').style.display = 'flex';
                 document.getElementById('nav-logged-in').style.display = 'none';
             }
+            if (modChatLink) modChatLink.style.display = canSeeChatLogs ? 'inline-block' : 'none';
         };
 
         const navigateProfile = () => {
@@ -3223,6 +3242,7 @@ checkDailyReward(); // <-- ADDED HERE
             if (viewId !== 'create') stopTeamSync(); 
             if (viewId !== 'shop') stopAccEditorLoop();
             if (viewId !== 'group-detail') if(grpWallSyncInterval) clearInterval(grpWallSyncInterval);
+            if (viewId !== 'chat-logs' && adminChatLogsInterval) { clearInterval(adminChatLogsInterval); adminChatLogsInterval = null; }
             
             if (viewId === 'dashboard' && currentUser) {
                 document.getElementById('dash-username').innerText = currentUser.username;
@@ -3242,6 +3262,11 @@ else if (viewId === 'chat') {
                 loadChat();
                 if (chatSyncInterval) clearInterval(chatSyncInterval);
                 chatSyncInterval = setInterval(loadChat, 2000); // Poll for new messages every 2s
+            }
+            else if (viewId === 'chat-logs') {
+                refreshAdminChatLogs(true);
+                if (adminChatLogsInterval) clearInterval(adminChatLogsInterval);
+                adminChatLogsInterval = setInterval(() => refreshAdminChatLogs(false), 2000);
             }
 
 else if (viewId === 'groups') {
@@ -4109,14 +4134,18 @@ const openLuckySpin = () => {
 
         const postToGroupWall = async () => {
             if(!currentGroupData) return;
-            const text = document.getElementById('grp-post-text').value;
+            const input = document.getElementById('grp-post-text');
+            const text = input.value;
             if(!text) return;
+            if (postToGroupWall._sending) return;
+            postToGroupWall._sending = true;
             try {
                 const res = await apiCall(`/groups/${currentGroupData.id}/posts`, 'POST', { text });
-                document.getElementById('grp-post-text').value = '';
+                input.value = '';
                 currentGroupData.posts = res.posts;
                 updateGroupWallUI();
             } catch(e) {}
+            postToGroupWall._sending = false;
         };
 
         const deleteGroupPost = async (postId) => {
@@ -11074,6 +11103,8 @@ const sendGameChatMessage = async () => {
 
     const text = input.value.trim();
     if (!text) return;
+    if (sendGameChatMessage._sending) return;
+    sendGameChatMessage._sending = true;
 
     try {
         status.innerText = '';
@@ -11096,6 +11127,7 @@ const sendGameChatMessage = async () => {
     } catch (e) {
         if (status) status.innerText = e.message || 'Failed to send chat.';
     }
+    sendGameChatMessage._sending = false;
 };
 const setupGameChatInput = () => {
     const input = document.getElementById('game-chat-input');
@@ -11929,6 +11961,9 @@ const groupAsAircraft = () => {
 
 // --- GLOBAL CHAT ---
         let chatSyncInterval = null;
+        let adminChatLogsInterval = null;
+        let adminChatLogsLastTs = 0;
+        let adminChatLogsCache = [];
 
         const loadChat = async () => {
             try {
@@ -11970,6 +12005,57 @@ const groupAsAircraft = () => {
             }
             input.disabled = false;
             input.focus();
+        };
+        const renderAdminChatLogs = (payload = {}) => {
+            const listEl = document.getElementById('chatlogs-list');
+            const statusEl = document.getElementById('chatlogs-status');
+            const chanSel = document.getElementById('chatlogs-filter-channel');
+            if (!listEl || !statusEl || !chanSel) return;
+
+            const channels = payload.channels || [];
+            const selectedChannel = chanSel.value || '';
+            chanSel.innerHTML = `<option value="">All Channels</option>${channels.map(c => `<option value="${c}">${c}</option>`).join('')}`;
+            if (selectedChannel) chanSel.value = selectedChannel;
+
+            if (!adminChatLogsCache.length) {
+                listEl.innerHTML = `<div style="padding:8px; color:#667;">No chat logs found for current filters.</div>`;
+                statusEl.innerText = `Live updating every 2s. Total shown: 0`;
+                return;
+            }
+            listEl.innerHTML = adminChatLogsCache.map(m => {
+                const ts = new Date(m.timestamp || Date.now()).toLocaleString();
+                const metaBits = [m.channel, m.gameId ? `game:${m.gameId}` : '', m.groupId ? `group:${m.groupId}` : ''].filter(Boolean).join(' • ');
+                return `<div style="padding:7px 8px; border-bottom:1px solid #e9eefb;">
+                    <div style="font-size:11px; color:#6b7390;">${ts} • ${metaBits}</div>
+                    <div><strong style="color:#2563eb;">${m.authorName || 'Unknown'}</strong>: <span style="word-break:break-word;">${m.text || ''}</span></div>
+                </div>`;
+            }).join('');
+            statusEl.innerText = `Live updating every 2s. Total shown: ${adminChatLogsCache.length}`;
+            listEl.scrollTop = listEl.scrollHeight;
+        };
+
+        const refreshAdminChatLogs = async (reset = false) => {
+            if (!currentUser || !['admin', 'nick', 'austin'].includes(String(currentUser.username || '').toLowerCase())) return;
+            const username = (document.getElementById('chatlogs-filter-username')?.value || '').trim();
+            const channel = (document.getElementById('chatlogs-filter-channel')?.value || '').trim();
+            const gameId = (document.getElementById('chatlogs-filter-game')?.value || '').trim();
+            const groupId = (document.getElementById('chatlogs-filter-group')?.value || '').trim();
+            if (reset) { adminChatLogsLastTs = 0; adminChatLogsCache = []; }
+            const qs = new URLSearchParams();
+            if (adminChatLogsLastTs > 0 && !reset) qs.set('since', String(adminChatLogsLastTs));
+            qs.set('limit', '300');
+            if (username) qs.set('username', username);
+            if (channel) qs.set('channel', channel);
+            if (gameId) qs.set('gameId', gameId);
+            if (groupId) qs.set('groupId', groupId);
+            try {
+                const data = await apiCall(`/admin/chat-logs?${qs.toString()}`);
+                const incoming = Array.isArray(data.logs) ? data.logs : [];
+                if (reset) adminChatLogsCache = incoming;
+                else if (incoming.length) adminChatLogsCache = adminChatLogsCache.concat(incoming).slice(-1200);
+                incoming.forEach(m => { adminChatLogsLastTs = Math.max(adminChatLogsLastTs, Number(m.timestamp) || 0); });
+                renderAdminChatLogs(data);
+            } catch (e) {}
         };
 
 
