@@ -35,6 +35,8 @@ let gameChatActivity = {}; // { [gameId_userId]: [timestamps] }
 let gameChatSuspensions = {}; // { [gameId_userId]: unbanTimestamp }
 let gameServerLastSeen = {}; // { [gameId]: timestamp }
 let adminAuth = { attempts: 0, lockoutUntil: 0 };
+const RESTART_POPUP_TEXT = 'Playsculpt servers are restarting! You do not need to take any action if you’re in a game or in studio, you will stay in. Please wait around 10 seconds to be automatically reconnected!';
+let restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
 // Load existing DB if available & migrate data
 if (fs.existsSync(DB_FILE)) {
 
@@ -349,6 +351,16 @@ const canViewChatLogs = (user) => !!user && CHAT_LOG_ADMIN_USERS.has(String(user
 
 const appendChatLog = (entry = {}) => {
     if (!db.chatLogs) db.chatLogs = [];
+    const now = Date.now();
+    const textNorm = String(entry.text || '').trim().toLowerCase();
+    const recentDup = db.chatLogs.slice(-12).find((m) =>
+        String(m.channel || '') === String(entry.channel || '') &&
+        String(m.authorId || '') === String(entry.authorId || '') &&
+        String(m.sourceId || '') === String(entry.sourceId || '') &&
+        String(m.text || '').trim().toLowerCase() === textNorm &&
+        (now - (Number(m.timestamp) || 0)) < 3000
+    );
+    if (recentDup) return;
     const record = {
         id: crypto.randomUUID(),
         timestamp: Number(entry.timestamp) || Date.now(),
@@ -405,6 +417,29 @@ const cleanupGameServerIfInactive = (gameId, maxIdleMs = 15000) => {
     }
     const lastSeen = gameServerLastSeen[gameId] || 0;
     if ((now - lastSeen) > maxIdleMs) clearGameServerState(gameId);
+};
+const finalizeSafeRestart = () => {
+    activeEditors = {};
+    activePlayers = {};
+    activePlayDynamic = {};
+    gameChats = {};
+    gameChatActivity = {};
+    gameChatSuspensions = {};
+    gameServerLastSeen = {};
+    restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
+};
+const triggerSafeServerRestart = (actorName = 'system') => {
+    const now = Date.now();
+    const durationMs = 10000;
+    restartState = {
+        active: true,
+        startedAt: now,
+        endsAt: now + durationMs,
+        message: RESTART_POPUP_TEXT,
+        actor: actorName
+    };
+    saveDB();
+    setTimeout(() => finalizeSafeRestart(), durationMs);
 };
 
 const deleteUserAccountCompletely = (user) => {
@@ -1097,6 +1132,39 @@ app.get('/api/admin/chat-logs', requireAuth, (req, res) => {
         games: Array.from(new Set((db.chatLogs || []).map(m => String(m.gameId || '')).filter(Boolean))).sort(),
         groups: Array.from(new Set((db.chatLogs || []).map(m => String(m.groupId || '')).filter(Boolean))).sort()
     });
+});
+
+app.get('/api/system/status', (req, res) => {
+    const now = Date.now();
+    const active = !!restartState.active && now < (restartState.endsAt || 0);
+    if (!active && restartState.active) restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
+    res.json({
+        restarting: active,
+        endsAt: restartState.endsAt || 0,
+        startedAt: restartState.startedAt || 0,
+        message: restartState.message || RESTART_POPUP_TEXT
+    });
+});
+
+app.post('/api/system/restart', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!canViewChatLogs(user)) return res.status(403).json({ error: 'Moderator access only.' });
+    if (restartState.active && Date.now() < restartState.endsAt) {
+        return res.status(400).json({ error: 'Restart already in progress.' });
+    }
+    triggerSafeServerRestart(user?.username || 'system');
+    res.json({ success: true, restarting: true, endsAt: restartState.endsAt, message: restartState.message });
+});
+
+app.post('/api/system/command', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!canViewChatLogs(user)) return res.status(403).json({ error: 'Moderator access only.' });
+    const command = String(req.body.command || '').trim().toLowerCase();
+    if (command === 'restart-server-safe' || command === 'safe_restart') {
+        if (!(restartState.active && Date.now() < restartState.endsAt)) triggerSafeServerRestart(user?.username || 'system');
+        return res.json({ success: true, output: `Safe restart initiated by ${user.username}.`, endsAt: restartState.endsAt });
+    }
+    res.status(400).json({ error: 'Unknown command. Try: restart-server-safe' });
 });
 
 app.put('/api/me/primary-group', requireAuth, (req, res) => {

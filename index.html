@@ -704,6 +704,13 @@
             </div>
         </div>
     </div>
+    <div id="system-restart-banner" style="display:none; position:fixed; inset:0; background:rgba(8,12,24,0.75); z-index:999998; align-items:center; justify-content:center; padding:20px;">
+        <div style="max-width:760px; width:100%; background:#fff; border-radius:12px; padding:18px; box-shadow:0 16px 34px rgba(0,0,0,0.38);">
+            <h3 style="margin:0 0 8px 0; color:#c0392b;">Server Restart In Progress</h3>
+            <div id="system-restart-message" style="font-size:15px; line-height:1.45; color:#2c3e50;"></div>
+            <div id="system-restart-countdown" style="margin-top:8px; font-weight:700; color:#34495e;"></div>
+        </div>
+    </div>
 
     <div class="container">
 
@@ -1359,6 +1366,13 @@
                 </div>
                 <textarea id="funlab-note" class="form-control mt-20" placeholder="Sticky creator notes..."></textarea>
                 <div id="funlab-output" style="margin-top:12px; background:#f8fafc; border:1px solid #dbe4ee; border-radius:8px; padding:10px; min-height:70px;"></div>
+                <div id="funlab-admin-shell" style="display:none; margin-top:14px; border:1px solid #d6def0; border-radius:8px; padding:10px; background:#f7faff;">
+                    <div style="font-weight:700; margin-bottom:6px;">Admin Command Prompt (Safe Ops)</div>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                        <input id="funlab-admin-cmd" class="form-control" style="flex:1 1 280px;" placeholder="Type command (e.g. restart-server-safe)" onkeydown="if(event.key==='Enter') runAdminCommandPrompt()">
+                        <button class="btn btn-warning" onclick="runAdminCommandPrompt()">Run</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -2233,6 +2247,9 @@
         // --- State Management ---
         const API_BASE = '/api';
         let currentUser = null; 
+        let systemStatusInterval = null;
+        let restartBannerActive = false;
+        let lastRestartEndsAtSeen = 0;
         const accImageCache = {}; 
         let isDragging = false; 
         let isDrawingAcc = false; 
@@ -3119,6 +3136,7 @@ const toggleMultiSelect = () => {
         const updateNav = () => {
             const modChatLink = document.getElementById('nav-chat-logs');
             const canSeeChatLogs = !!currentUser && ['admin','nick','austin'].includes(String(currentUser.username || '').toLowerCase());
+            const funlabAdmin = document.getElementById('funlab-admin-shell');
             if (currentUser) {
                 document.getElementById('nav-logged-out').style.display = 'none';
                 document.getElementById('nav-logged-in').style.display = 'flex';
@@ -3129,6 +3147,53 @@ checkDailyReward(); // <-- ADDED HERE
                 document.getElementById('nav-logged-in').style.display = 'none';
             }
             if (modChatLink) modChatLink.style.display = canSeeChatLogs ? 'inline-block' : 'none';
+            if (funlabAdmin) funlabAdmin.style.display = canSeeChatLogs ? 'block' : 'none';
+        };
+
+        const showRestartBanner = (message, endsAt) => {
+            const banner = document.getElementById('system-restart-banner');
+            const msg = document.getElementById('system-restart-message');
+            const countdown = document.getElementById('system-restart-countdown');
+            if (!banner || !msg || !countdown) return;
+            msg.innerText = message || 'Playsculpt servers are restarting.';
+            const left = Math.max(0, Math.ceil(((Number(endsAt) || Date.now()) - Date.now()) / 1000));
+            countdown.innerText = `Reconnecting in ~${left}s...`;
+            banner.style.display = 'flex';
+        };
+        const hideRestartBanner = () => {
+            const banner = document.getElementById('system-restart-banner');
+            if (banner) banner.style.display = 'none';
+        };
+        const reconnectAfterRestart = async () => {
+            try {
+                const inPlay = document.getElementById('view-play')?.classList.contains('active');
+                const inCreate = document.getElementById('view-create')?.classList.contains('active');
+                if (inPlay && currentPlayGameId) {
+                    await startGame();
+                } else if (inCreate) {
+                    if (currentEditGameId) await editExistingGame(currentEditGameId);
+                    else initEditor();
+                }
+            } catch (_) {}
+        };
+        const pollSystemStatus = async () => {
+            try {
+                const res = await fetch('/api/system/status');
+                if (!res.ok) return;
+                const st = await res.json();
+                if (st.restarting) {
+                    restartBannerActive = true;
+                    lastRestartEndsAtSeen = Number(st.endsAt) || 0;
+                    showRestartBanner(st.message, st.endsAt);
+                } else if (restartBannerActive) {
+                    hideRestartBanner();
+                    restartBannerActive = false;
+                    if (lastRestartEndsAtSeen > 0) {
+                        lastRestartEndsAtSeen = 0;
+                        reconnectAfterRestart();
+                    }
+                }
+            } catch (_) {}
         };
 
         const navigateProfile = () => {
@@ -6379,6 +6444,17 @@ Keep playing together for more daily rewards.`, 'Aww!');
             funOut('Sticky note exported as .txt');
         };
         const funKeyboardCheats = () => funOut('Shortcut Sheet:\nCtrl+D duplicate\nCtrl+Z undo\nCtrl+Y redo\nF frame selection\nDelete remove selected');
+        const runAdminCommandPrompt = async () => {
+            const input = document.getElementById('funlab-admin-cmd');
+            if (!input) return;
+            const command = String(input.value || '').trim();
+            if (!command) return funOut('Enter a command first. Example: restart-server-safe');
+            try {
+                const res = await apiCall('/system/command', 'POST', { command });
+                funOut(res.output || 'Command executed.');
+                input.value = '';
+            } catch (e) {}
+        };
         window.funIdeaGenerator = funIdeaGenerator;
         window.funNameForge = funNameForge;
         window.funPatchNotes = funPatchNotes;
@@ -6393,6 +6469,7 @@ Keep playing together for more daily rewards.`, 'Aww!');
         window.funLoadNote = funLoadNote;
         window.funExportNote = funExportNote;
         window.funKeyboardCheats = funKeyboardCheats;
+        window.runAdminCommandPrompt = runAdminCommandPrompt;
         setInterval(() => { if (localStorage.getItem('ps_break_reminder') === '1') showModal('Break Reminder', 'Stand up, hydrate, and rest your eyes for a minute.'); }, 45 * 60 * 1000);
         const KNOWN_SCULPT_SCRIPT_TOKENS = [/^\s*when\s+/im, /^\s*end\s*$/im, /^\s*say\s+/im, /^\s*set\s+[a-zA-Z][\w.]+\s+to\s+/im, /^\s*add\s+[a-zA-Z][\w.]*\s+by\s+/im, /^\s*move\s+part\s+by\s*\(/im, /^\s*rotate\s+part\s+by\s*\(/im, /^\s*scale\s+part\s+to\s*\(/im];
         const looksLikeLegacySculptScript = (source = '') => {
@@ -12573,6 +12650,9 @@ async function punishUser(targetUsername, action, reason, durationHours = 0) {
 
         if (window.heartbeatInterval) clearInterval(window.heartbeatInterval);
         window.heartbeatInterval = setInterval(sendHeartbeat, 10000);
+        if (systemStatusInterval) clearInterval(systemStatusInterval);
+        systemStatusInterval = setInterval(pollSystemStatus, 2000);
+        pollSystemStatus();
 
 
 const toggleOutputPanel = () => {
