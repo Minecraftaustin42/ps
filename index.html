@@ -3202,6 +3202,8 @@ checkDailyReward(); // <-- ADDED HERE
         };
         const initSystemEventStream = () => {
             if (systemEventSource) return;
+            const isLocalHost = ['localhost', '127.0.0.1'].includes(location.hostname);
+            if (location.protocol === 'https:' && !isLocalHost) return;
             try {
                 systemEventSource = new EventSource('/api/system/events');
                 systemEventSource.onmessage = (evt) => {
@@ -5277,10 +5279,12 @@ const dom = edRenderer.domElement;
                 
                 if (activeGizmoPart) {
                     activeGizmoPart = null;
+                    markMeshesLocallyEdited(selectedObjects);
                     recordEdit(true); 
                 }
                 if (isPhysicalDragging) {
                     isPhysicalDragging = false; 
+                    markMeshesLocallyEdited(selectedObjects);
                     recordEdit(true);
                 }
                 if (studioWindowSelect.active) {
@@ -6806,16 +6810,18 @@ let currentTransformSpace = 'local';
             return newData;
         };
 
-        const recordEdit = (pushToHistory = true, bumpSyncTime = true) => {
-            if (bumpSyncTime) lastLocalEditTime = Date.now();
+        const markMeshesLocallyEdited = (meshes = []) => {
             const now = Date.now();
-            const selectedIds = selectedObjects
-                .filter(m => m && m.userData && !m.userData.isSpawn && m.userData.id)
-                .map(m => m.userData.id);
-            selectedIds.forEach(id => {
+            (meshes || []).forEach((mesh) => {
+                const id = mesh?.userData?.id;
+                if (!id || mesh?.userData?.isSpawn) return;
                 localEditedObjectIds.add(id);
                 localLockedObjectUntil[id] = now + 2200;
             });
+        };
+
+        const recordEdit = (pushToHistory = true, bumpSyncTime = true) => {
+            if (bumpSyncTime) lastLocalEditTime = Date.now();
             if (pushToHistory) {
                 if (historyIndex < historyStack.length - 1) historyStack = historyStack.slice(0, historyIndex + 1);
                 historyStack.push(JSON.parse(JSON.stringify(edData)));
@@ -6881,6 +6887,8 @@ let currentTransformSpace = 'local';
         const isTeamCreateLocked = () => !!(currentEditGameId && isTeamEditingMode);
         // Legacy-safe helper retained so stale callers never crash selection flow.
         const isMeshEditableByCurrentUser = () => true;
+        // Legacy-safe helper retained so stale callers never crash delete flows.
+        const getEditableSelectedMeshes = () => getLocalSelectionForTeamShortcuts();
         const getLocalSelectionForTeamShortcuts = () => {
             if (!isTeamCreateLocked() || !currentUser) return selectedObjects.slice();
             return selectedObjects.filter((mesh) => {
@@ -7182,9 +7190,10 @@ const loadSponsoredAssetsDashboard = async () => {
         };
 
         const deleteSelectedParts = () => {
-            const editableMeshes = getEditableSelectedMeshes(true);
-            if (editableMeshes.length > 0) {
-                editableMeshes.forEach(mesh => {
+            const targets = isTeamCreateLocked() ? getLocalSelectionForTeamShortcuts() : selectedObjects.slice();
+            if (targets.length > 0) {
+                markMeshesLocallyEdited(targets);
+                targets.forEach(mesh => {
                     if (mesh.userData.isSpawn) edData.spawn = null;
                     else edData.objects = edData.objects.filter(o => o.id !== mesh.userData.id);
                 });
@@ -7193,10 +7202,10 @@ const loadSponsoredAssetsDashboard = async () => {
         };
 
       const duplicateSelectedParts = () => {
-            const editableMeshes = getEditableSelectedMeshes(true);
-            if (editableMeshes.length > 0) {
+            const targets = isTeamCreateLocked() ? getLocalSelectionForTeamShortcuts() : selectedObjects.slice();
+            if (targets.length > 0) {
                 let newSelectionIds = [];
-                editableMeshes.forEach(mesh => {
+                targets.forEach(mesh => {
                     if (mesh.userData.isSpawn) return; // Cant duplicate spawn
                     const objData = edData.objects.find(o => o.id === mesh.userData.id);
                     if (objData) {
@@ -7526,6 +7535,8 @@ document.addEventListener('keydown', (e) => {
             if (primary.userData.isSpawn) return;
             const objData = edData.objects.find(o => o.id === primary.userData.id);
             if (!objData || !objData.smart) return;
+            localEditedObjectIds.add(objData.id);
+            localLockedObjectUntil[objData.id] = Date.now() + 2200;
             objData.smart.title = sanitizeSmartText(document.getElementById('smart-title').value, objData.name);
             objData.smart.power = Math.max(0, Math.min(1000, parseFloat(document.getElementById('smart-power').value) || 0));
             objData.smart.team = document.getElementById('smart-team').value;
@@ -8145,6 +8156,8 @@ if (item.type === 'button' && item.onClickEvent) {
             const scriptText = String(document.getElementById('sculptscript-editor').value || '').slice(0, 12000);
             const obj = edData.objects.find(o => o.id === id);
             if (obj) {
+                localEditedObjectIds.add(obj.id);
+                localLockedObjectUntil[obj.id] = Date.now() + 2200;
                 obj.script = scriptText;
                 recordEdit();
                 renderExplorer();
@@ -8156,7 +8169,7 @@ if (item.type === 'button' && item.onClickEvent) {
             const newName = prompt("Rename object:", currentName);
             if (newName) {
                 const obj = edData.objects.find(o => o.id === id);
-                if (obj) { obj.name = newName; renderExplorer(); recordEdit(); }
+                if (obj) { localEditedObjectIds.add(obj.id); localLockedObjectUntil[obj.id] = Date.now() + 2200; obj.name = newName; renderExplorer(); recordEdit(); }
             }
         };
 
@@ -8167,6 +8180,8 @@ if (item.type === 'button' && item.onClickEvent) {
             } else {
         const objData = edData.objects.find(o => o.id === mesh.userData.id);
         if (objData) {
+            localEditedObjectIds.add(objData.id);
+            localLockedObjectUntil[objData.id] = Date.now() + 2200;
             objData.position = { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z };
             objData.rotation = { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z };
             objData.scale = { x: Math.max(0.1, mesh.scale.x), y: Math.max(0.1, mesh.scale.y), z: Math.max(0.1, mesh.scale.z) };
