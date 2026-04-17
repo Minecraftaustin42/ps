@@ -5135,10 +5135,22 @@ const dom = edRenderer.domElement;
                 }
 
                 // 2. Check Scene Hits if Gizmo was missed
-                const intersects = raycaster.intersectObjects(editorMeshes, true);
+                let intersects = raycaster.intersectObjects(editorMeshes, true);
+                let obj = null;
+                if (intersects.length === 0) {
+                    // Fallback: if editorMeshes is temporarily stale, search scene children and walk to selectable roots.
+                    intersects = raycaster.intersectObjects(edScene.children, true);
+                }
                 if (intersects.length > 0) {
-                    let obj = intersects[0].object;
-                    while (obj.parent && obj.parent.type === 'Group' && !(obj.parent.userData && obj.parent.userData.isChunkGroup)) obj = obj.parent;
+                    obj = intersects[0].object;
+                    while (obj && obj.parent && obj.parent.type === 'Group' && !(obj.parent.userData && obj.parent.userData.isChunkGroup)) obj = obj.parent;
+                    if (obj && !(obj.userData && (obj.userData.id || obj.userData.isSpawn))) {
+                        let p = intersects[0].object;
+                        while (p && p.parent && !(p.userData && (p.userData.id || p.userData.isSpawn))) p = p.parent;
+                        if (p && p.userData && (p.userData.id || p.userData.isSpawn)) obj = p;
+                    }
+                }
+                if (obj) {
                     selectObject(obj, e.shiftKey || isMultiSelect);
 
                     if (currentEditMode === 'select' && !obj.userData.isSpawn) {
@@ -7252,7 +7264,8 @@ const loadSponsoredAssetsDashboard = async () => {
 const setTransformMode = (mode) => {
     currentEditMode = mode;
     document.querySelectorAll('#view-create .tool-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(`mode-${mode}`).classList.add('active');
+    const modeBtn = document.getElementById(`mode-${mode}`);
+    if (modeBtn) modeBtn.classList.add('active');
     
     if (mode === 'select') {
         if (customGizmo) customGizmo.visible = false;
@@ -7343,21 +7356,17 @@ document.addEventListener('keydown', (e) => {
 
             if (selectedObjects.length > 0) {
                 const primary = selectedObjects[selectedObjects.length - 1];
-                
+                if (selectionBoxHelper) {
+                    selectionBoxHelper.setFromObject(primary);
+                    selectionBoxHelper.visible = true;
+                }
                 if (currentEditMode === 'select') {
                     if (customGizmo) customGizmo.visible = false;
-                    if (selectionBoxHelper) {
-                        selectionBoxHelper.setFromObject(primary);
-                        selectionBoxHelper.visible = true;
-                    }
-                } else {
-                    if (selectionBoxHelper) selectionBoxHelper.visible = false;
-                    if (customGizmo) {
-                        customGizmo.position.copy(primary.position);
-                        const useLocal = currentEditMode === 'scale' || currentTransformSpace === 'local';
-                        customGizmo.quaternion.copy(useLocal ? primary.quaternion : new THREE.Quaternion());
-                        setTransformMode(currentEditMode); // Refreshes visibility
-                    }
+                } else if (customGizmo) {
+                    customGizmo.position.copy(primary.position);
+                    const useLocal = currentEditMode === 'scale' || currentTransformSpace === 'local';
+                    customGizmo.quaternion.copy(useLocal ? primary.quaternion : new THREE.Quaternion());
+                    setTransformMode(currentEditMode); // Refreshes visibility
                 }
                 
                 document.getElementById('props-empty').style.display = 'none';
