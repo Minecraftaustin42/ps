@@ -5913,9 +5913,16 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 treeTop.castShadow = true;
                 profileWorldScene.add(treeTop);
             }
-            const player = new THREE.Mesh(new THREE.CapsuleGeometry(0.8, 2.2, 6, 12), new THREE.MeshStandardMaterial({ color: 0x2563eb }));
-            player.position.set(0, 13.5, 0);
-            player.castShadow = true;
+            const player = new THREE.Group();
+            const playerBody = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.85, 2.6, 14), new THREE.MeshStandardMaterial({ color: 0x2563eb }));
+            playerBody.position.y = 1.25;
+            playerBody.castShadow = true;
+            const playerHead = new THREE.Mesh(new THREE.SphereGeometry(0.62, 14, 14), new THREE.MeshStandardMaterial({ color: 0x93c5fd }));
+            playerHead.position.y = 2.85;
+            playerHead.castShadow = true;
+            player.add(playerBody);
+            player.add(playerHead);
+            player.position.set(0, 11.8, 0);
             profileWorldScene.add(player);
             profileWorldState.player = player;
             profileWorldState.keys = {};
@@ -5989,7 +5996,7 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                         profileWorldState.player.position.z *= s;
                     }
                 }
-                profileWorldState.player.position.y = 13.5;
+                profileWorldState.player.position.y = 11.8;
                 const camDistance = 8.5;
                 const camHeight = 4.8;
                 profileWorldCamera.position.set(
