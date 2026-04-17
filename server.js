@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 
 const app = express();
 const PORT = 3000;
@@ -15,6 +16,8 @@ const DB_FILE = path.join(__dirname, 'db.json');
 let db = {
     users: [], sessions: {}, games: [], shopItems: [], clothingItems: [], blueprints: [], jams: [], groups: [], cityPlots: [], datastores: {},
     globalChat: [], toolboxItems: [], // NEW
+    chatLogs: [],
+    systemState: { restartUntil: 0, restartMessage: '' },
     reports: [],
     notifications: [],
     moderation: { bans: {}, ipBans: [], warnings: {} },  // <-- ADD THIS LINE
@@ -32,7 +35,12 @@ let onlineUsers = {};
 let gameChats = {}; // { [gameId]: [messages] }
 let gameChatActivity = {}; // { [gameId_userId]: [timestamps] }
 let gameChatSuspensions = {}; // { [gameId_userId]: unbanTimestamp }
+let gameServerLastSeen = {}; // { [gameId]: timestamp }
 let adminAuth = { attempts: 0, lockoutUntil: 0 };
+const RESTART_POPUP_TEXT = 'Playsculpt servers are restarting! You do not need to take any action if you’re in a game or in studio, you will stay in. Please wait around 10 seconds to be automatically reconnected!';
+let restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
+let httpServer = null;
+const systemEventClients = new Set();
 // Load existing DB if available & migrate data
 if (fs.existsSync(DB_FILE)) {
 
@@ -41,6 +49,8 @@ if (fs.existsSync(DB_FILE)) {
 if (!db.datastores) db.datastores = {};
 if (!db.notifications) db.notifications = [];
 if (!db.reports) db.reports = [];
+if (!db.chatLogs) db.chatLogs = [];
+if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} }; // <-- ADD THIS LINE
 if (!db.friendPetDaily) db.friendPetDaily = {};
     try {
@@ -55,10 +65,12 @@ if (!db.friendPetDaily) db.friendPetDaily = {};
         if (!db.groups) db.groups = [];
 if (!db.sounds) db.sounds = [];
         if (!db.reports) db.reports = [];
+        if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
+        if (!db.chatLogs) db.chatLogs = [];
 
         db.users.forEach(u => { 
             if (!u.followers) u.followers = []; 
-if (typeof u.createdAt === 'undefined') u.createdAt = 0;
+if (!u.createdAt) u.createdAt = Date.now();
             if (!u.friends) u.friends = [];
             u.friends = (u.friends || []).map(f => (typeof f === 'string' ? { id: f, addedAt: Date.now(), xp: 0, level: 0, rewardTier: 0, lastXpAt: 0 } : { ...f, xp: f.xp || 0, level: f.level || 0, rewardTier: f.rewardTier || 0, lastXpAt: f.lastXpAt || 0 }));
             if (!u.friendRequests) u.friendRequests = [];
@@ -74,7 +86,7 @@ if (!u.toolboxInventory) u.toolboxInventory = [];
             if (typeof u.equippedShirt === 'undefined') u.equippedShirt = null;
             if (typeof u.equippedPants === 'undefined') u.equippedPants = null;
             if (!u.challengeClaims) u.challengeClaims = {};
-            if (!u.challengeProgress) u.challengeProgress = { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 };
+            if (!u.challengeProgress) u.challengeProgress = { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 };
             if (!u.academyProgress) u.academyProgress = {};
             if (!u.academyClaims) u.academyClaims = {};
             if (!u.jamVotes) u.jamVotes = {};
@@ -94,6 +106,14 @@ if (typeof db.lastUserIdNum === 'undefined') {
 
             if (!u.bookmarks) u.bookmarks = []; 
             if (typeof u.equipped === 'undefined') u.equipped = null;
+            if (!u.profileItems) u.profileItems = [];
+            if (typeof u.equippedProfileTheme === 'undefined') u.equippedProfileTheme = null;
+            if (typeof u.equippedProfileCosmetic === 'undefined') u.equippedProfileCosmetic = null;
+            if (!Array.isArray(u.equippedProfileCosmetics)) u.equippedProfileCosmetics = (u.equippedProfileCosmetic ? [u.equippedProfileCosmetic] : []);
+            if (!u.profilePinnedGame) u.profilePinnedGame = { enabled: false, gameId: null, description: '' };
+            if (typeof u.profileBio === 'undefined') u.profileBio = '';
+            if (!u.profileTextStyle) u.profileTextStyle = { font: 'default', color: '#2c3e50' };
+            if (typeof u.lastSeenAt === 'undefined') u.lastSeenAt = Date.now();
             if (typeof u.primaryGroupId === 'undefined') u.primaryGroupId = null; 
             if (typeof u.coins === 'undefined') u.coins = 0; // Migrate coins to backend
 if (typeof u.lastSpinDate === 'undefined') u.lastSpinDate = 0; // NEW: Lucky Spin Tracker
@@ -181,6 +201,16 @@ if (!g.analytics) {
     } catch (e) {
         console.error("Error loading db.json, starting fresh.");
     }
+}
+if (db.systemState && Number(db.systemState.restartUntil || 0) > Date.now()) {
+    restartState = {
+        active: true,
+        startedAt: Date.now(),
+        endsAt: Number(db.systemState.restartUntil || 0),
+        message: String(db.systemState.restartMessage || RESTART_POPUP_TEXT)
+    };
+    const remaining = Math.max(0, restartState.endsAt - Date.now());
+    setTimeout(() => finalizeSafeRestart(), remaining);
 }
 
 const saveDB = () => {
@@ -328,18 +358,157 @@ if (typeof onlineUsers[req.userId] === 'object') {
     } else {
         onlineUsers[req.userId] = { lastSeen: Date.now(), location: 'website' };
     }
-
-
-    onlineUsers[req.userId] = Date.now(); 
+    const reqUser = db.users.find(u => u.id === req.userId);
+    if (reqUser) reqUser.lastSeenAt = Date.now();
     next();
 };
 const inviteCooldowns = {}; 
 
 const isUserOnline = (userId) => {
-    return onlineUsers[userId] && (Date.now() - onlineUsers[userId] < 15000);
+    const slot = onlineUsers[userId];
+    if (!slot) return false;
+    if (typeof slot === 'number') return (Date.now() - slot) < 15000;
+    if (typeof slot.lastSeen === 'number') return (Date.now() - slot.lastSeen) < 15000;
+    return false;
+};
+const getUserLastSeenAt = (userId) => {
+    const slot = onlineUsers[userId];
+    if (typeof slot === 'number') return slot;
+    if (slot && typeof slot.lastSeen === 'number') return slot.lastSeen;
+    const user = db.users.find(u => u.id === userId);
+    return (user && user.lastSeenAt) ? user.lastSeenAt : Date.now();
 };
 
 const isPrimaryAdmin = (user) => !!user && String(user.username || '').toLowerCase() === 'admin';
+const CHAT_LOG_ADMIN_USERS = new Set(['admin', 'nick', 'austin']);
+const ECONOMY_ADMIN_USERS = new Set(['admin', 'nick', 'austin']);
+const canViewChatLogs = (user) => !!user && CHAT_LOG_ADMIN_USERS.has(String(user.username || '').toLowerCase());
+const canUseEconomyAdmin = (user) => !!user && ECONOMY_ADMIN_USERS.has(String(user.username || '').toLowerCase());
+
+const appendChatLog = (entry = {}) => {
+    if (!db.chatLogs) db.chatLogs = [];
+    const now = Date.now();
+    const textNorm = String(entry.text || '').trim().toLowerCase();
+    const recentDup = db.chatLogs.slice(-12).find((m) =>
+        String(m.channel || '') === String(entry.channel || '') &&
+        String(m.authorId || '') === String(entry.authorId || '') &&
+        String(m.sourceId || '') === String(entry.sourceId || '') &&
+        String(m.text || '').trim().toLowerCase() === textNorm &&
+        (now - (Number(m.timestamp) || 0)) < 3000
+    );
+    if (recentDup) return;
+    const record = {
+        id: crypto.randomUUID(),
+        timestamp: Number(entry.timestamp) || Date.now(),
+        channel: String(entry.channel || 'unknown').slice(0, 40),
+        sourceType: String(entry.sourceType || '').slice(0, 40),
+        sourceId: entry.sourceId ? String(entry.sourceId).slice(0, 120) : null,
+        gameId: entry.gameId ? String(entry.gameId).slice(0, 120) : null,
+        groupId: entry.groupId ? String(entry.groupId).slice(0, 120) : null,
+        authorId: entry.authorId ? String(entry.authorId).slice(0, 120) : null,
+        authorName: String(entry.authorName || 'Unknown').slice(0, 60),
+        text: String(entry.text || '').slice(0, 600),
+        meta: entry.meta && typeof entry.meta === 'object' ? entry.meta : {}
+    };
+    db.chatLogs.push(record);
+    if (db.chatLogs.length > 50000) db.chatLogs.splice(0, db.chatLogs.length - 50000);
+};
+
+const isLikelyDuplicateMessage = (messages = [], userId, text, windowMs = 1400) => {
+    const normalized = String(text || '').trim().toLowerCase();
+    if (!normalized || !Array.isArray(messages) || !messages.length) return false;
+    const now = Date.now();
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (!m) continue;
+        if ((now - (Number(m.timestamp) || 0)) > windowMs) break;
+        const sameUser = (m.userId && m.userId === userId) || (m.authorId && m.authorId === userId);
+        if (!sameUser) continue;
+        if (String(m.text || '').trim().toLowerCase() === normalized) return true;
+    }
+    return false;
+};
+
+const touchGameServer = (gameId) => {
+    if (!gameId) return;
+    gameServerLastSeen[gameId] = Date.now();
+};
+const clearGameServerState = (gameId) => {
+    if (!gameId) return;
+    delete activePlayers[gameId];
+    delete activePlayDynamic[gameId];
+    delete gameChats[gameId];
+    delete gameServerLastSeen[gameId];
+    for (const key in gameChatActivity) if (key.startsWith(gameId + '_')) delete gameChatActivity[key];
+    for (const key in gameChatSuspensions) if (key.startsWith(gameId + '_')) delete gameChatSuspensions[key];
+};
+const cleanupGameServerIfInactive = (gameId, maxIdleMs = 15000) => {
+    if (!gameId) return;
+    const now = Date.now();
+    const players = activePlayers[gameId] || {};
+    const hasFreshPlayers = Object.values(players).some(p => now - (p.timestamp || 0) < 3500);
+    if (hasFreshPlayers) {
+        touchGameServer(gameId);
+        return;
+    }
+    const lastSeen = gameServerLastSeen[gameId] || 0;
+    if ((now - lastSeen) > maxIdleMs) clearGameServerState(gameId);
+};
+const emitSystemEvent = (type, payload = {}) => {
+    const eventData = `data: ${JSON.stringify({ type, ...payload })}\n\n`;
+    systemEventClients.forEach((res) => {
+        try { res.write(eventData); } catch (_) {}
+    });
+};
+const finalizeSafeRestart = () => {
+    activeEditors = {};
+    activePlayers = {};
+    activePlayDynamic = {};
+    gameChats = {};
+    gameChatActivity = {};
+    gameChatSuspensions = {};
+    gameServerLastSeen = {};
+    restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
+    db.systemState = { restartUntil: 0, restartMessage: '' };
+    saveDB();
+    emitSystemEvent('restart_complete', {});
+};
+const performProcessRestart = () => {
+    try {
+        const child = spawn(process.execPath, process.argv.slice(1), {
+            cwd: process.cwd(),
+            env: process.env,
+            detached: true,
+            stdio: 'ignore'
+        });
+        child.unref();
+    } catch (err) {
+        console.error('Safe restart spawn failed:', err);
+        return;
+    }
+    if (httpServer) {
+        httpServer.close(() => process.exit(0));
+        setTimeout(() => process.exit(0), 4500);
+    } else {
+        setTimeout(() => process.exit(0), 1000);
+    }
+};
+const triggerSafeServerRestart = (actorName = 'system') => {
+    const now = Date.now();
+    const durationMs = 10000;
+    restartState = {
+        active: true,
+        startedAt: now,
+        endsAt: now + durationMs,
+        message: RESTART_POPUP_TEXT,
+        actor: actorName
+    };
+    db.systemState = { restartUntil: restartState.endsAt, restartMessage: restartState.message };
+    saveDB();
+    emitSystemEvent('restart_start', { endsAt: restartState.endsAt, message: restartState.message, actor: actorName });
+    setTimeout(() => performProcessRestart(), 1500);
+    setTimeout(() => finalizeSafeRestart(), durationMs);
+};
 
 const deleteUserAccountCompletely = (user) => {
     if (!user) return;
@@ -587,6 +756,76 @@ const requireModPanelUnlocked = (req, res, next) => {
     next();
 };
 
+const PLATFORM_ADMIN_USERNAMES = new Set(['austin', 'nick', 'admin']);
+const isPlatformAdminUser = (user) => !!(user && PLATFORM_ADMIN_USERNAMES.has(String(user.username || '').toLowerCase()));
+const requirePlatformAdmin = (req, res, next) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!isPlatformAdminUser(user)) return res.status(403).json({ error: 'Platform admins only.' });
+    req.platformAdminUser = user;
+    next();
+};
+
+const applyModerationActionToUser = (target, action = 'none', reason = '', durationHours = 24) => {
+    if (!target) return;
+    const safeReason = String(reason || '').slice(0, 300) || 'Policy violation.';
+    if (action === 'warn') {
+        if (!db.moderation.warnings[target.id]) db.moderation.warnings[target.id] = [];
+        db.moderation.warnings[target.id].push({
+            id: crypto.randomUUID(),
+            reason: safeReason,
+            date: Date.now(),
+            acknowledged: false
+        });
+    } else if (action === 'tempban') {
+        const expires = Date.now() + (Math.max(1, parseInt(durationHours, 10) || 24) * 3600000);
+        db.moderation.bans[target.id] = { reason: safeReason, expires };
+    } else if (action === 'permaban') {
+        db.moderation.bans[target.id] = { reason: safeReason, expires: 'permanent' };
+    }
+};
+
+const getCreatorLeagueForStats = ({ playerCount = 0, plays = 0, retention = 0 }) => {
+    const score = (playerCount * 2) + (plays * 0.5) + (retention * 20);
+    if (score >= 500) return 'Mythic';
+    if (score >= 320) return 'Diamond';
+    if (score >= 190) return 'Gold';
+    if (score >= 90) return 'Silver';
+    return 'Bronze';
+};
+const CREATOR_LEAGUE_REWARDS = { Bronze: 40, Silver: 80, Gold: 130, Diamond: 200, Mythic: 300 };
+const getCurrentMonthKey = () => {
+    const d = new Date();
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+const computeCreatorLeagueForUser = (userId) => {
+    const myGames = (db.games || []).filter(g => g.authorId === userId);
+    const playerCount = myGames.reduce((sum, g) => sum + ((g.analytics?.uniquePlayers || []).length || 0), 0);
+    const plays = myGames.reduce((sum, g) => sum + (g.plays || 0), 0);
+    const totalSession = myGames.reduce((sum, g) => sum + (g.analytics?.totalSessionTimeSeconds || 0), 0);
+    const retention = plays > 0 ? Math.min(10, totalSession / Math.max(1, plays * 60)) : 0;
+    const tier = getCreatorLeagueForStats({ playerCount, plays, retention });
+    return { tier, playerCount, plays, retention, reward: CREATOR_LEAGUE_REWARDS[tier] || 0 };
+};
+
+const PROFILE_THEME_CATALOG = [
+    { id: 'theme_playsculpt_blue', name: 'Playsculpt Blue', price: 50, colorA: '#dff1ff', colorB: '#8ecbff', shine: false },
+    { id: 'theme_playsculpt_purple', name: 'Playsculpt Purple', price: 50, colorA: '#f1e6ff', colorB: '#c8a3ff', shine: false },
+    { id: 'theme_yellow', name: 'Yellow Theme', price: 100, colorA: '#fff9d8', colorB: '#ffe16b', shine: false },
+    { id: 'theme_orange', name: 'Orange Theme', price: 100, colorA: '#fff0df', colorB: '#ffb668', shine: false },
+    { id: 'theme_green', name: 'Green Theme', price: 100, colorA: '#e2ffe8', colorB: '#7edb95', shine: false },
+    { id: 'theme_red', name: 'Red Theme', price: 100, colorA: '#ffe3e3', colorB: '#ff8d8d', shine: false },
+    { id: 'theme_pink', name: 'Pink Theme', price: 100, colorA: '#ffe7f5', colorB: '#ff9fd5', shine: false },
+    { id: 'theme_grey', name: 'Grey Theme', price: 100, colorA: '#eef1f4', colorB: '#b4bcc4', shine: false },
+    { id: 'theme_black', name: 'Black Theme', price: 100, colorA: '#2a2d33', colorB: '#4b5563', shine: false },
+    { id: 'theme_gold', name: 'Gold Theme', price: 900, colorA: '#fff4bf', colorB: '#f5b642', shine: true }
+];
+const PROFILE_COSMETIC_CATALOG = [
+    { id: 'cosmetic_pinned_game_feature', name: 'Pinned Game Creation Profile Feature', price: 850, description: 'Ability to pin a game you made at the top of your profile and write a short description of it' },
+    { id: 'cosmetic_profile_font_chooser', name: 'Custom Profile Text Font Chooser', price: 725, description: 'Unlock dropdown control to set your profile text font to one of 8 fonts.' },
+    { id: 'cosmetic_profile_text_color', name: 'Profile Text Color Chooser', price: 600, description: 'Unlock color-wheel control to set your profile text color.' }
+];
+const getProfileStoreItem = (itemId) => PROFILE_THEME_CATALOG.concat(PROFILE_COSMETIC_CATALOG).find(i => i.id === itemId);
+
 const REPORT_COIN_REWARDS = [150, 300, 800];
 const rollReportCrateReward = () => {
     const roll = Math.random();
@@ -683,7 +922,7 @@ userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
         reportCrates: [], accurateReports: 0,
-        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, equippedProfileCosmetics: [], profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileBio: '', profileTextStyle: { font: 'default', color: '#2c3e50' }, lastSeenAt: Date.now(), primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
 
@@ -809,6 +1048,32 @@ if (!actingUser) {
 
     saveDB(); 
     res.json({ success: true, message: `Action ${action} applied to ${target.username}` });
+});
+
+app.post('/api/admin/games/:id/remove', requireAuth, requirePlatformAdmin, (req, res) => {
+    const game = db.games.find(g => g.id === req.params.id);
+    if (!game) return res.status(404).json({ error: 'Game not found.' });
+    const owner = db.users.find(u => u.id === game.authorId);
+    const { action, reason, durationHours } = req.body || {};
+    if (owner) applyModerationActionToUser(owner, String(action || 'none'), reason, durationHours);
+    db.games = db.games.filter(g => g.id !== game.id);
+    if (activePlayers[game.id]) delete activePlayers[game.id];
+    if (activeEditors[game.id]) delete activeEditors[game.id];
+    if (deletedObjectTombstones[game.id]) delete deletedObjectTombstones[game.id];
+    saveDB();
+    res.json({ success: true, removedId: game.id, removedType: 'game' });
+});
+
+app.post('/api/admin/groups/:id/remove', requireAuth, requirePlatformAdmin, (req, res) => {
+    const group = db.groups.find(gr => gr.id === req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+    const owner = db.users.find(u => u.id === group.ownerId);
+    const { action, reason, durationHours } = req.body || {};
+    if (owner) applyModerationActionToUser(owner, String(action || 'none'), reason, durationHours);
+    db.games.forEach(g => { if (g.groupId === group.id) g.groupId = null; });
+    db.groups = db.groups.filter(gr => gr.id !== group.id);
+    saveDB();
+    res.json({ success: true, removedId: group.id, removedType: 'group' });
 });
 
 app.post('/api/reports', requireAuth, (req, res) => {
@@ -946,7 +1211,7 @@ if (db.moderation && db.moderation.warnings && db.moderation.warnings[user.id]) 
     pendingWarnings = db.moderation.warnings[user.id].filter(w => w.acknowledged === false);
 }
 
-    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, coins: user.coins, pendingWarnings });
+    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: user.profileBio || '', equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' }, coins: user.coins, pendingWarnings });
 });
 
 app.post('/api/logout', requireAuth, (req, res) => {
@@ -957,7 +1222,7 @@ app.post('/api/logout', requireAuth, (req, res) => {
 });
 
 app.put('/api/me/settings', requireAuth, (req, res) => {
-    const { newUsername, newPassword } = req.body;
+    const { newUsername, newPassword, profileBio } = req.body;
     const user = db.users.find(u => u.id === req.userId);
 
    if (newUsername && newUsername !== user.username) {
@@ -983,9 +1248,12 @@ app.put('/api/me/settings', requireAuth, (req, res) => {
         user.salt = salt;
         user.hash = hash;
     }
+    if (profileBio !== undefined) {
+        user.profileBio = String(profileBio || '').slice(0, 400);
+    }
 
     saveDB();
-    res.json({ message: 'Settings updated successfully!', username: user.username });
+    res.json({ message: 'Settings updated successfully!', username: user.username, profileBio: user.profileBio || '' });
 });
 
 app.delete('/api/admin/users/:username', requireAuth, (req, res) => {
@@ -1002,6 +1270,94 @@ app.delete('/api/admin/users/:username', requireAuth, (req, res) => {
     deleteUserAccountCompletely(target);
     saveDB();
     res.json({ success: true, deletedUser: target.username });
+});
+
+app.post('/api/admin/economy/grant-coins', requireAuth, (req, res) => {
+    const actingUser = db.users.find(u => u.id === req.userId);
+    if (!canUseEconomyAdmin(actingUser)) return res.status(403).json({ error: 'Economy admin only.' });
+    const { username, amount } = req.body || {};
+    const target = db.users.find(u => String(u.username || '').toLowerCase() === String(username || '').toLowerCase());
+    const amt = parseInt(amount, 10);
+    if (!target) return res.status(404).json({ error: 'Target user not found.' });
+    if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'Amount must be a positive integer.' });
+    if (amt > 1000000) return res.status(400).json({ error: 'Amount too large (max 1,000,000).' });
+    target.coins = (target.coins || 0) + amt;
+    saveDB();
+    res.json({ success: true, username: target.username, added: amt, newBalance: target.coins });
+});
+
+app.get('/api/admin/chat-logs', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!canViewChatLogs(user)) return res.status(403).json({ error: 'Moderator access only.' });
+
+    const since = Number(req.query.since || 0);
+    const limit = Math.max(1, Math.min(800, Number(req.query.limit || 200)));
+    const usernameQ = String(req.query.username || '').trim().toLowerCase();
+    const channelQ = String(req.query.channel || '').trim().toLowerCase();
+    const gameIdQ = String(req.query.gameId || '').trim();
+    const groupIdQ = String(req.query.groupId || '').trim();
+
+    const list = (db.chatLogs || []).filter((m) => {
+        if (since && (Number(m.timestamp) || 0) <= since) return false;
+        if (usernameQ && !String(m.authorName || '').toLowerCase().includes(usernameQ)) return false;
+        if (channelQ && String(m.channel || '').toLowerCase() !== channelQ) return false;
+        if (gameIdQ && String(m.gameId || '') !== gameIdQ) return false;
+        if (groupIdQ && String(m.groupId || '') !== groupIdQ) return false;
+        return true;
+    });
+
+    const sliced = list.slice(-limit);
+    res.json({
+        logs: sliced,
+        channels: Array.from(new Set((db.chatLogs || []).map(m => String(m.channel || '')).filter(Boolean))).sort(),
+        games: Array.from(new Set((db.chatLogs || []).map(m => String(m.gameId || '')).filter(Boolean))).sort(),
+        groups: Array.from(new Set((db.chatLogs || []).map(m => String(m.groupId || '')).filter(Boolean))).sort()
+    });
+});
+
+app.get('/api/system/status', (req, res) => {
+    const now = Date.now();
+    const active = !!restartState.active && now < (restartState.endsAt || 0);
+    if (!active && restartState.active) restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
+    res.json({
+        restarting: active,
+        endsAt: restartState.endsAt || 0,
+        startedAt: restartState.startedAt || 0,
+        message: restartState.message || RESTART_POPUP_TEXT
+    });
+});
+
+app.get('/api/system/events', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders && res.flushHeaders();
+    systemEventClients.add(res);
+    res.write(`data: ${JSON.stringify({ type: 'hello', restarting: restartState.active, endsAt: restartState.endsAt || 0, message: restartState.message || RESTART_POPUP_TEXT })}\n\n`);
+    req.on('close', () => {
+        systemEventClients.delete(res);
+    });
+});
+
+app.post('/api/system/restart', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!canViewChatLogs(user)) return res.status(403).json({ error: 'Moderator access only.' });
+    if (restartState.active && Date.now() < restartState.endsAt) {
+        return res.status(400).json({ error: 'Restart already in progress.' });
+    }
+    triggerSafeServerRestart(user?.username || 'system');
+    res.json({ success: true, restarting: true, endsAt: restartState.endsAt, message: restartState.message });
+});
+
+app.post('/api/system/command', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!canViewChatLogs(user)) return res.status(403).json({ error: 'Moderator access only.' });
+    const command = String(req.body.command || '').trim().toLowerCase();
+    if (command === 'restart-server-safe' || command === 'safe_restart') {
+        if (!(restartState.active && Date.now() < restartState.endsAt)) triggerSafeServerRestart(user?.username || 'system');
+        return res.json({ success: true, output: `Safe restart initiated by ${user.username}.`, endsAt: restartState.endsAt });
+    }
+    res.status(400).json({ error: 'Unknown command. Try: restart-server-safe' });
 });
 
 app.put('/api/me/primary-group', requireAuth, (req, res) => {
@@ -1032,15 +1388,32 @@ app.post('/api/users/:username/message', requireAuth, (req, res) => {
     }
 
     if (!targetUser.messages) targetUser.messages = [];
+    const cleanText = text.trim().substring(0, 500);
+    if (isLikelyDuplicateMessage(targetUser.messages || [], sender.id, cleanText, 1500)) {
+        return res.json({ message: 'Message already sent.' });
+    }
+    const msgTs = Date.now();
     targetUser.messages.push({
         id: crypto.randomUUID(), fromId: sender.id, fromUsername: sender.username,
-        text: text.trim().substring(0, 500), timestamp: Date.now()
+        text: cleanText, timestamp: msgTs
     });
+    appendChatLog({
+        channel: 'direct_message',
+        sourceType: 'direct',
+        sourceId: targetUser.id,
+        authorId: sender.id,
+        authorName: sender.username,
+        text: cleanText,
+        timestamp: msgTs,
+        meta: { toUserId: targetUser.id, toUsername: targetUser.username }
+    });
+    ensureChallengeProgressDay(sender);
+    sender.challengeProgress.messagesSent += 1;
 
     saveDB();
     createNotification(targetUser.id, "message", {
     from: sender.username,
-    text: text.trim().substring(0, 500)
+    text: cleanText
 });
     res.json({ message: 'Message sent!' });
 });
@@ -1100,6 +1473,65 @@ app.get("/api/friends", requireAuth, (req, res) => {
     res.json(friends);
 });
 
+app.post('/api/friends/team-create-xp', requireAuth, (req, res) => {
+    const { gameId } = req.body || {};
+    if (!gameId) return res.status(400).json({ error: 'gameId required.' });
+    const game = db.games.find(g => g.id === gameId);
+    if (!game) return res.status(404).json({ error: 'Game not found.' });
+
+    let canEdit = game.authorId === req.userId || (game.collaborators || []).includes(req.userId);
+    if (game.groupId) {
+        const group = db.groups.find(gr => gr.id === game.groupId);
+        const perms = getGroupMemberPerms(group, req.userId);
+        if (perms && perms.editGames) canEdit = true;
+    }
+    if (!canEdit) return res.status(403).json({ error: 'Not authorized.' });
+
+    const editorMap = activeEditors[game.id] || {};
+    const now = Date.now();
+    const me = db.users.find(u => u.id === req.userId);
+    if (!me) return res.status(401).json({ error: 'Unauthorized.' });
+    const friendIds = new Set((me.friends || []).map(f => (typeof f === 'string' ? f : f.id)));
+    let awarded = 0;
+
+    Object.keys(editorMap).forEach((uId) => {
+        if (uId === req.userId) return;
+        const seen = editorMap[uId];
+        if (!seen || (now - (seen.timestamp || 0)) > 12000) return;
+        if (!friendIds.has(uId)) return;
+        const link = ensureFriendLink(me, uId);
+        if (now - (link.lastXpAt || 0) < (7 * 60 * 1000)) return;
+        grantFriendshipXp(req.userId, uId, 10);
+        awarded++;
+    });
+
+    if (awarded > 0) saveDB();
+    res.json({ success: true, awarded });
+});
+
+app.get('/api/creator-leagues/me', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user) return res.status(401).json({ error: 'Unauthorized.' });
+    const monthKey = getCurrentMonthKey();
+    const league = computeCreatorLeagueForUser(req.userId);
+    const claimed = !!(user.creatorLeagueClaims && user.creatorLeagueClaims[monthKey]);
+    res.json({ monthKey, ...league, claimed });
+});
+
+app.post('/api/creator-leagues/claim', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user) return res.status(401).json({ error: 'Unauthorized.' });
+    const monthKey = getCurrentMonthKey();
+    if (!user.creatorLeagueClaims) user.creatorLeagueClaims = {};
+    if (user.creatorLeagueClaims[monthKey]) return res.status(400).json({ error: 'Already claimed this month.' });
+    const league = computeCreatorLeagueForUser(req.userId);
+    const reward = league.reward || 0;
+    user.coins = (user.coins || 0) + reward;
+    user.creatorLeagueClaims[monthKey] = true;
+    saveDB();
+    res.json({ success: true, reward, coins: user.coins, tier: league.tier, monthKey });
+});
+
 
 app.get('/api/users/search', (req, res) => {
     const query = (req.query.q || '').toLowerCase();
@@ -1142,7 +1574,7 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({
         id: user.id, username: user.username, color: user.color, badges: user.badges, coins: user.coins,
         requests, friends: friendsList, recentlyPlayed: recentGames, bookmarkedGames, 
-        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [], equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null,
+        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [], equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: user.profileBio || '', profileItems: user.profileItems || [], equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
         lastSpinDate: user.lastSpinDate,
         loginStreak: user.loginStreak, playStreak: user.playStreak, lastLoginDate: user.lastLoginDate,
         toolboxInventory: user.toolboxInventory,
@@ -1156,7 +1588,12 @@ const CREATOR_CHALLENGE_POOL = [
     { id: 'publish_1', text: 'Publish one map update', reward: 70, check: (p) => p.publishes >= 1 },
     { id: 'visit_city', text: 'Visit Sculpt City once', reward: 25, check: (p) => p.cityVisits >= 1 },
     { id: 'play_2', text: 'Play 2 community games', reward: 35, check: (p) => p.gamesPlayed >= 2 },
-    { id: 'parts_25', text: 'Place 25 parts in Studio', reward: 60, check: (p) => p.partsPlaced >= 25 }
+    { id: 'parts_25', text: 'Place 25 parts in Studio', reward: 60, check: (p) => p.partsPlaced >= 25 },
+    { id: 'like_3_games', text: 'Like 3 games', reward: 45, check: (p) => (p.likesGiven || 0) >= 3 },
+    { id: 'make_friend_1', text: 'Accept 1 friend request', reward: 55, check: (p) => (p.friendsAdded || 0) >= 1 },
+    { id: 'send_2_messages', text: 'Send 2 friend messages', reward: 40, check: (p) => (p.messagesSent || 0) >= 2 },
+    { id: 'group_wall_post', text: 'Post once on a group wall', reward: 35, check: (p) => (p.groupPosts || 0) >= 1 },
+    { id: 'buy_2_items', text: 'Buy 2 shop items', reward: 50, check: (p) => (p.purchases || 0) >= 2 }
 ];
 const getDayKey = () => new Date().toISOString().slice(0, 10);
 const getDailyChallenges = () => {
@@ -1170,9 +1607,14 @@ const getDailyChallenges = () => {
 const ensureChallengeProgressDay = (user) => {
     const dayKey = getDayKey();
     if (!user.challengeProgress || user.challengeProgress.dayKey !== dayKey) {
-        user.challengeProgress = { dayKey, partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 };
+        user.challengeProgress = { dayKey, partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 };
     }
     if (!user.challengeClaims) user.challengeClaims = {};
+    if (typeof user.challengeProgress.likesGiven !== 'number') user.challengeProgress.likesGiven = 0;
+    if (typeof user.challengeProgress.friendsAdded !== 'number') user.challengeProgress.friendsAdded = 0;
+    if (typeof user.challengeProgress.messagesSent !== 'number') user.challengeProgress.messagesSent = 0;
+    if (typeof user.challengeProgress.groupPosts !== 'number') user.challengeProgress.groupPosts = 0;
+    if (typeof user.challengeProgress.purchases !== 'number') user.challengeProgress.purchases = 0;
 };
 
 app.get('/api/challenges/daily', requireAuth, (req, res) => {
@@ -1199,6 +1641,11 @@ app.post('/api/challenges/progress', requireAuth, (req, res) => {
     if (event === 'publishes') user.challengeProgress.publishes += amt;
     if (event === 'cityVisits') user.challengeProgress.cityVisits += amt;
     if (event === 'gamesPlayed') user.challengeProgress.gamesPlayed += amt;
+    if (event === 'likesGiven') user.challengeProgress.likesGiven += amt;
+    if (event === 'friendsAdded') user.challengeProgress.friendsAdded += amt;
+    if (event === 'messagesSent') user.challengeProgress.messagesSent += amt;
+    if (event === 'groupPosts') user.challengeProgress.groupPosts += amt;
+    if (event === 'purchases') user.challengeProgress.purchases += amt;
     saveDB();
     res.json({ success: true, progress: user.challengeProgress });
 });
@@ -1596,6 +2043,7 @@ app.get('/api/users/:username', (req, res) => {
     const inventoryItems = user.inventory.map(itemId => {
         return db.shopItems.find(i => i.id === itemId);
     }).filter(Boolean);
+    const pinnedGame = user.profilePinnedGame && user.profilePinnedGame.gameId ? db.games.find(g => g.id === user.profilePinnedGame.gameId && g.authorId === user.id) : null;
 
     // Get groups
     const userGroups = db.groups.filter(gr => gr.members.some(m => m.userId === user.id)).map(gr => {
@@ -1609,11 +2057,21 @@ app.get('/api/users/:username', (req, res) => {
     res.json({
         id: user.id, username: user.username, isOnline: isUserOnline(user.id), color: user.color, badges: user.badges,
         followersCount: user.followers.length, isFollowing, friendStatus, friends: friendsDetails, userIdNum: user.userIdNum,
+        playStreak: user.playStreak || 0,
         gamesCreated: userGames.length,
         games: userGames.map(g => ({ id: g.id, title: g.title, authorName: g.authorName, genre: g.genre, likes: g.likes.length, plays: g.plays, groupId: g.groupId })),
         likedGames: likedGames.map(g => ({ id: g.id, title: g.title, authorName: g.authorName, genre: g.genre, likes: g.likes.length, plays: g.plays, groupId: g.groupId })),
         inventory: inventoryItems,
-
+        profileBio: user.profileBio || '',
+        createdAt: user.createdAt || Date.now(),
+        friendsCount: (user.friends || []).length,
+        lastSeenAt: getUserLastSeenAt(user.id),
+        equippedProfileTheme: user.equippedProfileTheme || null,
+        equippedProfileCosmetic: user.equippedProfileCosmetic || null,
+        equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []),
+        profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' },
+        profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
+        pinnedGameData: pinnedGame ? { id: pinnedGame.id, title: pinnedGame.title } : null,
         equipped: user.equipped,
         groups: userGroups, primaryGroup
     });
@@ -1643,6 +2101,8 @@ app.post('/api/users/:username/accept-friend', requireAuth, (req, res) => {
         reqUser.friendRequests = reqUser.friendRequests.filter(id => id !== targetUser.id);
         if(!reqUser.friends.find(f => f.id === targetUser.id)) reqUser.friends.push({ id: targetUser.id, addedAt: Date.now() });
         if(!targetUser.friends.find(f => f.id === reqUser.id)) targetUser.friends.push({ id: reqUser.id, addedAt: Date.now() });
+        ensureChallengeProgressDay(reqUser);
+        reqUser.challengeProgress.friendsAdded += 1;
         saveDB();
     }
     res.json({ message: 'Friend request accepted.' });
@@ -1787,6 +2247,40 @@ app.put('/api/groups/:id/logo', requireAuth, (req, res) => {
     res.json({ success: true, logo: group.logo });
 });
 
+app.put('/api/groups/:id/description', requireAuth, (req, res) => {
+    const group = db.groups.find(gr => gr.id === req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+    if (group.ownerId !== req.userId) return res.status(403).json({ error: 'Only the group owner can edit description.' });
+    const description = String((req.body || {}).description || '').slice(0, 800).trim();
+    group.description = description;
+    saveDB();
+    res.json({ success: true, description: group.description });
+});
+
+app.post('/api/groups/:id/change-owner', requireAuth, (req, res) => {
+    const group = db.groups.find(gr => gr.id === req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+    if (group.ownerId !== req.userId) return res.status(403).json({ error: 'Only the current owner can transfer ownership.' });
+
+    const username = String((req.body || {}).username || '').trim().toLowerCase();
+    if (!username) return res.status(400).json({ error: 'Username required.' });
+    const target = db.users.find(u => u.username.toLowerCase() === username);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+    const targetMember = (group.members || []).find(m => m.userId === target.id);
+    if (!targetMember) return res.status(400).json({ error: 'That user must already be a member of the group.' });
+    if (target.id === req.userId) return res.status(400).json({ error: 'You already own this group.' });
+
+    const ownerRole = (group.roles || []).find(r => r.rank === 255) || (group.roles || []).find(r => r.name === 'Owner');
+    const fallbackRole = (group.roles || []).filter(r => r.rank < 255).sort((a, b) => b.rank - a.rank)[0] || (group.roles || [])[0];
+
+    const oldOwnerMember = (group.members || []).find(m => m.userId === req.userId);
+    if (ownerRole && targetMember) targetMember.roleId = ownerRole.id;
+    if (oldOwnerMember && fallbackRole) oldOwnerMember.roleId = fallbackRole.id;
+    group.ownerId = target.id;
+    saveDB();
+    res.json({ success: true, newOwner: target.username });
+});
+
 
 // Post Group Shout
 app.post('/api/groups/:id/shout', requireAuth, (req, res) => {
@@ -1925,6 +2419,7 @@ app.get('/api/groups/:id', (req, res) => {
 res.json({
     id: group.id,
     name: group.name,
+    ownerId: group.ownerId,
     description: group.description,
     logo: group.logo || '',
     groupCoins: group.coins || 0,
@@ -2101,8 +2596,25 @@ app.post('/api/groups/:id/posts', requireAuth, (req, res) => {
     }
 
     const user = db.users.find(u => u.id === req.userId);
+    const cleanText = text.trim().substring(0, 200);
+    if (isLikelyDuplicateMessage(group.posts || [], user.id, cleanText, 1800)) {
+        return res.json({ message: 'Posted successfully!', posts: group.posts.slice(0, 50) });
+    }
+    const ts = Date.now();
     group.posts.unshift({
-        id: crypto.randomUUID(), authorName: user.username, authorId: user.id, text: text.trim().substring(0, 200), timestamp: Date.now()
+        id: crypto.randomUUID(), authorName: user.username, authorId: user.id, text: cleanText, timestamp: ts
+    });
+    ensureChallengeProgressDay(user);
+    user.challengeProgress.groupPosts += 1;
+    appendChatLog({
+        channel: 'group_wall',
+        sourceType: 'group',
+        sourceId: group.id,
+        groupId: group.id,
+        authorId: user.id,
+        authorName: user.username,
+        text: cleanText,
+        timestamp: ts
     });
 
     addGroupXp(group, 5); // Earn XP for posting
@@ -2219,11 +2731,24 @@ app.post('/api/groups/:id/forums/:catId', requireAuth, (req, res) => {
 
     const user = db.users.find(u => u.id === req.userId);
     const { title, content } = req.body;
+    const cleanContent = String(content || '').trim().substring(0, 2000);
+    if (!cleanContent) return res.status(400).json({ error: 'Content cannot be empty.' });
     const thread = {
         id: crypto.randomUUID(), categoryId: req.params.catId, authorId: user.id, authorName: user.username,
-        title, content, timestamp: Date.now(), replies: []
+        title, content: cleanContent, timestamp: Date.now(), replies: []
     };
     group.threads.push(thread);
+    appendChatLog({
+        channel: 'group_forum_thread',
+        sourceType: 'group_forum',
+        sourceId: thread.id,
+        groupId: group.id,
+        authorId: user.id,
+        authorName: user.username,
+        text: `${String(title || '').trim().substring(0, 120)} | ${cleanContent}`,
+        timestamp: thread.timestamp,
+        meta: { categoryId: req.params.catId }
+    });
     addGroupXp(group, 5); // XP for posting thread
     saveDB();
     res.json({ success: true });
@@ -2244,8 +2769,25 @@ app.post('/api/groups/:id/threads/:threadId/replies', requireAuth, (req, res) =>
     const thread = group.threads.find(t => t.id === req.params.threadId);
     if (!thread) return res.status(404).json({ error: 'Thread not found.' });
 
+    const replyText = String(req.body.content || '').trim().substring(0, 2000);
+    if (!replyText) return res.status(400).json({ error: 'Reply cannot be empty.' });
+    if (isLikelyDuplicateMessage(thread.replies || [], user.id, replyText, 1800)) {
+        return res.json({ success: true, replies: thread.replies });
+    }
+    const ts = Date.now();
     thread.replies.push({
-        id: crypto.randomUUID(), authorId: user.id, authorName: user.username, content: req.body.content, timestamp: Date.now()
+        id: crypto.randomUUID(), authorId: user.id, authorName: user.username, content: replyText, timestamp: ts
+    });
+    appendChatLog({
+        channel: 'group_forum_reply',
+        sourceType: 'group_forum',
+        sourceId: thread.id,
+        groupId: group.id,
+        authorId: user.id,
+        authorName: user.username,
+        text: replyText,
+        timestamp: ts,
+        meta: { threadId: thread.id }
     });
     addGroupXp(group, 5); // XP for reply
     saveDB();
@@ -2278,6 +2820,7 @@ app.post('/api/groups/:id/payout', requireAuth, (req, res) => {
     
     const targetUser = db.users.find(u => u.id === targetUserId);
     if (!targetUser) return res.status(404).json({error: 'User not found.'});
+    if (!(group.members || []).some(m => m.userId === targetUser.id)) return res.status(400).json({ error: 'Target user must be a group member.' });
     
     group.coins -= amt;
     targetUser.coins += amt;
@@ -2291,6 +2834,114 @@ app.post('/api/groups/:id/payout', requireAuth, (req, res) => {
 app.get('/api/shop/items', (req, res) => {
     const approved = (db.shopItems || []).filter(i => (i.status || 'approved') === 'approved');
     res.json(approved.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
+});
+
+app.get('/api/profile-store', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const owned = new Set(user.profileItems || []);
+    const equippedSet = new Set(user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []));
+    const games = (db.games || []).filter(g => g.authorId === user.id).map(g => ({ id: g.id, title: g.title }));
+    res.json({
+        themes: PROFILE_THEME_CATALOG.map(t => ({ ...t, owned: owned.has(t.id), equipped: user.equippedProfileTheme === t.id })),
+        cosmetics: PROFILE_COSMETIC_CATALOG.map(c => ({ ...c, owned: owned.has(c.id), equipped: equippedSet.has(c.id) })),
+        textStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' },
+        pinned: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
+        games
+    });
+});
+
+app.post('/api/profile-store/buy/:itemId', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const item = getProfileStoreItem(req.params.itemId);
+    if (!item) return res.status(404).json({ error: 'Item not found.' });
+    if (!user.profileItems) user.profileItems = [];
+    if (user.profileItems.includes(item.id)) return res.status(400).json({ error: 'Already owned.' });
+    if ((user.coins || 0) < item.price) return res.status(400).json({ error: 'Insufficient funds.' });
+    user.coins -= item.price;
+    user.profileItems.push(item.id);
+    saveDB();
+    res.json({ success: true, coins: user.coins, itemId: item.id });
+});
+
+app.post('/api/profile-store/equip-theme', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const { itemId } = req.body || {};
+    if (!itemId) {
+        user.equippedProfileTheme = null;
+        saveDB();
+        return res.json({ success: true, equippedProfileTheme: null });
+    }
+    const item = PROFILE_THEME_CATALOG.find(t => t.id === itemId);
+    if (!item) return res.status(404).json({ error: 'Theme not found.' });
+    if (!(user.profileItems || []).includes(item.id)) return res.status(403).json({ error: 'Theme not owned.' });
+    user.equippedProfileTheme = item.id;
+    saveDB();
+    res.json({ success: true, equippedProfileTheme: user.equippedProfileTheme });
+});
+
+app.post('/api/profile-store/equip-cosmetic', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const { itemId } = req.body || {};
+    if (!Array.isArray(user.equippedProfileCosmetics)) user.equippedProfileCosmetics = (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []);
+    if (!itemId) return res.status(400).json({ error: 'itemId required.' });
+    const item = PROFILE_COSMETIC_CATALOG.find(c => c.id === itemId);
+    if (!item) return res.status(404).json({ error: 'Cosmetic not found.' });
+    if (!(user.profileItems || []).includes(item.id)) return res.status(403).json({ error: 'Cosmetic not owned.' });
+    const alreadyEquipped = user.equippedProfileCosmetics.includes(item.id);
+    if (alreadyEquipped) {
+        user.equippedProfileCosmetics = user.equippedProfileCosmetics.filter(id => id !== item.id);
+        if (item.id === 'cosmetic_pinned_game_feature') {
+            if (!user.profilePinnedGame) user.profilePinnedGame = { enabled: false, gameId: null, description: '' };
+            user.profilePinnedGame.enabled = false;
+        }
+        if (item.id === 'cosmetic_profile_font_chooser' && user.profileTextStyle) user.profileTextStyle.font = 'default';
+        if (item.id === 'cosmetic_profile_text_color' && user.profileTextStyle) user.profileTextStyle.color = '#2c3e50';
+    } else {
+        user.equippedProfileCosmetics.push(item.id);
+    }
+    user.equippedProfileCosmetic = user.equippedProfileCosmetics[0] || null;
+    saveDB();
+    res.json({ success: true, equippedProfileCosmetic: user.equippedProfileCosmetic, equippedProfileCosmetics: user.equippedProfileCosmetics });
+});
+
+app.post('/api/profile-store/pinned-game', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const equipped = new Set(user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []));
+    if (!equipped.has('cosmetic_pinned_game_feature')) return res.status(403).json({ error: 'Pinned Game cosmetic must be equipped.' });
+    const { gameId, description, enabled } = req.body || {};
+    if (!user.profilePinnedGame) user.profilePinnedGame = { enabled: false, gameId: null, description: '' };
+    const desc = String(description || '').slice(0, 180);
+    if (!enabled) {
+        user.profilePinnedGame = { enabled: false, gameId: null, description: desc };
+        saveDB();
+        return res.json({ success: true, profilePinnedGame: user.profilePinnedGame });
+    }
+    const game = (db.games || []).find(g => g.id === gameId && g.authorId === user.id);
+    if (!game) return res.status(400).json({ error: 'You can only pin games you created.' });
+    user.profilePinnedGame = { enabled: true, gameId: game.id, description: desc };
+    saveDB();
+    res.json({ success: true, profilePinnedGame: user.profilePinnedGame });
+});
+
+app.post('/api/profile-store/text-style', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const equipped = new Set(user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []));
+    const { font, color } = req.body || {};
+    const FONT_OPTIONS = ['default', 'Inter', 'Georgia', 'Courier New', 'Trebuchet MS', 'Verdana', 'Palatino', 'Comic Sans MS', 'Impact'];
+    if (!user.profileTextStyle) user.profileTextStyle = { font: 'default', color: '#2c3e50' };
+    if (font !== undefined) {
+        if (!equipped.has('cosmetic_profile_font_chooser')) return res.status(403).json({ error: 'Font chooser cosmetic must be equipped.' });
+        const cleanFont = FONT_OPTIONS.includes(String(font)) ? String(font) : 'default';
+        user.profileTextStyle.font = cleanFont;
+    }
+    if (color !== undefined) {
+        if (!equipped.has('cosmetic_profile_text_color')) return res.status(403).json({ error: 'Text color cosmetic must be equipped.' });
+        const colorStr = String(color || '').trim();
+        if (!/^#[0-9a-fA-F]{6}$/.test(colorStr)) return res.status(400).json({ error: 'Invalid color format.' });
+        user.profileTextStyle.color = colorStr;
+    }
+    saveDB();
+    res.json({ success: true, profileTextStyle: user.profileTextStyle });
 });
 
 app.post('/api/shop/items', requireAuth, (req, res) => {
@@ -2331,6 +2982,8 @@ app.post('/api/shop/buy/:id', requireAuth, (req, res) => {
     
     user.coins -= item.price;
     user.inventory.push(item.id);
+    ensureChallengeProgressDay(user);
+    user.challengeProgress.purchases += 1;
     const author = db.users.find(u => u.id === item.authorId);
     if (author) author.coins = (author.coins || 0) + item.price;
     saveDB();
@@ -2385,6 +3038,8 @@ app.post('/api/clothing/buy/:id', requireAuth, (req, res) => {
     user.coins -= item.price;
     if (!Array.isArray(user.clothingInventory)) user.clothingInventory = [];
     user.clothingInventory.push(item.id);
+    ensureChallengeProgressDay(user);
+    user.challengeProgress.purchases += 1;
     const author = db.users.find(u => u.id === item.authorId);
     if (author) author.coins = (author.coins || 0) + item.price;
     saveDB();
@@ -2466,8 +3121,10 @@ app.post('/api/games/:id/publish', requireAuth, (req, res) => {
     if (!game.versions) game.versions = [];
     game.versions.push({ versionId: game.versions.length + 1, timestamp: Date.now(), gameData: JSON.parse(JSON.stringify(safeGameData)) });
     const author = db.users.find(u => u.id === req.userId);
-    ensureChallengeProgressDay(author);
-    if (author) author.challengeProgress.publishes += 1;
+    if (author) {
+        ensureChallengeProgressDay(author);
+        author.challengeProgress.publishes += 1;
+    }
 
     saveDB();
     res.json({ success: true, versionId: game.versions.length });
@@ -2804,11 +3461,14 @@ app.post('/api/ping', requireAuth, (req, res) => {
 
     // Count active users and kick out AFK/Disconnected users (no ping for 30 seconds)
     for (let uid in onlineUsers) {
-        if (now - onlineUsers[uid].lastSeen > 30000) {
+        const slot = onlineUsers[uid];
+        const lastSeen = typeof slot === 'number' ? slot : (slot && typeof slot.lastSeen === 'number' ? slot.lastSeen : 0);
+        const location = (slot && typeof slot === 'object' && slot.location) ? slot.location : 'website';
+        if (now - lastSeen > 30000) {
             delete onlineUsers[uid];
         } else {
             totalOnline++;
-            if (onlineUsers[uid].location === 'city') cityOnline++;
+            if (location === 'city') cityOnline++;
         }
     }
 
@@ -2842,7 +3502,8 @@ app.post('/api/games/:id/track', requireAuth, (req, res) => {
     }
     
     // Aggregate metrics
-    game.analytics.totalSessionTimeSeconds += (sessionTimeSeconds || 0);
+    const safeSessionSeconds = Math.max(0, Math.min(6 * 3600, Number(sessionTimeSeconds) || 0));
+    game.analytics.totalSessionTimeSeconds += safeSessionSeconds;
     game.analytics.totalJumps += (jumps || 0);
     game.analytics.fallOffs += (falls || 0);
     
@@ -2855,6 +3516,24 @@ app.post('/api/games/:id/track', requireAuth, (req, res) => {
         if (currentCCU > game.analytics.peakCCU) {
             game.analytics.peakCCU = currentCCU;
         }
+    }
+
+    if (!game.creatorRewards) game.creatorRewards = { totalCoinsAwarded: 0, playerSeconds: {} };
+    if (req.userId !== game.authorId) {
+        const prev = game.creatorRewards.playerSeconds[req.userId] || 0;
+        const next = prev + safeSessionSeconds;
+        const prevBlocks = Math.floor(prev / (20 * 60));
+        const nextBlocks = Math.floor(next / (20 * 60));
+        const blocksEarned = Math.max(0, nextBlocks - prevBlocks);
+        if (blocksEarned > 0) {
+            const creator = db.users.find(u => u.id === game.authorId);
+            if (creator) {
+                const coins = blocksEarned * 10;
+                creator.coins = (creator.coins || 0) + coins;
+                game.creatorRewards.totalCoinsAwarded += coins;
+            }
+        }
+        game.creatorRewards.playerSeconds[req.userId] = next;
     }
 
     saveDB();
@@ -2876,7 +3555,17 @@ app.get('/api/games/:id/analytics', requireAuth, (req, res) => {
     
     if (!canView) return res.status(403).json({ error: 'Not authorized.' });
 
-    res.json({ plays: game.plays, likes: game.likes.length, analytics: game.analytics });
+    const creatorLeague = computeCreatorLeagueForUser(game.authorId);
+    res.json({
+        plays: game.plays,
+        likes: game.likes.length,
+        analytics: game.analytics,
+        creatorRewards: {
+            totalCoinsAwarded: game.creatorRewards?.totalCoinsAwarded || 0,
+            trackedPlayerSeconds: game.creatorRewards?.playerSeconds || {}
+        },
+        creatorLeague
+    });
 });
 
 
@@ -2951,7 +3640,7 @@ app.post('/api/games/:id/play', requireAuth, (req, res) => {
         game.plays = (game.plays || 0) + 1;
         if (game.groupId) {
             const group = db.groups.find(gr => gr.id === game.groupId);
-            if (group) { group.coins = (group.coins || 0) + 5; addGroupXp(group, 10); }
+            if (group) { group.coins = (group.coins || 0) + 1; addGroupXp(group, 4); }
         }
     }
     ensureChallengeProgressDay(user);
@@ -2968,17 +3657,22 @@ app.post('/api/games/:id/play', requireAuth, (req, res) => {
         else user.playStreak = 1;
         
         user.lastPlayDate = Date.now();
-        if (user.playStreak > 0 && user.playStreak % 2 === 0) streakReward = 15;
+        if (user.playStreak > 0 && user.playStreak % 3 === 0) streakReward = 6;
     }
-
-    user.coins += 5 + streakReward;
+    let basePlayCoins = 2;
+    if (game && (game.authorId === req.userId)) basePlayCoins = 1;
+    if (game && game.groupId) {
+        const group = db.groups.find(gr => gr.id === game.groupId);
+        if (group && group.members.some(m => m.userId === req.userId)) basePlayCoins = 1;
+    }
+    user.coins += basePlayCoins + streakReward;
     user.recentlyPlayed = user.recentlyPlayed.filter(g => g.gameId !== gameId);
     user.recentlyPlayed.unshift({ gameId, timestamp: Date.now() });
     if (user.recentlyPlayed.length > 8) user.recentlyPlayed.pop();
 
     awardBadge(req.userId, 'Gamer');
     saveDB();
-    res.json({ success: true, coins: user.coins, streakReward, playStreak: user.playStreak });
+    res.json({ success: true, coins: user.coins, streakReward, playStreak: user.playStreak, basePlayCoins });
 });
 app.post('/api/games/:id/like', requireAuth, (req, res) => {
     const game = db.games.find(g => g.id === req.params.id);
@@ -2990,6 +3684,11 @@ app.post('/api/games/:id/like', requireAuth, (req, res) => {
     } else {
         game.likes.push(req.userId);
         isLiked = true;
+        const user = db.users.find(u => u.id === req.userId);
+        if (user) {
+            ensureChallengeProgressDay(user);
+            user.challengeProgress.likesGiven += 1;
+        }
         awardBadge(req.userId, 'Critic');
     }
     saveDB();
@@ -3206,10 +3905,23 @@ app.post('/api/chat', requireAuth, (req, res) => {
     }
 
     if (!db.globalChat) db.globalChat = [];
+    if (isLikelyDuplicateMessage(db.globalChat, req.userId, text, 1600)) {
+        return res.json({ success: true, message: db.globalChat[db.globalChat.length - 1] || null });
+    }
     const newMsg = { id: crypto.randomUUID(), authorName: user.username, text, timestamp: now };
     
     db.globalChat.push(newMsg);
     if (db.globalChat.length > 100) db.globalChat.shift(); // Keep memory clean
+    appendChatLog({
+        channel: 'global_chat',
+        sourceType: 'global',
+        sourceId: 'global',
+        authorId: user.id,
+        authorName: user.username,
+        text,
+        timestamp: now
+    });
+    saveDB();
     
     res.json({ success: true, message: newMsg });
 });
@@ -3220,6 +3932,7 @@ app.post('/api/chat', requireAuth, (req, res) => {
 // ==========================================
 app.get('/api/games/:id/chat', requireAuth, (req, res) => {
     const gameId = req.params.id;
+    cleanupGameServerIfInactive(gameId);
     res.json({ messages: (gameChats[gameId] || []).slice(-50) });
 });
 
@@ -3252,6 +3965,11 @@ app.post('/api/games/:id/chat', requireAuth, (req, res) => {
     }
 
     if (!gameChats[gameId]) gameChats[gameId] = [];
+    cleanupGameServerIfInactive(gameId);
+    if (!gameChats[gameId]) gameChats[gameId] = [];
+    if (isLikelyDuplicateMessage(gameChats[gameId], req.userId, text, 1500)) {
+        return res.json({ success: true, message: gameChats[gameId][gameChats[gameId].length - 1] || null });
+    }
 
     const activePlayer = activePlayers[gameId] && activePlayers[gameId][req.userId];
 
@@ -3271,6 +3989,19 @@ app.post('/api/games/:id/chat', requireAuth, (req, res) => {
 
     gameChats[gameId].push(newMsg);
     if (gameChats[gameId].length > 100) gameChats[gameId].shift();
+    touchGameServer(gameId);
+    appendChatLog({
+        channel: 'game_chat',
+        sourceType: 'game',
+        sourceId: gameId,
+        gameId,
+        authorId: req.userId,
+        authorName: newMsg.username,
+        text,
+        timestamp: now,
+        meta: { sceneId: newMsg.sceneId }
+    });
+    saveDB();
 
     res.json({ success: true, message: newMsg });
 });
@@ -3281,6 +4012,7 @@ app.post('/api/games/:id/play-sync', requireAuth, (req, res) => {
     const user = db.users.find(u => u.id === req.userId);
 
 if (!activePlayers[gameId]) activePlayers[gameId] = {};
+touchGameServer(gameId);
 
 const lastChatMessage = (gameChats[gameId] || [])
     .slice()
@@ -3336,19 +4068,7 @@ for (let uId in activePlayers[gameId]) {
 }
 
 // If nobody is left in this game server, wipe its temporary server chat too
-if (!activePlayers[gameId] || Object.keys(activePlayers[gameId]).length === 0) {
-    delete activePlayers[gameId];
-    delete activePlayDynamic[gameId];
-    delete gameChats[gameId];
-
-    // Clean any per-user chat cooldown/spam data for this game too
-    for (const key in gameChatActivity) {
-        if (key.startsWith(gameId + '_')) delete gameChatActivity[key];
-    }
-    for (const key in gameChatSuspensions) {
-        if (key.startsWith(gameId + '_')) delete gameChatSuspensions[key];
-    }
-}
+if (!activePlayers[gameId] || Object.keys(activePlayers[gameId]).length === 0) clearGameServerState(gameId);
 
 const dynamicPayload = activePlayDynamic[gameId] && (Date.now() - activePlayDynamic[gameId].updatedAt < 3000)
     ? activePlayDynamic[gameId].states
@@ -3418,6 +4138,9 @@ app.get('/seo/*any', (req, res, next) => {
 app.get('*any', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-app.listen(PORT, () => {
+setInterval(() => {
+    Object.keys(gameServerLastSeen).forEach((gameId) => cleanupGameServerIfInactive(gameId, 15000));
+}, 5000);
+httpServer = app.listen(PORT, () => {
     console.log(`Playsculpt server running on http://localhost:${PORT}`);
 });
