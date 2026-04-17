@@ -5008,6 +5008,7 @@ let customGizmo = null;
         };
 
         const initEditor = () => {
+            localEditedObjectIds.clear();
             const container = document.getElementById('editor-container-3d');
             if (edRenderer) {
                 buildEditorScene(); 
@@ -6626,6 +6627,7 @@ const studioWindowSelect = { active: false, startX: 0, startY: 0, rect: null };
         let teamCollaboratorsOnline = 0;
         let isTeamEditingMode = false;
         let localLockedObjectUntil = {};
+        const localEditedObjectIds = new Set();
 
 let currentEditMode = 'translate';
 let currentTransformSpace = 'local';
@@ -6790,8 +6792,7 @@ let currentTransformSpace = 'local';
                 .filter(m => m && m.userData && !m.userData.isSpawn && m.userData.id)
                 .map(m => m.userData.id);
             selectedIds.forEach(id => {
-                const obj = (edData.objects || []).find(o => o.id === id);
-                if (obj && currentUser && !obj.ownerId && !(currentEditGameId && isTeamEditingMode)) obj.ownerId = currentUser.userId;
+                localEditedObjectIds.add(id);
                 localLockedObjectUntil[id] = now + 2200;
             });
             if (pushToHistory) {
@@ -6849,13 +6850,7 @@ let currentTransformSpace = 'local';
             if (!targetState || !Array.isArray(targetState.objects)) return;
             const targetById = new Map((targetState.objects || []).map(o => [o.id, o]));
             const nextById = new Map((edData.objects || []).map(o => [o.id, o]));
-            const ownedIds = new Set(
-                (edData.objects || [])
-                    .filter(o => o && o.ownerId && currentUser && o.ownerId === currentUser.userId)
-                    .map(o => o.id)
-            );
-
-            ownedIds.forEach(id => {
+            localEditedObjectIds.forEach(id => {
                 if (targetById.has(id)) nextById.set(id, JSON.parse(JSON.stringify(targetById.get(id))));
                 else nextById.delete(id);
             });
@@ -6863,12 +6858,11 @@ let currentTransformSpace = 'local';
             edData = { ...edData, objects: Array.from(nextById.values()) };
         };
         const isTeamCreateLocked = () => !!(currentEditGameId && isTeamEditingMode);
-        const getOwnedSelectionForTeamShortcuts = () => {
+        const getLocalSelectionForTeamShortcuts = () => {
             if (!isTeamCreateLocked() || !currentUser) return selectedObjects.slice();
             return selectedObjects.filter((mesh) => {
                 if (!mesh || mesh.userData?.isSpawn) return false;
-                const obj = (edData.objects || []).find(o => o.id === mesh.userData?.id);
-                return !!(obj && obj.ownerId && obj.ownerId === currentUser.userId);
+                return localEditedObjectIds.has(mesh.userData?.id);
             });
         };
 
@@ -6899,6 +6893,7 @@ let currentTransformSpace = 'local';
         const editExistingGame = async (gameId) => {
             try {
                 const game = await apiCall(`/games/${gameId}`);
+                localEditedObjectIds.clear();
                 currentEditGameId = game.id; 
                 document.getElementById('editor-title').value = game.title;
                 document.getElementById('editor-genre').value = game.genre || 'Sandbox';
@@ -7112,6 +7107,7 @@ const dir = new THREE.Vector3();
                     position: { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 4, z: 4 }, color: '#3498db',
                     isAnchored: true, canCollide: true
                 });
+                localEditedObjectIds.add(newId);
                 if (type === 'floatingText') {
                     const created = edData.objects[edData.objects.length - 1];
                     created.name = 'Floating Text';
@@ -7186,6 +7182,7 @@ const loadSponsoredAssetsDashboard = async () => {
                         newObj.ownerId = currentUser ? currentUser.userId : objData.ownerId;
                         newObj.name = newObj.name + ' (Copy)';
                         edData.objects.push(newObj);
+                        localEditedObjectIds.add(newObj.id);
                         newSelectionIds.push(newObj.id);
                     }
                 });
@@ -7457,6 +7454,7 @@ document.addEventListener('keydown', (e) => {
                 if(mesh.userData.isSpawn) return;
                 const objData = edData.objects.find(o => o.id === mesh.userData.id);
                 if (objData) {
+                    localEditedObjectIds.add(objData.id);
                     if (mesh === primary) objData.name = name; // Only rename the main clicked object
                     objData.color = color;
                     objData.material = material;
@@ -8366,6 +8364,7 @@ const promptClearEditor = () => {
         // --- Editor Core Engine ---
      const clearEditor = () => {
             currentEditGameId = null; 
+            localEditedObjectIds.clear();
             edData = { settings: normalizeNostalgiaWorldSettings({ skyColor: '#7fbeff', brightness: 0.72 }), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
@@ -8575,7 +8574,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     recordEdit(); 
                     // Hard save creates a new version point!
                     await apiCall(`/games/${currentEditGameId}/publish`, 'POST', { gameData: edData, genre });
-                    showModal('Published!', 'New version is now live.', 'To Dashboard', () => { currentEditGameId = null; document.getElementById('editor-title').value = ''; navigate('dashboard'); });
+                    showModal('Published!', 'New version is now live.', 'To Dashboard', () => { currentEditGameId = null; localEditedObjectIds.clear(); document.getElementById('editor-title').value = ''; navigate('dashboard'); });
                 } else {
                     isTeamEditingMode = false;
                     await apiCall('/games', 'POST', { title, gameData: edData, genre, groupId });
@@ -8802,7 +8801,7 @@ playerObj = {
                     e.preventDefault();
                     if (isTeamCreateLocked()) {
                         const previousSelection = selectedObjects.slice();
-                        selectedObjects = getOwnedSelectionForTeamShortcuts();
+                        selectedObjects = getLocalSelectionForTeamShortcuts();
                         duplicateSelectedParts();
                         if (selectedObjects.length === 0) selectedObjects = previousSelection;
                     } else duplicateSelectedParts();
@@ -8818,7 +8817,7 @@ playerObj = {
                 else if (e.key === 'Delete' || e.key === 'Backspace') {
                     if (isTeamCreateLocked()) {
                         const previousSelection = selectedObjects.slice();
-                        selectedObjects = getOwnedSelectionForTeamShortcuts();
+                        selectedObjects = getLocalSelectionForTeamShortcuts();
                         deleteSelectedParts();
                         if (selectedObjects.length === 0) selectedObjects = previousSelection;
                     } else deleteSelectedParts();
