@@ -7112,6 +7112,7 @@ const dir = new THREE.Vector3();
                 } else {
                     edData.objects.push({
                         id: newId,
+                        ownerId: currentUser ? currentUser.userId : undefined,
                         name: `Spawn ${((edData.objects || []).filter(o => o.type === 'spawn').length + 2)}`,
                         type: 'spawn',
                         position: { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z },
@@ -7125,7 +7126,7 @@ const dir = new THREE.Vector3();
                 }
             } else {
                 edData.objects.push({
-                    id: newId, name: type.charAt(0).toUpperCase() + type.slice(1), type: type,
+                    id: newId, ownerId: currentUser ? currentUser.userId : undefined, name: type.charAt(0).toUpperCase() + type.slice(1), type: type,
                     position: { x: spawnPos.x, y: spawnPos.y, z: spawnPos.z }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 4, y: 4, z: 4 }, color: '#3498db',
                     isAnchored: true, canCollide: true
                 });
@@ -7181,8 +7182,9 @@ const loadSponsoredAssetsDashboard = async () => {
         };
 
         const deleteSelectedParts = () => {
-            if (selectedObjects.length > 0) {
-                selectedObjects.forEach(mesh => {
+            const editableMeshes = getEditableSelectedMeshes(true);
+            if (editableMeshes.length > 0) {
+                editableMeshes.forEach(mesh => {
                     if (mesh.userData.isSpawn) edData.spawn = null;
                     else edData.objects = edData.objects.filter(o => o.id !== mesh.userData.id);
                 });
@@ -7191,14 +7193,16 @@ const loadSponsoredAssetsDashboard = async () => {
         };
 
       const duplicateSelectedParts = () => {
-            if (selectedObjects.length > 0) {
+            const editableMeshes = getEditableSelectedMeshes(true);
+            if (editableMeshes.length > 0) {
                 let newSelectionIds = [];
-                selectedObjects.forEach(mesh => {
+                editableMeshes.forEach(mesh => {
                     if (mesh.userData.isSpawn) return; // Cant duplicate spawn
                     const objData = edData.objects.find(o => o.id === mesh.userData.id);
                     if (objData) {
                         const newObj = JSON.parse(JSON.stringify(objData));
                         newObj.id = crypto.randomUUID();
+                        newObj.ownerId = currentUser ? currentUser.userId : objData.ownerId;
                         newObj.name = newObj.name + ' (Copy)';
                         edData.objects.push(newObj);
                         localEditedObjectIds.add(newObj.id);
@@ -7349,6 +7353,10 @@ document.addEventListener('keydown', (e) => {
       const selectObject = (mesh, shiftKey = false) => {
             isEditingSettings = false;
             document.getElementById('world-settings-panel').style.display = 'none';
+            if (mesh && !isMeshEditableByCurrentUser(mesh)) {
+                showModal('Team Safety', 'This part is owned by another collaborator and is view-only for you.');
+                return;
+            }
 
             if (shiftKey && mesh) {
                 if (selectedObjects.includes(mesh)) selectedObjects = selectedObjects.filter(m => m !== mesh);
@@ -7446,6 +7454,8 @@ document.addEventListener('keydown', (e) => {
             if (selectedObjects.length === 0) return;
             const primary = selectedObjects[selectedObjects.length - 1];
             if (primary.userData.isSpawn) return;
+            const editableMeshes = getEditableSelectedMeshes(true);
+            if (editableMeshes.length === 0) return;
 
             const name = document.getElementById('prop-name').value;
             const color = document.getElementById('prop-color').value;
@@ -7460,7 +7470,7 @@ document.addEventListener('keydown', (e) => {
             const floatingBgTransparency = Math.max(0, Math.min(1, parseFloat((document.getElementById('prop-fbg-transparency') || {}).value) || 1));
 
             // Apply to all selected blocks for fast multi-editing!
-            selectedObjects.forEach(mesh => {
+            editableMeshes.forEach(mesh => {
                 if(mesh.userData.isSpawn) return;
                 const objData = edData.objects.find(o => o.id === mesh.userData.id);
                 if (objData) {
