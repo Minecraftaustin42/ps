@@ -686,6 +686,7 @@
                 <a onclick="navigate('library')">Library</a>
                 <a onclick="navigate('chat')">Global Chat</a>
                 <a onclick="navigate('groups')">Groups</a>
+                <a onclick="navigate('creator-leagues')">Creator Leagues</a>
                 <a onclick="navigate('events')">Events</a>
                 <a onclick="navigate('create')">Create</a>
                 <a onclick="navigate('shop')">Shop</a>
@@ -736,6 +737,17 @@
                 <canvas id="deviceChart"></canvas>
             </div>
         </div>
+    </div>
+</div>
+
+       <div id="view-creator-leagues" class="view">
+    <div class="card">
+        <div class="card-title">
+            <h2 style="margin:0;">Creator Leagues</h2>
+            <button class="btn btn-sm btn-info" onclick="navigate('dashboard')">Back to Dashboard</button>
+        </div>
+        <p style="color:#666; margin-top:0;">Monthly competition tiers based on player count, plays, and retention. Claim your monthly Sculpt Coin prize after competing.</p>
+        <div id="creator-leagues-panel"></div>
     </div>
 </div>
         
@@ -2810,6 +2822,7 @@ if (data.coins !== undefined && currentUser && !data.groupCoins) {
         window.submitReport = submitReport;
 
         const renderGameCard = (g, showEdit = false) => {
+            const isPlatformAdmin = !!(currentUser && ['austin', 'nick', 'admin'].includes(String(currentUser.username || '').toLowerCase()));
             return `
                 <div class="game-card">
                     <span class="badge-pill badge-genre" style="float:right; margin-right:0;">${g.genre || 'Sandbox'}</span>
@@ -2827,6 +2840,7 @@ if (data.coins !== undefined && currentUser && !data.groupCoins) {
     <button class="btn btn-warning btn-sm" onclick="editExistingGame('${g.id}')">Edit</button>
     <button class="btn btn-info btn-sm" onclick="openAnalytics('${g.id}')">Analytics</button>
 ` : ''}
+                      ${isPlatformAdmin ? `<button class="btn btn-sm btn-danger" onclick="event.stopPropagation(); adminRemoveGamePrompt('${g.id}', '${String(g.title || '').replace(/'/g, "\\'")}', '${String(g.authorName || '').replace(/'/g, "\\'")}')">Remove</button>` : ''}
                     </div>
                 </div>
             `;
@@ -3422,6 +3436,8 @@ else if (viewId === 'groups') {
                 loadCreatorAcademy();
             } else if (viewId === 'jams') {
                 loadCreatorJams();
+            } else if (viewId === 'creator-leagues') {
+                loadCreatorLeagues();
             } else if (viewId === 'funlab') {
                 loadFunLab();
             } else if (viewId === 'settings') {
@@ -3693,6 +3709,7 @@ else if (viewId === 'groups') {
         let currentCategoryId = null;
 
     const renderGroupCard = (gr) => {
+            const isPlatformAdmin = !!(currentUser && ['austin', 'nick', 'admin'].includes(String(currentUser.username || '').toLowerCase()));
             const logo = gr.logo ? `<img src="${gr.logo}" alt="${gr.name} logo" style="width:46px;height:46px;border-radius:8px;object-fit:cover;border:1px solid #d0d7de;background:#f3f5f7;margin:0 auto 8px auto;display:block;">` : `<div style="width:46px;height:46px;border-radius:8px;background:#e8eef5;border:1px solid #d0d7de;margin:0 auto 8px auto;display:flex;align-items:center;justify-content:center;font-weight:700;color:#6b7a8a;">${(gr.name || 'G').slice(0,1).toUpperCase()}</div>`;
             return `
                 <div class="game-card" onclick="loadGroupDetail('${gr.id}')" style="cursor:pointer; transition: transform 0.2s;">
@@ -3703,6 +3720,7 @@ else if (viewId === 'groups') {
                         <span>Level ${gr.level || 1}</span>
                         <span style="color:#3498db;">${gr.members} Members</span>
                     </div>
+                    ${isPlatformAdmin ? `<button class="btn btn-sm btn-danger" style="margin-top:8px;" onclick="event.stopPropagation(); adminRemoveGroupPrompt('${gr.id}', '${String(gr.name || '').replace(/'/g, "\\'")}')">Remove</button>` : ''}
                 </div>
             `;
         };
@@ -3750,6 +3768,60 @@ else if (viewId === 'groups') {
 let funnelChartInstance = null;
 let deviceChartInstance = null;
 
+const buildAdminActionPayload = (targetLabel) => new Promise((resolve) => {
+    showModal(
+        'Admin Action (Optional)',
+        `Optional moderation action for this ${targetLabel} owner:\nUse formats:\nnone\nwarn:reason\ntempban:hours:reason\npermaban:reason`,
+        'Continue',
+        (raw) => {
+            const text = String(raw || '').trim();
+            if (!text || text.toLowerCase() === 'none') return resolve({ action: 'none' });
+            const parts = text.split(':');
+            const action = (parts[0] || '').toLowerCase();
+            if (action === 'warn') return resolve({ action: 'warn', reason: (parts.slice(1).join(':') || 'Policy violation').trim() });
+            if (action === 'permaban') return resolve({ action: 'permaban', reason: (parts.slice(1).join(':') || 'Policy violation').trim() });
+            if (action === 'tempban') {
+                const hours = parseInt(parts[1], 10) || 24;
+                const reason = (parts.slice(2).join(':') || 'Policy violation').trim();
+                return resolve({ action: 'tempban', durationHours: hours, reason });
+            }
+            resolve({ action: 'none' });
+        },
+        true,
+        true
+    );
+});
+
+const adminRemoveGamePrompt = async (gameId, title = 'Game', ownerName = '') => {
+    const isAdmin = !!(currentUser && ['austin', 'nick', 'admin'].includes(String(currentUser.username || '').toLowerCase()));
+    if (!isAdmin) return;
+    showModal('Remove Game', `Remove "${title}" from the platform?`, 'Yes, Remove', async () => {
+        const payload = await buildAdminActionPayload('game');
+        try {
+            await apiCall(`/admin/games/${gameId}/remove`, 'POST', payload);
+            showModal('Removed', `Game removed.${ownerName ? ` Owner: ${ownerName}.` : ''}`);
+            loadLibrary();
+            loadDashboardGames();
+        } catch (e) {}
+    }, false, true);
+};
+window.adminRemoveGamePrompt = adminRemoveGamePrompt;
+
+const adminRemoveGroupPrompt = async (groupId, groupName = 'Group') => {
+    const isAdmin = !!(currentUser && ['austin', 'nick', 'admin'].includes(String(currentUser.username || '').toLowerCase()));
+    if (!isAdmin) return;
+    showModal('Remove Group', `Remove group "${groupName}" from the platform?`, 'Yes, Remove', async () => {
+        const payload = await buildAdminActionPayload('group');
+        try {
+            await apiCall(`/admin/groups/${groupId}/remove`, 'POST', payload);
+            showModal('Removed', 'Group removed.');
+            if (document.getElementById('view-group-detail').classList.contains('active')) navigate('groups');
+            else loadGroupsList();
+        } catch (e) {}
+    }, false, true);
+};
+window.adminRemoveGroupPrompt = adminRemoveGroupPrompt;
+
 const openAnalytics = async (gameId) => {
     try {
         const data = await apiCall(`/games/${gameId}/analytics`);
@@ -3770,6 +3842,8 @@ const openAnalytics = async (gameId) => {
             <div class="card" style="text-align:center; padding: 15px; box-shadow: none; border: 1px solid #ccc;"><h3>Fall-Offs</h3><h2 style="color:#e74c3c;">${a.fallOffs}</h2><p style="font-size:11px; margin:0; color:#777;">Map drop-offs</p></div>
             <div class="card" style="text-align:center; padding: 15px; box-shadow: none; border: 1px solid #ccc;"><h3>Total Jumps</h3><h2 style="color:#f1c40f;">${a.totalJumps}</h2></div>
             <div class="card" style="text-align:center; padding: 15px; box-shadow: none; border: 1px solid #ccc;"><h3>Devices</h3><h2 style="color:#34495e;">${desktopPct}%</h2><p style="font-size:11px; margin:0; color:#777;">Desktop Users</p></div>
+            <div class="card" style="text-align:center; padding: 15px; box-shadow: none; border: 1px solid #ccc;"><h3>Creator Rewards</h3><h2 style="color:#16a085;">${data.creatorRewards?.totalCoinsAwarded || 0} SC</h2><p style="font-size:11px; margin:0; color:#777;">Total creator coins from playtime</p></div>
+            <div class="card" style="text-align:center; padding: 15px; box-shadow: none; border: 1px solid #ccc;"><h3>Creator League</h3><h2 style="color:#8e44ad;">${data.creatorLeague?.tier || 'Bronze'}</h2><p style="font-size:11px; margin:0; color:#777;">Monthly reward: ${data.creatorLeague?.reward || 0} SC</p></div>
         `;
         
         // Navigate to the view first so the canvases are visible in the DOM
@@ -3819,6 +3893,39 @@ const openAnalytics = async (gameId) => {
         showModal('Error', 'Could not load analytics. Make sure you are the creator.');
     }
 };
+
+const loadCreatorLeagues = async () => {
+    const panel = document.getElementById('creator-leagues-panel');
+    if (!panel) return;
+    panel.innerHTML = '<p style="color:#777;">Loading creator league data...</p>';
+    try {
+        const data = await apiCall('/creator-leagues/me');
+        panel.innerHTML = `
+            <div class="card" style="box-shadow:none; border:1px solid #ddd;">
+                <h3 style="margin-top:0;">${data.monthKey} • ${data.tier} League</h3>
+                <p style="margin:6px 0;">Players reached: <strong>${data.playerCount}</strong></p>
+                <p style="margin:6px 0;">Total plays: <strong>${data.plays}</strong></p>
+                <p style="margin:6px 0;">Retention score: <strong>${Number(data.retention || 0).toFixed(2)}</strong></p>
+                <p style="margin:6px 0;">Monthly reward: <strong>${data.reward} SC</strong></p>
+                <button class="btn btn-sm ${data.claimed ? '' : 'btn-success'}" ${data.claimed ? 'disabled' : ''} onclick="claimCreatorLeagueReward()">${data.claimed ? 'Already Claimed' : 'Claim Monthly Reward'}</button>
+            </div>
+        `;
+    } catch (e) {
+        panel.innerHTML = '<p style="color:#e74c3c;">Failed to load Creator Leagues.</p>';
+    }
+};
+window.loadCreatorLeagues = loadCreatorLeagues;
+
+const claimCreatorLeagueReward = async () => {
+    try {
+        const res = await apiCall('/creator-leagues/claim', 'POST');
+        if (currentUser && typeof res.coins === 'number') currentUser.coins = res.coins;
+        updateCoinsUI();
+        showModal('Creator Reward Claimed', `You claimed ${res.reward} SC for ${res.tier} League.`);
+        loadCreatorLeagues();
+    } catch (e) {}
+};
+window.claimCreatorLeagueReward = claimCreatorLeagueReward;
 
         const stopGameLoop = () => {
 

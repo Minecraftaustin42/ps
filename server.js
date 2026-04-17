@@ -736,6 +736,57 @@ const requireModPanelUnlocked = (req, res, next) => {
     next();
 };
 
+const PLATFORM_ADMIN_USERNAMES = new Set(['austin', 'nick', 'admin']);
+const isPlatformAdminUser = (user) => !!(user && PLATFORM_ADMIN_USERNAMES.has(String(user.username || '').toLowerCase()));
+const requirePlatformAdmin = (req, res, next) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!isPlatformAdminUser(user)) return res.status(403).json({ error: 'Platform admins only.' });
+    req.platformAdminUser = user;
+    next();
+};
+
+const applyModerationActionToUser = (target, action = 'none', reason = '', durationHours = 24) => {
+    if (!target) return;
+    const safeReason = String(reason || '').slice(0, 300) || 'Policy violation.';
+    if (action === 'warn') {
+        if (!db.moderation.warnings[target.id]) db.moderation.warnings[target.id] = [];
+        db.moderation.warnings[target.id].push({
+            id: crypto.randomUUID(),
+            reason: safeReason,
+            date: Date.now(),
+            acknowledged: false
+        });
+    } else if (action === 'tempban') {
+        const expires = Date.now() + (Math.max(1, parseInt(durationHours, 10) || 24) * 3600000);
+        db.moderation.bans[target.id] = { reason: safeReason, expires };
+    } else if (action === 'permaban') {
+        db.moderation.bans[target.id] = { reason: safeReason, expires: 'permanent' };
+    }
+};
+
+const getCreatorLeagueForStats = ({ playerCount = 0, plays = 0, retention = 0 }) => {
+    const score = (playerCount * 2) + (plays * 0.5) + (retention * 20);
+    if (score >= 500) return 'Mythic';
+    if (score >= 320) return 'Diamond';
+    if (score >= 190) return 'Gold';
+    if (score >= 90) return 'Silver';
+    return 'Bronze';
+};
+const CREATOR_LEAGUE_REWARDS = { Bronze: 40, Silver: 80, Gold: 130, Diamond: 200, Mythic: 300 };
+const getCurrentMonthKey = () => {
+    const d = new Date();
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+};
+const computeCreatorLeagueForUser = (userId) => {
+    const myGames = (db.games || []).filter(g => g.authorId === userId);
+    const playerCount = myGames.reduce((sum, g) => sum + ((g.analytics?.uniquePlayers || []).length || 0), 0);
+    const plays = myGames.reduce((sum, g) => sum + (g.plays || 0), 0);
+    const totalSession = myGames.reduce((sum, g) => sum + (g.analytics?.totalSessionTimeSeconds || 0), 0);
+    const retention = plays > 0 ? Math.min(10, totalSession / Math.max(1, plays * 60)) : 0;
+    const tier = getCreatorLeagueForStats({ playerCount, plays, retention });
+    return { tier, playerCount, plays, retention, reward: CREATOR_LEAGUE_REWARDS[tier] || 0 };
+};
+
 const REPORT_COIN_REWARDS = [150, 300, 800];
 const rollReportCrateReward = () => {
     const roll = Math.random();
@@ -958,6 +1009,32 @@ if (!actingUser) {
 
     saveDB(); 
     res.json({ success: true, message: `Action ${action} applied to ${target.username}` });
+});
+
+app.post('/api/admin/games/:id/remove', requireAuth, requirePlatformAdmin, (req, res) => {
+    const game = db.games.find(g => g.id === req.params.id);
+    if (!game) return res.status(404).json({ error: 'Game not found.' });
+    const owner = db.users.find(u => u.id === game.authorId);
+    const { action, reason, durationHours } = req.body || {};
+    if (owner) applyModerationActionToUser(owner, String(action || 'none'), reason, durationHours);
+    db.games = db.games.filter(g => g.id !== game.id);
+    if (activePlayers[game.id]) delete activePlayers[game.id];
+    if (activeEditors[game.id]) delete activeEditors[game.id];
+    if (deletedObjectTombstones[game.id]) delete deletedObjectTombstones[game.id];
+    saveDB();
+    res.json({ success: true, removedId: game.id, removedType: 'game' });
+});
+
+app.post('/api/admin/groups/:id/remove', requireAuth, requirePlatformAdmin, (req, res) => {
+    const group = db.groups.find(gr => gr.id === req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+    const owner = db.users.find(u => u.id === group.ownerId);
+    const { action, reason, durationHours } = req.body || {};
+    if (owner) applyModerationActionToUser(owner, String(action || 'none'), reason, durationHours);
+    db.games.forEach(g => { if (g.groupId === group.id) g.groupId = null; });
+    db.groups = db.groups.filter(gr => gr.id !== group.id);
+    saveDB();
+    res.json({ success: true, removedId: group.id, removedType: 'group' });
 });
 
 app.post('/api/reports', requireAuth, (req, res) => {
@@ -1372,6 +1449,29 @@ app.post('/api/friends/team-create-xp', requireAuth, (req, res) => {
 
     if (awarded > 0) saveDB();
     res.json({ success: true, awarded });
+});
+
+app.get('/api/creator-leagues/me', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user) return res.status(401).json({ error: 'Unauthorized.' });
+    const monthKey = getCurrentMonthKey();
+    const league = computeCreatorLeagueForUser(req.userId);
+    const claimed = !!(user.creatorLeagueClaims && user.creatorLeagueClaims[monthKey]);
+    res.json({ monthKey, ...league, claimed });
+});
+
+app.post('/api/creator-leagues/claim', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user) return res.status(401).json({ error: 'Unauthorized.' });
+    const monthKey = getCurrentMonthKey();
+    if (!user.creatorLeagueClaims) user.creatorLeagueClaims = {};
+    if (user.creatorLeagueClaims[monthKey]) return res.status(400).json({ error: 'Already claimed this month.' });
+    const league = computeCreatorLeagueForUser(req.userId);
+    const reward = league.reward || 0;
+    user.coins = (user.coins || 0) + reward;
+    user.creatorLeagueClaims[monthKey] = true;
+    saveDB();
+    res.json({ success: true, reward, coins: user.coins, tier: league.tier, monthKey });
 });
 
 
@@ -2632,6 +2732,7 @@ app.post('/api/groups/:id/payout', requireAuth, (req, res) => {
     
     const targetUser = db.users.find(u => u.id === targetUserId);
     if (!targetUser) return res.status(404).json({error: 'User not found.'});
+    if (!(group.members || []).some(m => m.userId === targetUser.id)) return res.status(400).json({ error: 'Target user must be a group member.' });
     
     group.coins -= amt;
     targetUser.coins += amt;
@@ -3196,7 +3297,8 @@ app.post('/api/games/:id/track', requireAuth, (req, res) => {
     }
     
     // Aggregate metrics
-    game.analytics.totalSessionTimeSeconds += (sessionTimeSeconds || 0);
+    const safeSessionSeconds = Math.max(0, Math.min(6 * 3600, Number(sessionTimeSeconds) || 0));
+    game.analytics.totalSessionTimeSeconds += safeSessionSeconds;
     game.analytics.totalJumps += (jumps || 0);
     game.analytics.fallOffs += (falls || 0);
     
@@ -3209,6 +3311,24 @@ app.post('/api/games/:id/track', requireAuth, (req, res) => {
         if (currentCCU > game.analytics.peakCCU) {
             game.analytics.peakCCU = currentCCU;
         }
+    }
+
+    if (!game.creatorRewards) game.creatorRewards = { totalCoinsAwarded: 0, playerSeconds: {} };
+    if (req.userId !== game.authorId) {
+        const prev = game.creatorRewards.playerSeconds[req.userId] || 0;
+        const next = prev + safeSessionSeconds;
+        const prevBlocks = Math.floor(prev / (20 * 60));
+        const nextBlocks = Math.floor(next / (20 * 60));
+        const blocksEarned = Math.max(0, nextBlocks - prevBlocks);
+        if (blocksEarned > 0) {
+            const creator = db.users.find(u => u.id === game.authorId);
+            if (creator) {
+                const coins = blocksEarned * 10;
+                creator.coins = (creator.coins || 0) + coins;
+                game.creatorRewards.totalCoinsAwarded += coins;
+            }
+        }
+        game.creatorRewards.playerSeconds[req.userId] = next;
     }
 
     saveDB();
@@ -3230,7 +3350,17 @@ app.get('/api/games/:id/analytics', requireAuth, (req, res) => {
     
     if (!canView) return res.status(403).json({ error: 'Not authorized.' });
 
-    res.json({ plays: game.plays, likes: game.likes.length, analytics: game.analytics });
+    const creatorLeague = computeCreatorLeagueForUser(game.authorId);
+    res.json({
+        plays: game.plays,
+        likes: game.likes.length,
+        analytics: game.analytics,
+        creatorRewards: {
+            totalCoinsAwarded: game.creatorRewards?.totalCoinsAwarded || 0,
+            trackedPlayerSeconds: game.creatorRewards?.playerSeconds || {}
+        },
+        creatorLeague
+    });
 });
 
 
@@ -3305,7 +3435,7 @@ app.post('/api/games/:id/play', requireAuth, (req, res) => {
         game.plays = (game.plays || 0) + 1;
         if (game.groupId) {
             const group = db.groups.find(gr => gr.id === game.groupId);
-            if (group) { group.coins = (group.coins || 0) + 5; addGroupXp(group, 10); }
+            if (group) { group.coins = (group.coins || 0) + 1; addGroupXp(group, 4); }
         }
     }
     ensureChallengeProgressDay(user);
@@ -3322,17 +3452,22 @@ app.post('/api/games/:id/play', requireAuth, (req, res) => {
         else user.playStreak = 1;
         
         user.lastPlayDate = Date.now();
-        if (user.playStreak > 0 && user.playStreak % 2 === 0) streakReward = 15;
+        if (user.playStreak > 0 && user.playStreak % 3 === 0) streakReward = 6;
     }
-
-    user.coins += 5 + streakReward;
+    let basePlayCoins = 2;
+    if (game && (game.authorId === req.userId)) basePlayCoins = 1;
+    if (game && game.groupId) {
+        const group = db.groups.find(gr => gr.id === game.groupId);
+        if (group && group.members.some(m => m.userId === req.userId)) basePlayCoins = 1;
+    }
+    user.coins += basePlayCoins + streakReward;
     user.recentlyPlayed = user.recentlyPlayed.filter(g => g.gameId !== gameId);
     user.recentlyPlayed.unshift({ gameId, timestamp: Date.now() });
     if (user.recentlyPlayed.length > 8) user.recentlyPlayed.pop();
 
     awardBadge(req.userId, 'Gamer');
     saveDB();
-    res.json({ success: true, coins: user.coins, streakReward, playStreak: user.playStreak });
+    res.json({ success: true, coins: user.coins, streakReward, playStreak: user.playStreak, basePlayCoins });
 });
 app.post('/api/games/:id/like', requireAuth, (req, res) => {
     const game = db.games.find(g => g.id === req.params.id);
