@@ -106,6 +106,11 @@ if (typeof db.lastUserIdNum === 'undefined') {
 
             if (!u.bookmarks) u.bookmarks = []; 
             if (typeof u.equipped === 'undefined') u.equipped = null;
+            if (!u.profileItems) u.profileItems = [];
+            if (typeof u.equippedProfileTheme === 'undefined') u.equippedProfileTheme = null;
+            if (typeof u.equippedProfileCosmetic === 'undefined') u.equippedProfileCosmetic = null;
+            if (!u.profilePinnedGame) u.profilePinnedGame = { enabled: false, gameId: null, description: '' };
+            if (typeof u.profileBio === 'undefined') u.profileBio = '';
             if (typeof u.primaryGroupId === 'undefined') u.primaryGroupId = null; 
             if (typeof u.coins === 'undefined') u.coins = 0; // Migrate coins to backend
 if (typeof u.lastSpinDate === 'undefined') u.lastSpinDate = 0; // NEW: Lucky Spin Tracker
@@ -787,6 +792,23 @@ const computeCreatorLeagueForUser = (userId) => {
     return { tier, playerCount, plays, retention, reward: CREATOR_LEAGUE_REWARDS[tier] || 0 };
 };
 
+const PROFILE_THEME_CATALOG = [
+    { id: 'theme_playsculpt_blue', name: 'Playsculpt Blue', price: 50, colorA: '#dff1ff', colorB: '#8ecbff', shine: false },
+    { id: 'theme_playsculpt_purple', name: 'Playsculpt Purple', price: 50, colorA: '#f1e6ff', colorB: '#c8a3ff', shine: false },
+    { id: 'theme_yellow', name: 'Yellow Theme', price: 100, colorA: '#fff9d8', colorB: '#ffe16b', shine: false },
+    { id: 'theme_orange', name: 'Orange Theme', price: 100, colorA: '#fff0df', colorB: '#ffb668', shine: false },
+    { id: 'theme_green', name: 'Green Theme', price: 100, colorA: '#e2ffe8', colorB: '#7edb95', shine: false },
+    { id: 'theme_red', name: 'Red Theme', price: 100, colorA: '#ffe3e3', colorB: '#ff8d8d', shine: false },
+    { id: 'theme_pink', name: 'Pink Theme', price: 100, colorA: '#ffe7f5', colorB: '#ff9fd5', shine: false },
+    { id: 'theme_grey', name: 'Grey Theme', price: 100, colorA: '#eef1f4', colorB: '#b4bcc4', shine: false },
+    { id: 'theme_black', name: 'Black Theme', price: 100, colorA: '#2a2d33', colorB: '#4b5563', shine: false },
+    { id: 'theme_gold', name: 'Gold Theme', price: 900, colorA: '#fff4bf', colorB: '#f5b642', shine: true }
+];
+const PROFILE_COSMETIC_CATALOG = [
+    { id: 'cosmetic_pinned_game_feature', name: 'Pinned Game Creation Profile Feature', price: 850, description: 'Ability to pin a game you made at the top of your profile and write a short description of it' }
+];
+const getProfileStoreItem = (itemId) => PROFILE_THEME_CATALOG.concat(PROFILE_COSMETIC_CATALOG).find(i => i.id === itemId);
+
 const REPORT_COIN_REWARDS = [150, 300, 800];
 const rollReportCrateReward = () => {
     const roll = Math.random();
@@ -883,7 +905,7 @@ userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
         reportCrates: [], accurateReports: 0,
-        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileBio: '', primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
 
@@ -1172,7 +1194,7 @@ if (db.moderation && db.moderation.warnings && db.moderation.warnings[user.id]) 
     pendingWarnings = db.moderation.warnings[user.id].filter(w => w.acknowledged === false);
 }
 
-    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, coins: user.coins, pendingWarnings });
+    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: user.profileBio || '', equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' }, coins: user.coins, pendingWarnings });
 });
 
 app.post('/api/logout', requireAuth, (req, res) => {
@@ -1183,7 +1205,7 @@ app.post('/api/logout', requireAuth, (req, res) => {
 });
 
 app.put('/api/me/settings', requireAuth, (req, res) => {
-    const { newUsername, newPassword } = req.body;
+    const { newUsername, newPassword, profileBio } = req.body;
     const user = db.users.find(u => u.id === req.userId);
 
    if (newUsername && newUsername !== user.username) {
@@ -1209,9 +1231,12 @@ app.put('/api/me/settings', requireAuth, (req, res) => {
         user.salt = salt;
         user.hash = hash;
     }
+    if (profileBio !== undefined) {
+        user.profileBio = String(profileBio || '').slice(0, 400);
+    }
 
     saveDB();
-    res.json({ message: 'Settings updated successfully!', username: user.username });
+    res.json({ message: 'Settings updated successfully!', username: user.username, profileBio: user.profileBio || '' });
 });
 
 app.delete('/api/admin/users/:username', requireAuth, (req, res) => {
@@ -1516,7 +1541,7 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({
         id: user.id, username: user.username, color: user.color, badges: user.badges, coins: user.coins,
         requests, friends: friendsList, recentlyPlayed: recentGames, bookmarkedGames, 
-        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [], equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null,
+        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [], equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: user.profileBio || '', profileItems: user.profileItems || [], equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
         lastSpinDate: user.lastSpinDate,
         loginStreak: user.loginStreak, playStreak: user.playStreak, lastLoginDate: user.lastLoginDate,
         toolboxInventory: user.toolboxInventory,
@@ -1970,6 +1995,7 @@ app.get('/api/users/:username', (req, res) => {
     const inventoryItems = user.inventory.map(itemId => {
         return db.shopItems.find(i => i.id === itemId);
     }).filter(Boolean);
+    const pinnedGame = user.profilePinnedGame && user.profilePinnedGame.gameId ? db.games.find(g => g.id === user.profilePinnedGame.gameId && g.authorId === user.id) : null;
 
     // Get groups
     const userGroups = db.groups.filter(gr => gr.members.some(m => m.userId === user.id)).map(gr => {
@@ -1987,7 +2013,11 @@ app.get('/api/users/:username', (req, res) => {
         games: userGames.map(g => ({ id: g.id, title: g.title, authorName: g.authorName, genre: g.genre, likes: g.likes.length, plays: g.plays, groupId: g.groupId })),
         likedGames: likedGames.map(g => ({ id: g.id, title: g.title, authorName: g.authorName, genre: g.genre, likes: g.likes.length, plays: g.plays, groupId: g.groupId })),
         inventory: inventoryItems,
-
+        profileBio: user.profileBio || '',
+        equippedProfileTheme: user.equippedProfileTheme || null,
+        equippedProfileCosmetic: user.equippedProfileCosmetic || null,
+        profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
+        pinnedGameData: pinnedGame ? { id: pinnedGame.id, title: pinnedGame.title } : null,
         equipped: user.equipped,
         groups: userGroups, primaryGroup
     });
@@ -2746,6 +2776,83 @@ app.post('/api/groups/:id/payout', requireAuth, (req, res) => {
 app.get('/api/shop/items', (req, res) => {
     const approved = (db.shopItems || []).filter(i => (i.status || 'approved') === 'approved');
     res.json(approved.sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt)));
+});
+
+app.get('/api/profile-store', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const owned = new Set(user.profileItems || []);
+    const games = (db.games || []).filter(g => g.authorId === user.id).map(g => ({ id: g.id, title: g.title }));
+    res.json({
+        themes: PROFILE_THEME_CATALOG.map(t => ({ ...t, owned: owned.has(t.id), equipped: user.equippedProfileTheme === t.id })),
+        cosmetics: PROFILE_COSMETIC_CATALOG.map(c => ({ ...c, owned: owned.has(c.id), equipped: user.equippedProfileCosmetic === c.id })),
+        pinned: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
+        games
+    });
+});
+
+app.post('/api/profile-store/buy/:itemId', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const item = getProfileStoreItem(req.params.itemId);
+    if (!item) return res.status(404).json({ error: 'Item not found.' });
+    if (!user.profileItems) user.profileItems = [];
+    if (user.profileItems.includes(item.id)) return res.status(400).json({ error: 'Already owned.' });
+    if ((user.coins || 0) < item.price) return res.status(400).json({ error: 'Insufficient funds.' });
+    user.coins -= item.price;
+    user.profileItems.push(item.id);
+    saveDB();
+    res.json({ success: true, coins: user.coins, itemId: item.id });
+});
+
+app.post('/api/profile-store/equip-theme', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const { itemId } = req.body || {};
+    if (!itemId) {
+        user.equippedProfileTheme = null;
+        saveDB();
+        return res.json({ success: true, equippedProfileTheme: null });
+    }
+    const item = PROFILE_THEME_CATALOG.find(t => t.id === itemId);
+    if (!item) return res.status(404).json({ error: 'Theme not found.' });
+    if (!(user.profileItems || []).includes(item.id)) return res.status(403).json({ error: 'Theme not owned.' });
+    user.equippedProfileTheme = item.id;
+    saveDB();
+    res.json({ success: true, equippedProfileTheme: user.equippedProfileTheme });
+});
+
+app.post('/api/profile-store/equip-cosmetic', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const { itemId } = req.body || {};
+    if (!itemId) {
+        user.equippedProfileCosmetic = null;
+        if (!user.profilePinnedGame) user.profilePinnedGame = { enabled: false, gameId: null, description: '' };
+        user.profilePinnedGame.enabled = false;
+        saveDB();
+        return res.json({ success: true, equippedProfileCosmetic: null });
+    }
+    const item = PROFILE_COSMETIC_CATALOG.find(c => c.id === itemId);
+    if (!item) return res.status(404).json({ error: 'Cosmetic not found.' });
+    if (!(user.profileItems || []).includes(item.id)) return res.status(403).json({ error: 'Cosmetic not owned.' });
+    user.equippedProfileCosmetic = item.id;
+    saveDB();
+    res.json({ success: true, equippedProfileCosmetic: user.equippedProfileCosmetic });
+});
+
+app.post('/api/profile-store/pinned-game', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (user.equippedProfileCosmetic !== 'cosmetic_pinned_game_feature') return res.status(403).json({ error: 'Pinned Game cosmetic must be equipped.' });
+    const { gameId, description, enabled } = req.body || {};
+    if (!user.profilePinnedGame) user.profilePinnedGame = { enabled: false, gameId: null, description: '' };
+    const desc = String(description || '').slice(0, 180);
+    if (!enabled) {
+        user.profilePinnedGame = { enabled: false, gameId: null, description: desc };
+        saveDB();
+        return res.json({ success: true, profilePinnedGame: user.profilePinnedGame });
+    }
+    const game = (db.games || []).find(g => g.id === gameId && g.authorId === user.id);
+    if (!game) return res.status(400).json({ error: 'You can only pin games you created.' });
+    user.profilePinnedGame = { enabled: true, gameId: game.id, description: desc };
+    saveDB();
+    res.json({ success: true, profilePinnedGame: user.profilePinnedGame });
 });
 
 app.post('/api/shop/items', requireAuth, (req, res) => {
