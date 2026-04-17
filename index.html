@@ -2248,6 +2248,7 @@
         const API_BASE = '/api';
         let currentUser = null; 
         let systemStatusInterval = null;
+        let systemEventSource = null;
         let restartBannerActive = false;
         let lastRestartEndsAtSeen = 0;
         const accImageCache = {}; 
@@ -3193,6 +3194,34 @@ checkDailyReward(); // <-- ADDED HERE
                         reconnectAfterRestart();
                     }
                 }
+            } catch (_) {}
+        };
+        const initSystemEventStream = () => {
+            if (systemEventSource) return;
+            try {
+                systemEventSource = new EventSource('/api/system/events');
+                systemEventSource.onmessage = (evt) => {
+                    try {
+                        const payload = JSON.parse(evt.data || '{}');
+                        if (payload.type === 'restart_start') {
+                            restartBannerActive = true;
+                            lastRestartEndsAtSeen = Number(payload.endsAt) || 0;
+                            showRestartBanner(payload.message, payload.endsAt);
+                        } else if (payload.type === 'restart_complete') {
+                            hideRestartBanner();
+                            if (restartBannerActive) reconnectAfterRestart();
+                            restartBannerActive = false;
+                            lastRestartEndsAtSeen = 0;
+                        }
+                    } catch (_) {}
+                };
+                systemEventSource.onerror = () => {
+                    if (systemEventSource) {
+                        systemEventSource.close();
+                        systemEventSource = null;
+                    }
+                    setTimeout(initSystemEventStream, 2500);
+                };
             } catch (_) {}
         };
 
@@ -12653,6 +12682,7 @@ async function punishUser(targetUsername, action, reason, durationHours = 0) {
         if (systemStatusInterval) clearInterval(systemStatusInterval);
         systemStatusInterval = setInterval(pollSystemStatus, 2000);
         pollSystemStatus();
+        initSystemEventStream();
 
 
 const toggleOutputPanel = () => {

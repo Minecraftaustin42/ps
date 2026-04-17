@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 
 const app = express();
 const PORT = 3000;
@@ -16,6 +17,7 @@ let db = {
     users: [], sessions: {}, games: [], shopItems: [], clothingItems: [], blueprints: [], jams: [], groups: [], cityPlots: [], datastores: {},
     globalChat: [], toolboxItems: [], // NEW
     chatLogs: [],
+    systemState: { restartUntil: 0, restartMessage: '' },
     reports: [],
     notifications: [],
     moderation: { bans: {}, ipBans: [], warnings: {} },  // <-- ADD THIS LINE
@@ -37,6 +39,8 @@ let gameServerLastSeen = {}; // { [gameId]: timestamp }
 let adminAuth = { attempts: 0, lockoutUntil: 0 };
 const RESTART_POPUP_TEXT = 'Playsculpt servers are restarting! You do not need to take any action if you’re in a game or in studio, you will stay in. Please wait around 10 seconds to be automatically reconnected!';
 let restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
+let httpServer = null;
+const systemEventClients = new Set();
 // Load existing DB if available & migrate data
 if (fs.existsSync(DB_FILE)) {
 
@@ -46,6 +50,7 @@ if (!db.datastores) db.datastores = {};
 if (!db.notifications) db.notifications = [];
 if (!db.reports) db.reports = [];
 if (!db.chatLogs) db.chatLogs = [];
+if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} }; // <-- ADD THIS LINE
 if (!db.friendPetDaily) db.friendPetDaily = {};
     try {
@@ -60,6 +65,7 @@ if (!db.friendPetDaily) db.friendPetDaily = {};
         if (!db.groups) db.groups = [];
 if (!db.sounds) db.sounds = [];
         if (!db.reports) db.reports = [];
+        if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
         if (!db.chatLogs) db.chatLogs = [];
 
         db.users.forEach(u => { 
@@ -187,6 +193,16 @@ if (!g.analytics) {
     } catch (e) {
         console.error("Error loading db.json, starting fresh.");
     }
+}
+if (db.systemState && Number(db.systemState.restartUntil || 0) > Date.now()) {
+    restartState = {
+        active: true,
+        startedAt: Date.now(),
+        endsAt: Number(db.systemState.restartUntil || 0),
+        message: String(db.systemState.restartMessage || RESTART_POPUP_TEXT)
+    };
+    const remaining = Math.max(0, restartState.endsAt - Date.now());
+    setTimeout(() => finalizeSafeRestart(), remaining);
 }
 
 const saveDB = () => {
@@ -418,6 +434,12 @@ const cleanupGameServerIfInactive = (gameId, maxIdleMs = 15000) => {
     const lastSeen = gameServerLastSeen[gameId] || 0;
     if ((now - lastSeen) > maxIdleMs) clearGameServerState(gameId);
 };
+const emitSystemEvent = (type, payload = {}) => {
+    const eventData = `data: ${JSON.stringify({ type, ...payload })}\n\n`;
+    systemEventClients.forEach((res) => {
+        try { res.write(eventData); } catch (_) {}
+    });
+};
 const finalizeSafeRestart = () => {
     activeEditors = {};
     activePlayers = {};
@@ -427,6 +449,29 @@ const finalizeSafeRestart = () => {
     gameChatSuspensions = {};
     gameServerLastSeen = {};
     restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
+    db.systemState = { restartUntil: 0, restartMessage: '' };
+    saveDB();
+    emitSystemEvent('restart_complete', {});
+};
+const performProcessRestart = () => {
+    try {
+        const child = spawn(process.execPath, process.argv.slice(1), {
+            cwd: process.cwd(),
+            env: process.env,
+            detached: true,
+            stdio: 'ignore'
+        });
+        child.unref();
+    } catch (err) {
+        console.error('Safe restart spawn failed:', err);
+        return;
+    }
+    if (httpServer) {
+        httpServer.close(() => process.exit(0));
+        setTimeout(() => process.exit(0), 4500);
+    } else {
+        setTimeout(() => process.exit(0), 1000);
+    }
 };
 const triggerSafeServerRestart = (actorName = 'system') => {
     const now = Date.now();
@@ -438,7 +483,10 @@ const triggerSafeServerRestart = (actorName = 'system') => {
         message: RESTART_POPUP_TEXT,
         actor: actorName
     };
+    db.systemState = { restartUntil: restartState.endsAt, restartMessage: restartState.message };
     saveDB();
+    emitSystemEvent('restart_start', { endsAt: restartState.endsAt, message: restartState.message, actor: actorName });
+    setTimeout(() => performProcessRestart(), 1500);
     setTimeout(() => finalizeSafeRestart(), durationMs);
 };
 
@@ -1143,6 +1191,18 @@ app.get('/api/system/status', (req, res) => {
         endsAt: restartState.endsAt || 0,
         startedAt: restartState.startedAt || 0,
         message: restartState.message || RESTART_POPUP_TEXT
+    });
+});
+
+app.get('/api/system/events', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders && res.flushHeaders();
+    systemEventClients.add(res);
+    res.write(`data: ${JSON.stringify({ type: 'hello', restarting: restartState.active, endsAt: restartState.endsAt || 0, message: restartState.message || RESTART_POPUP_TEXT })}\n\n`);
+    req.on('close', () => {
+        systemEventClients.delete(res);
     });
 });
 
@@ -3665,6 +3725,6 @@ app.get('*any', (req, res) => {
 setInterval(() => {
     Object.keys(gameServerLastSeen).forEach((gameId) => cleanupGameServerIfInactive(gameId, 15000));
 }, 5000);
-app.listen(PORT, () => {
+httpServer = app.listen(PORT, () => {
     console.log(`Playsculpt server running on http://localhost:${PORT}`);
 });
