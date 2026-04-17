@@ -139,6 +139,12 @@
         .portal-hint { background:rgba(17,24,39,0.8); color:#fff; padding:8px 10px; border-radius:8px; font-size:12px; }
         .profile-world-join-label { position:absolute; top:18px; left:50%; transform:translateX(-50%); z-index:6; background:rgba(15,23,42,0.82); color:#fff; padding:8px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.2); font-size:13px; font-weight:700; display:none; }
         .profile-world-controls { position:absolute; bottom:16px; left:50%; transform:translateX(-50%); z-index:6; background:rgba(15,23,42,0.74); color:#e2e8f0; padding:8px 12px; border-radius:8px; font-size:12px; }
+        .profile-world-joystick { position:absolute; left:14px; bottom:18px; width:110px; height:110px; border-radius:50%; border:2px solid rgba(255,255,255,0.32); background:rgba(15,23,42,0.45); z-index:7; display:none; touch-action:none; }
+        .profile-world-joystick-knob { position:absolute; width:44px; height:44px; border-radius:50%; background:rgba(148,163,184,0.86); left:33px; top:33px; border:2px solid rgba(255,255,255,0.5); }
+        @media (max-width: 900px) {
+            .profile-world-joystick { display:block; }
+            .profile-world-controls { font-size:11px; bottom:10px; left:auto; right:12px; transform:none; max-width: 52vw; }
+        }
 
         /* 3D Canvas Container */
         .canvas-container { background: #34495e; padding: 10px; border-radius: 4px; display: inline-block; position: relative; width: 100%; box-sizing: border-box; }
@@ -478,10 +484,13 @@
 <div id="profile-world-overlay" class="profile-world-overlay">
     <div class="profile-world-ui">
         <button class="btn btn-danger btn-sm" onclick="closeProfileWorld()">Exit Profile World</button>
-        <div class="portal-hint">Walk your character into glowing portals to join games.</div>
+        <div class="portal-hint">Click a glowing portal to join that game.</div>
     </div>
     <div id="profile-world-join-label" class="profile-world-join-label"></div>
-    <div class="profile-world-controls">WASD to move • Mouse to look • Walk into portal to join game</div>
+    <div class="profile-world-controls">WASD / joystick to move • Drag to look • Click portal to join game</div>
+    <div id="profile-world-joystick" class="profile-world-joystick">
+        <div id="profile-world-joystick-knob" class="profile-world-joystick-knob"></div>
+    </div>
 </div>
 
 
@@ -5814,7 +5823,8 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
 
         let profileWorldScene = null, profileWorldCamera = null, profileWorldRenderer = null, profileWorldAnim = null, profileWorldPortalMeshes = [], profileWorldResizeHandler = null;
         let profileWorldKeyDownHandler = null, profileWorldKeyUpHandler = null, profileWorldMouseMoveHandler = null, profileWorldMouseDownHandler = null, profileWorldMouseUpHandler = null;
-        let profileWorldState = { keys: {}, player: null, playerAvatar: null, yaw: 0, pitch: -0.25, joining: false, portalInfo: [] };
+        let profileWorldJoystickStartHandler = null, profileWorldJoystickMoveHandler = null, profileWorldJoystickEndHandler = null;
+        let profileWorldState = { keys: {}, player: null, playerAvatar: null, yaw: 0, pitch: -0.25, joining: false, portalInfo: [], joystick: { x: 0, y: 0 }, colliders: [] };
         const closeProfileWorld = () => {
             const overlay = document.getElementById('profile-world-overlay');
             if (overlay) overlay.style.display = 'none';
@@ -5835,7 +5845,19 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
             if (profileWorldMouseDownHandler) window.removeEventListener('mousedown', profileWorldMouseDownHandler);
             if (profileWorldMouseUpHandler) window.removeEventListener('mouseup', profileWorldMouseUpHandler);
             profileWorldKeyDownHandler = null; profileWorldKeyUpHandler = null; profileWorldMouseMoveHandler = null; profileWorldMouseDownHandler = null; profileWorldMouseUpHandler = null;
-            profileWorldState = { keys: {}, player: null, playerAvatar: null, yaw: 0, pitch: -0.25, joining: false, portalInfo: [] };
+            const joy = document.getElementById('profile-world-joystick');
+            if (joy) {
+                if (profileWorldJoystickStartHandler) joy.removeEventListener('touchstart', profileWorldJoystickStartHandler);
+                if (profileWorldJoystickMoveHandler) joy.removeEventListener('touchmove', profileWorldJoystickMoveHandler);
+                if (profileWorldJoystickEndHandler) {
+                    joy.removeEventListener('touchend', profileWorldJoystickEndHandler);
+                    joy.removeEventListener('touchcancel', profileWorldJoystickEndHandler);
+                }
+            }
+            profileWorldJoystickStartHandler = null; profileWorldJoystickMoveHandler = null; profileWorldJoystickEndHandler = null;
+            const knob = document.getElementById('profile-world-joystick-knob');
+            if (knob) { knob.style.left = '33px'; knob.style.top = '33px'; }
+            profileWorldState = { keys: {}, player: null, playerAvatar: null, yaw: 0, pitch: -0.25, joining: false, portalInfo: [], joystick: { x: 0, y: 0 }, colliders: [] };
             profileWorldRenderer = null; profileWorldScene = null; profileWorldCamera = null;
         };
         window.closeProfileWorld = closeProfileWorld;
@@ -5846,16 +5868,11 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
             loader.style.display = 'flex';
             try {
                 const worldData = await apiCall(`/profile-world/${encodeURIComponent(currentProfileData.username)}`);
-                setTimeout(() => {
-                    loader.style.display = 'none';
-                    overlay.style.display = 'block';
-                    const greeting = String(worldData.greeting || '').trim();
-                    if (greeting) {
-                        showModal(`${worldData.ownerName}'s Greeting`, greeting.slice(0, 300), 'Enter Profile World', () => buildProfileWorldScene(worldData));
-                    } else {
-                        buildProfileWorldScene(worldData);
-                    }
-                }, 900);
+                loader.style.display = 'none';
+                overlay.style.display = 'block';
+                buildProfileWorldScene(worldData);
+                const greeting = String(worldData.greeting || '').trim();
+                if (greeting) showModal(`${worldData.ownerName}'s Greeting`, greeting.slice(0, 300));
             } catch (e) {
                 loader.style.display = 'none';
                 showModal('Profile World', 'Unable to load profile world.');
@@ -5912,10 +5929,11 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 treeTop.position.set(tx, 18.2, tz);
                 treeTop.castShadow = true;
                 profileWorldScene.add(treeTop);
+                profileWorldState.colliders.push({ x: tx, z: tz, radius: 2.3 });
             }
             ensureAvatarBodyColors();
             const player = new THREE.Object3D();
-            player.position.set(0, 12.2, 0);
+            player.position.set(0, 12.85, 0);
             const avatarMesh = createPlayerMesh(
                 currentUser ? currentUser.color : '#e74c3c',
                 currentUser ? currentUser.equipped : null,
@@ -5933,6 +5951,8 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
             profileWorldState.pitch = -0.22;
             profileWorldState.joining = false;
             profileWorldState.portalInfo = [];
+            profileWorldState.joystick = { x: 0, y: 0 };
+            profileWorldState.colliders = [];
             profileWorldPortalMeshes = [];
             (worldData.games || []).slice(0, 3).forEach((g, idx) => {
                 const angle = (idx / 3) * Math.PI * 2;
@@ -5949,6 +5969,7 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 frame.userData.pulse = pulse;
                 profileWorldPortalMeshes.push(frame);
                 profileWorldState.portalInfo.push({ mesh: frame, gameId: g.id, title: g.title });
+                profileWorldState.colliders.push({ x, z, radius: 1.6 });
             });
             (worldData.assets || []).slice(0, 4).forEach((a, idx) => {
                 const angle = ((idx + 0.5) / 4) * Math.PI * 2;
@@ -5961,6 +5982,7 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 assetGem.rotation.y = idx * 0.7;
                 profileWorldScene.add(assetGem);
                 assetGem.userData.spin = 0.01 + idx * 0.002;
+                profileWorldState.colliders.push({ x, z, radius: 2.1 });
             });
             profileWorldKeyDownHandler = (ev) => { profileWorldState.keys[ev.key.toLowerCase()] = true; };
             profileWorldKeyUpHandler = (ev) => { profileWorldState.keys[ev.key.toLowerCase()] = false; };
@@ -5977,6 +5999,60 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
             window.addEventListener('mousedown', profileWorldMouseDownHandler);
             window.addEventListener('mouseup', profileWorldMouseUpHandler);
             window.addEventListener('mousemove', profileWorldMouseMoveHandler);
+            const joy = document.getElementById('profile-world-joystick');
+            const knob = document.getElementById('profile-world-joystick-knob');
+            const resetJoy = () => {
+                profileWorldState.joystick.x = 0;
+                profileWorldState.joystick.y = 0;
+                if (knob) { knob.style.left = '33px'; knob.style.top = '33px'; }
+            };
+            profileWorldJoystickStartHandler = (ev) => { ev.preventDefault(); };
+            profileWorldJoystickMoveHandler = (ev) => {
+                ev.preventDefault();
+                const t = ev.touches && ev.touches[0];
+                if (!t || !joy || !knob) return;
+                const rect = joy.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                let dx = t.clientX - cx;
+                let dy = t.clientY - cy;
+                const max = 36;
+                const len = Math.sqrt((dx * dx) + (dy * dy));
+                if (len > max) { dx = (dx / len) * max; dy = (dy / len) * max; }
+                knob.style.left = `${33 + dx}px`;
+                knob.style.top = `${33 + dy}px`;
+                profileWorldState.joystick.x = dx / max;
+                profileWorldState.joystick.y = dy / max;
+            };
+            profileWorldJoystickEndHandler = () => resetJoy();
+            if (joy) {
+                joy.addEventListener('touchstart', profileWorldJoystickStartHandler, { passive: false });
+                joy.addEventListener('touchmove', profileWorldJoystickMoveHandler, { passive: false });
+                joy.addEventListener('touchend', profileWorldJoystickEndHandler, { passive: false });
+                joy.addEventListener('touchcancel', profileWorldJoystickEndHandler, { passive: false });
+            }
+            const portalRaycaster = new THREE.Raycaster();
+            const pointer = new THREE.Vector2();
+            const clickPortal = (clientX, clientY) => {
+                if (!profileWorldRenderer || !profileWorldPortalMeshes.length) return;
+                const rect = profileWorldRenderer.domElement.getBoundingClientRect();
+                pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+                pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+                portalRaycaster.setFromCamera(pointer, profileWorldCamera);
+                const hits = portalRaycaster.intersectObjects(profileWorldPortalMeshes, false);
+                if (hits.length && hits[0].object && hits[0].object.userData && hits[0].object.userData.gameId) {
+                    const target = hits[0].object.userData;
+                    joinLabel.style.display = 'block';
+                    joinLabel.innerText = `Joining: ${target.gameTitle || 'Game'}`;
+                    closeProfileWorld();
+                    loadGame(target.gameId);
+                }
+            };
+            profileWorldRenderer.domElement.onclick = (ev) => clickPortal(ev.clientX, ev.clientY);
+            profileWorldRenderer.domElement.ontouchend = (ev) => {
+                const t = ev.changedTouches && ev.changedTouches[0];
+                if (t) clickPortal(t.clientX, t.clientY);
+            };
             const animate = () => {
                 profileWorldAnim = requestAnimationFrame(animate);
                 if (!profileWorldState.player) {
@@ -5987,14 +6063,20 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 }
                 const moveSpeed = 0.28;
                 const dir = new THREE.Vector3();
-                const forward = new THREE.Vector3(Math.sin(profileWorldState.yaw), 0, Math.cos(profileWorldState.yaw));
-                const right = new THREE.Vector3(forward.z, 0, -forward.x);
+                const forward = new THREE.Vector3(-Math.sin(profileWorldState.yaw), 0, -Math.cos(profileWorldState.yaw));
+                const right = new THREE.Vector3(-forward.z, 0, forward.x);
                 if (profileWorldState.keys['w']) dir.add(forward);
                 if (profileWorldState.keys['s']) dir.sub(forward);
                 if (profileWorldState.keys['a']) dir.sub(right);
                 if (profileWorldState.keys['d']) dir.add(right);
+                if (Math.abs(profileWorldState.joystick.x) > 0.06 || Math.abs(profileWorldState.joystick.y) > 0.06) {
+                    dir.addScaledVector(forward, -profileWorldState.joystick.y);
+                    dir.addScaledVector(right, profileWorldState.joystick.x);
+                }
                 if (dir.lengthSq() > 0) {
                     dir.normalize().multiplyScalar(moveSpeed);
+                    const prevX = profileWorldState.player.position.x;
+                    const prevZ = profileWorldState.player.position.z;
                     profileWorldState.player.position.add(dir);
                     const maxRadius = 47;
                     const planar = Math.sqrt((profileWorldState.player.position.x ** 2) + (profileWorldState.player.position.z ** 2));
@@ -6003,8 +6085,18 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                         profileWorldState.player.position.x *= s;
                         profileWorldState.player.position.z *= s;
                     }
+                    for (const col of (profileWorldState.colliders || [])) {
+                        const dx = profileWorldState.player.position.x - col.x;
+                        const dz = profileWorldState.player.position.z - col.z;
+                        const dist = Math.sqrt((dx * dx) + (dz * dz));
+                        if (dist < col.radius) {
+                            profileWorldState.player.position.x = prevX;
+                            profileWorldState.player.position.z = prevZ;
+                            break;
+                        }
+                    }
                 }
-                profileWorldState.player.position.y = 12.2;
+                profileWorldState.player.position.y = 12.85;
                 if (profileWorldState.playerAvatar) profileWorldState.playerAvatar.rotation.y = Math.PI + profileWorldState.yaw;
                 const camDistance = 8.5;
                 const camHeight = 4.8;
@@ -6038,14 +6130,6 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 } else {
                     joinLabel.style.display = 'none';
                     joinLabel.innerText = '';
-                }
-                if (nearest && nearest.dist < 1.8 && !profileWorldState.joining) {
-                    profileWorldState.joining = true;
-                    const gid = nearest.portal.userData.gameId;
-                    setTimeout(() => {
-                        closeProfileWorld();
-                        loadGame(gid);
-                    }, 350);
                 }
                 profileWorldRenderer.render(profileWorldScene, profileWorldCamera);
             };
