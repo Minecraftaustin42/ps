@@ -894,6 +894,24 @@
             </div>
         </div>
 
+        <div id="group-create-modal" class="modal-overlay" style="display:none;">
+            <div class="modal">
+                <h3 style="margin-top:0;">Create Group (100 SC)</h3>
+                <p style="font-size:12px; color:#666;">Pick a name, add a description, and optionally upload a group icon.</p>
+                <input id="group-create-name" class="form-control mb-10" maxlength="60" placeholder="Group name">
+                <textarea id="group-create-description" class="form-control mb-10" maxlength="800" placeholder="Describe your group..." style="min-height:90px;"></textarea>
+                <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+                    <button class="btn btn-sm btn-info" onclick="pickCreateGroupLogo()">Upload Group Icon</button>
+                    <span id="group-create-logo-label" style="font-size:12px; color:#777;">No file selected</span>
+                </div>
+                <img id="group-create-logo-preview" alt="Group logo preview" style="display:none; width:88px; height:88px; border-radius:10px; object-fit:cover; border:1px solid #ccd4dd; margin-bottom:10px;">
+                <div style="display:flex; gap:10px;">
+                    <button class="btn btn-success" onclick="submitCreateGroupModal()">Create Group</button>
+                    <button class="btn btn-danger" onclick="closeCreateGroupModal()">Close</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Single Group Detail View -->
         <div id="view-group-detail" class="view">
             <div class="card">
@@ -1118,6 +1136,18 @@
                                 <h4 style="margin-top:0; margin-bottom:10px;">Group Logo</h4>
                                 <input type="file" id="grp-logo-file" class="form-control mb-10" accept="image/*">
                                 <button class="btn btn-sm btn-info" onclick="saveGroupLogo()">Save Logo</button>
+                            </div>
+
+                            <div id="grp-admin-desc" style="display:none; margin-top:15px; padding-top:15px; border-top:1px solid #eee;">
+                                <h4 style="margin-top:0; margin-bottom:10px;">Group Description</h4>
+                                <textarea id="grp-description-input" class="form-control mb-10" maxlength="800" style="min-height:90px;" placeholder="Describe your group..."></textarea>
+                                <button class="btn btn-sm btn-info" onclick="saveGroupDescription()">Save Description</button>
+                            </div>
+
+                            <div id="grp-admin-owner" style="display:none; margin-top:15px; padding-top:15px; border-top:1px solid #eee;">
+                                <h4 style="margin-top:0; margin-bottom:10px;">Group Ownership</h4>
+                                <button class="btn btn-sm btn-warning" onclick="promptChangeGroupOwner()">Change Owner</button>
+                                <p style="font-size:11px; color:#666; margin-top:8px;">Only the current owner can transfer ownership. This is permanent.</p>
                             </div>
 
                         </div>
@@ -3832,20 +3862,52 @@ if (playAnimationId) cancelAnimationFrame(playAnimationId);
 };
         
 
+        let pendingGroupCreateLogo = '';
         const promptCreateGroup = () => {
-            showModal('Create a Group (100 SC)', 'Enter a name for your new group:', 'Next', async (name) => {
-                if(!name) return;
-                let logo = '';
-                try {
-                    logo = await pickImageAsDataUrl();
-                } catch (e) {}
-                try {
-                    const res = await apiCall('/groups', 'POST', { name, description: 'A brand new group!', logo: logo || '' });
-                    if (currentUser && typeof res.coins === 'number') currentUser.coins = res.coins;
-                    updateCoinsUI();
-                    loadGroupDetail(res.groupId);
-                } catch(e) {}
-            }, true, true);
+            pendingGroupCreateLogo = '';
+            const modal = document.getElementById('group-create-modal');
+            if (!modal) return;
+            document.getElementById('group-create-name').value = '';
+            document.getElementById('group-create-description').value = '';
+            document.getElementById('group-create-logo-label').innerText = 'No file selected';
+            const preview = document.getElementById('group-create-logo-preview');
+            if (preview) { preview.style.display = 'none'; preview.src = ''; }
+            modal.style.display = 'flex';
+        };
+        const closeCreateGroupModal = () => {
+            const modal = document.getElementById('group-create-modal');
+            if (modal) modal.style.display = 'none';
+        };
+        const pickCreateGroupLogo = async () => {
+            const logo = await pickImageAsDataUrl();
+            pendingGroupCreateLogo = logo || '';
+            const label = document.getElementById('group-create-logo-label');
+            if (label) label.innerText = pendingGroupCreateLogo ? 'Icon ready' : 'No file selected';
+            const preview = document.getElementById('group-create-logo-preview');
+            if (preview) {
+                if (pendingGroupCreateLogo) {
+                    preview.src = pendingGroupCreateLogo;
+                    preview.style.display = 'block';
+                } else {
+                    preview.style.display = 'none';
+                }
+            }
+        };
+        const submitCreateGroupModal = async () => {
+            const name = (document.getElementById('group-create-name') || {}).value || '';
+            const description = (document.getElementById('group-create-description') || {}).value || '';
+            if (!name.trim()) return showModal('Create Group', 'Please enter a group name.');
+            try {
+                const res = await apiCall('/groups', 'POST', {
+                    name: name.trim(),
+                    description: (description || '').trim() || 'A brand new group!',
+                    logo: pendingGroupCreateLogo || ''
+                });
+                if (currentUser && typeof res.coins === 'number') currentUser.coins = res.coins;
+                updateCoinsUI();
+                closeCreateGroupModal();
+                loadGroupDetail(res.groupId);
+            } catch(e) {}
         };
 
         const pickImageAsDataUrl = () => new Promise((resolve) => {
@@ -3862,6 +3924,9 @@ if (playAnimationId) cancelAnimationFrame(playAnimationId);
             };
             input.click();
         });
+        window.pickCreateGroupLogo = pickCreateGroupLogo;
+        window.closeCreateGroupModal = closeCreateGroupModal;
+        window.submitCreateGroupModal = submitCreateGroupModal;
 
         const switchGroupTab = (tabId) => {
             document.querySelectorAll('#view-group-detail .tab').forEach(t => t.classList.remove('active'));
@@ -4422,10 +4487,22 @@ const openLuckySpin = () => {
             }
 
             const logoDiv = document.getElementById('grp-admin-logo');
+            const descDiv = document.getElementById('grp-admin-desc');
+            const ownerDiv = document.getElementById('grp-admin-owner');
+            const canManageAdmin = !!(currentGroupData.myPerms && currentGroupData.myPerms.manageRanks);
             if (currentGroupData.myPerms && currentGroupData.myPerms.manageRanks) {
                 logoDiv.style.display = 'block';
             } else {
                 logoDiv.style.display = 'none';
+            }
+            if (descDiv) {
+                descDiv.style.display = canManageAdmin ? 'block' : 'none';
+                const descInput = document.getElementById('grp-description-input');
+                if (descInput) descInput.value = currentGroupData.description || '';
+            }
+            if (ownerDiv) {
+                const isOwner = !!(currentUser && currentGroupData.ownerId && currentUser.userId === currentGroupData.ownerId);
+                ownerDiv.style.display = isOwner ? 'block' : 'none';
             }
         };
 
@@ -4452,6 +4529,36 @@ const openLuckySpin = () => {
                 showModal('Success', 'Group logo updated.');
             } catch(e) {}
         };
+
+        const saveGroupDescription = async () => {
+            if (!currentGroupData) return;
+            const description = String((document.getElementById('grp-description-input') || {}).value || '').trim();
+            try {
+                const res = await apiCall(`/groups/${currentGroupData.id}/description`, 'PUT', { description });
+                currentGroupData.description = res.description || '';
+                const desc = document.getElementById('gd-desc');
+                if (desc) desc.innerText = currentGroupData.description || '';
+                showModal('Success', 'Group description updated.');
+            } catch (e) {}
+        };
+        window.saveGroupDescription = saveGroupDescription;
+
+        const promptChangeGroupOwner = () => {
+            if (!currentGroupData) return;
+            showModal('Change Group Owner', 'Enter the username of a current group member:', 'Next', (username) => {
+                if (!username) return;
+                showModal('Permanent Change', `Transfer ownership to "${username}"? This cannot be undone automatically.`, 'Yes, Transfer', async () => {
+                    try {
+                        await apiCall(`/groups/${currentGroupData.id}/change-owner`, 'POST', { username });
+                        showModal('Ownership Updated', 'Group ownership transferred successfully.', 'Go to Groups', () => {
+                            currentGroupData = null;
+                            navigate('groups');
+                        });
+                    } catch (e) {}
+                }, false, true);
+            }, true, true);
+        };
+        window.promptChangeGroupOwner = promptChangeGroupOwner;
 
         const promptCreateRole = () => {
             showModal('New Role Name', 'Name:', 'Next', (name) => {
@@ -6250,7 +6357,14 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                     return;
                 }
                 grid.innerHTML = '';
-                friends.forEach(f => {
+                grid.style.display = 'grid';
+                grid.style.gridTemplateColumns = 'repeat(4, minmax(0, 1fr))';
+                grid.style.gap = '12px';
+                const friendsToRender = friends.slice();
+                let shown = friendsToRender.length >= 5 ? 4 : friendsToRender.length;
+                const renderChunk = (count) => {
+                    friendsToRender.slice(0, count).forEach(f => {
+                        if (grid.querySelector(`[data-friend-card="${f.id}"]`)) return;
                     const level = f.friendshipLevel || Math.floor((f.friendshipXp || 0) / 100);
                     const currentLevelXp = (f.friendshipXp || 0) % 100;
                     const toNextLevel = 100 - currentLevelXp;
@@ -6265,6 +6379,7 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
 
                     const card = document.createElement('div');
                     card.className = 'game-card';
+                    card.dataset.friendCard = f.id;
                     card.style.textAlign = 'left';
                     card.innerHTML = `
                         <div style="display:flex; gap:10px; align-items:center;">
@@ -6293,7 +6408,24 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
 
 Keep playing together for more daily rewards.`, 'Aww!');
                     }
-                });
+                    });
+                };
+                renderChunk(shown);
+                if (friendsToRender.length > shown) {
+                    const loadMoreWrap = document.createElement('div');
+                    loadMoreWrap.style.gridColumn = '1 / -1';
+                    loadMoreWrap.style.textAlign = 'center';
+                    const loadMoreBtn = document.createElement('button');
+                    loadMoreBtn.className = 'btn btn-sm btn-info';
+                    loadMoreBtn.innerText = 'Load More';
+                    loadMoreBtn.onclick = () => {
+                        shown = Math.min(friendsToRender.length, shown + 4);
+                        renderChunk(shown);
+                        if (shown >= friendsToRender.length) loadMoreWrap.remove();
+                    };
+                    loadMoreWrap.appendChild(loadMoreBtn);
+                    grid.appendChild(loadMoreWrap);
+                }
             } catch (e) {
                 grid.innerHTML = '<p style="color:#e74c3c;">Failed to load friend activity.</p>';
             }
@@ -8621,8 +8753,25 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
         
         let teamSyncInFlight = false;
         let teamSyncCooldownUntil = 0;
+        let teamCreateFriendshipXpInterval = null;
+        let teamCreateFriendshipXpInFlight = false;
+        const startTeamCreateFriendshipXp = () => {
+            if (teamCreateFriendshipXpInterval) clearInterval(teamCreateFriendshipXpInterval);
+            teamCreateFriendshipXpInterval = setInterval(async () => {
+                if (!currentEditGameId || !isTeamEditingMode || !currentUser) return;
+                if (teamCreateFriendshipXpInFlight) return;
+                teamCreateFriendshipXpInFlight = true;
+                try {
+                    await apiCall('/friends/team-create-xp', 'POST', { gameId: currentEditGameId });
+                } catch (e) {
+                } finally {
+                    teamCreateFriendshipXpInFlight = false;
+                }
+            }, 60 * 1000);
+        };
         const startTeamSync = () => {
             if (teamSyncInterval) clearInterval(teamSyncInterval);
+            startTeamCreateFriendshipXp();
             teamSyncInterval = setInterval(async () => {
                 if(!currentEditGameId || !currentUser) return;
                 if (teamSyncInFlight || Date.now() < teamSyncCooldownUntil) return;
@@ -8662,6 +8811,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
         };
         const stopTeamSync = () => {
             if (teamSyncInterval) clearInterval(teamSyncInterval);
+            if (teamCreateFriendshipXpInterval) clearInterval(teamCreateFriendshipXpInterval);
             teamCollaboratorsOnline = 0;
             Object.keys(collabMeshes).forEach(k => { if (collabMeshes[k] && collabMeshes[k].parent) collabMeshes[k].parent.remove(collabMeshes[k]); delete collabMeshes[k]; });
         };
@@ -8843,13 +8993,16 @@ playerObj = {
                 }
                 else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
                     e.preventDefault();
-                    undo();
+                    if (isTeamCreateLocked()) showModal('Team Create', 'Undo is disabled in Team Create right now to protect collaborator edits.');
+                    else undo();
                 }
                 else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
                     e.preventDefault();
-                    redo();
+                    if (isTeamCreateLocked()) showModal('Team Create', 'Redo is disabled in Team Create right now to protect collaborator edits.');
+                    else redo();
                 }
                 else if (e.key === 'Delete' || e.key === 'Backspace') {
+                    e.preventDefault();
                     if (isTeamCreateLocked()) {
                         const previousSelection = selectedObjects.slice();
                         selectedObjects = getLocalSelectionForTeamShortcuts();

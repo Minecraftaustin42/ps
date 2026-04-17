@@ -1338,6 +1338,42 @@ app.get("/api/friends", requireAuth, (req, res) => {
     res.json(friends);
 });
 
+app.post('/api/friends/team-create-xp', requireAuth, (req, res) => {
+    const { gameId } = req.body || {};
+    if (!gameId) return res.status(400).json({ error: 'gameId required.' });
+    const game = db.games.find(g => g.id === gameId);
+    if (!game) return res.status(404).json({ error: 'Game not found.' });
+
+    let canEdit = game.authorId === req.userId || (game.collaborators || []).includes(req.userId);
+    if (game.groupId) {
+        const group = db.groups.find(gr => gr.id === game.groupId);
+        const perms = getGroupMemberPerms(group, req.userId);
+        if (perms && perms.editGames) canEdit = true;
+    }
+    if (!canEdit) return res.status(403).json({ error: 'Not authorized.' });
+
+    const editorMap = activeEditors[game.id] || {};
+    const now = Date.now();
+    const me = db.users.find(u => u.id === req.userId);
+    if (!me) return res.status(401).json({ error: 'Unauthorized.' });
+    const friendIds = new Set((me.friends || []).map(f => (typeof f === 'string' ? f : f.id)));
+    let awarded = 0;
+
+    Object.keys(editorMap).forEach((uId) => {
+        if (uId === req.userId) return;
+        const seen = editorMap[uId];
+        if (!seen || (now - (seen.timestamp || 0)) > 12000) return;
+        if (!friendIds.has(uId)) return;
+        const link = ensureFriendLink(me, uId);
+        if (now - (link.lastXpAt || 0) < (7 * 60 * 1000)) return;
+        grantFriendshipXp(req.userId, uId, 10);
+        awarded++;
+    });
+
+    if (awarded > 0) saveDB();
+    res.json({ success: true, awarded });
+});
+
 
 app.get('/api/users/search', (req, res) => {
     const query = (req.query.q || '').toLowerCase();
@@ -2025,6 +2061,40 @@ app.put('/api/groups/:id/logo', requireAuth, (req, res) => {
     res.json({ success: true, logo: group.logo });
 });
 
+app.put('/api/groups/:id/description', requireAuth, (req, res) => {
+    const group = db.groups.find(gr => gr.id === req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+    if (group.ownerId !== req.userId) return res.status(403).json({ error: 'Only the group owner can edit description.' });
+    const description = String((req.body || {}).description || '').slice(0, 800).trim();
+    group.description = description;
+    saveDB();
+    res.json({ success: true, description: group.description });
+});
+
+app.post('/api/groups/:id/change-owner', requireAuth, (req, res) => {
+    const group = db.groups.find(gr => gr.id === req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+    if (group.ownerId !== req.userId) return res.status(403).json({ error: 'Only the current owner can transfer ownership.' });
+
+    const username = String((req.body || {}).username || '').trim().toLowerCase();
+    if (!username) return res.status(400).json({ error: 'Username required.' });
+    const target = db.users.find(u => u.username.toLowerCase() === username);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+    const targetMember = (group.members || []).find(m => m.userId === target.id);
+    if (!targetMember) return res.status(400).json({ error: 'That user must already be a member of the group.' });
+    if (target.id === req.userId) return res.status(400).json({ error: 'You already own this group.' });
+
+    const ownerRole = (group.roles || []).find(r => r.rank === 255) || (group.roles || []).find(r => r.name === 'Owner');
+    const fallbackRole = (group.roles || []).filter(r => r.rank < 255).sort((a, b) => b.rank - a.rank)[0] || (group.roles || [])[0];
+
+    const oldOwnerMember = (group.members || []).find(m => m.userId === req.userId);
+    if (ownerRole && targetMember) targetMember.roleId = ownerRole.id;
+    if (oldOwnerMember && fallbackRole) oldOwnerMember.roleId = fallbackRole.id;
+    group.ownerId = target.id;
+    saveDB();
+    res.json({ success: true, newOwner: target.username });
+});
+
 
 // Post Group Shout
 app.post('/api/groups/:id/shout', requireAuth, (req, res) => {
@@ -2163,6 +2233,7 @@ app.get('/api/groups/:id', (req, res) => {
 res.json({
     id: group.id,
     name: group.name,
+    ownerId: group.ownerId,
     description: group.description,
     logo: group.logo || '',
     groupCoins: group.coins || 0,
