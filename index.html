@@ -137,6 +137,8 @@
         .profile-world-overlay { position: fixed; inset: 0; z-index: 100000; display:none; background:#000; }
         .profile-world-ui { position:absolute; top:14px; left:14px; z-index:5; display:flex; flex-direction:column; gap:8px; }
         .portal-hint { background:rgba(17,24,39,0.8); color:#fff; padding:8px 10px; border-radius:8px; font-size:12px; }
+        .profile-world-join-label { position:absolute; top:18px; left:50%; transform:translateX(-50%); z-index:6; background:rgba(15,23,42,0.82); color:#fff; padding:8px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.2); font-size:13px; font-weight:700; display:none; }
+        .profile-world-controls { position:absolute; bottom:16px; left:50%; transform:translateX(-50%); z-index:6; background:rgba(15,23,42,0.74); color:#e2e8f0; padding:8px 12px; border-radius:8px; font-size:12px; }
 
         /* 3D Canvas Container */
         .canvas-container { background: #34495e; padding: 10px; border-radius: 4px; display: inline-block; position: relative; width: 100%; box-sizing: border-box; }
@@ -476,8 +478,10 @@
 <div id="profile-world-overlay" class="profile-world-overlay">
     <div class="profile-world-ui">
         <button class="btn btn-danger btn-sm" onclick="closeProfileWorld()">Exit Profile World</button>
-        <div class="portal-hint">Click glowing portals to join games.</div>
+        <div class="portal-hint">Walk your character into glowing portals to join games.</div>
     </div>
+    <div id="profile-world-join-label" class="profile-world-join-label"></div>
+    <div class="profile-world-controls">WASD to move • Mouse to look • Walk into portal to join game</div>
 </div>
 
 
@@ -5809,9 +5813,13 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
         };
 
         let profileWorldScene = null, profileWorldCamera = null, profileWorldRenderer = null, profileWorldAnim = null, profileWorldPortalMeshes = [], profileWorldResizeHandler = null;
+        let profileWorldKeyDownHandler = null, profileWorldKeyUpHandler = null, profileWorldMouseMoveHandler = null, profileWorldMouseDownHandler = null, profileWorldMouseUpHandler = null;
+        let profileWorldState = { keys: {}, player: null, yaw: 0, pitch: -0.25, joining: false, portalInfo: [] };
         const closeProfileWorld = () => {
             const overlay = document.getElementById('profile-world-overlay');
             if (overlay) overlay.style.display = 'none';
+            const joinLabel = document.getElementById('profile-world-join-label');
+            if (joinLabel) { joinLabel.style.display = 'none'; joinLabel.innerText = ''; }
             if (profileWorldAnim) cancelAnimationFrame(profileWorldAnim);
             profileWorldAnim = null;
             profileWorldPortalMeshes = [];
@@ -5821,6 +5829,13 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
             }
             if (profileWorldResizeHandler) window.removeEventListener('resize', profileWorldResizeHandler);
             profileWorldResizeHandler = null;
+            if (profileWorldKeyDownHandler) window.removeEventListener('keydown', profileWorldKeyDownHandler);
+            if (profileWorldKeyUpHandler) window.removeEventListener('keyup', profileWorldKeyUpHandler);
+            if (profileWorldMouseMoveHandler) window.removeEventListener('mousemove', profileWorldMouseMoveHandler);
+            if (profileWorldMouseDownHandler) window.removeEventListener('mousedown', profileWorldMouseDownHandler);
+            if (profileWorldMouseUpHandler) window.removeEventListener('mouseup', profileWorldMouseUpHandler);
+            profileWorldKeyDownHandler = null; profileWorldKeyUpHandler = null; profileWorldMouseMoveHandler = null; profileWorldMouseDownHandler = null; profileWorldMouseUpHandler = null;
+            profileWorldState = { keys: {}, player: null, yaw: 0, pitch: -0.25, joining: false, portalInfo: [] };
             profileWorldRenderer = null; profileWorldScene = null; profileWorldCamera = null;
         };
         window.closeProfileWorld = closeProfileWorld;
@@ -5834,9 +5849,11 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 setTimeout(() => {
                     loader.style.display = 'none';
                     overlay.style.display = 'block';
-                    buildProfileWorldScene(worldData);
-                    if (worldData.greeting && String(worldData.greeting).trim()) {
-                        showModal(`${worldData.ownerName}'s Greeting`, String(worldData.greeting).slice(0, 300));
+                    const greeting = String(worldData.greeting || '').trim();
+                    if (greeting) {
+                        showModal(`${worldData.ownerName}'s Greeting`, greeting.slice(0, 300), 'Enter Profile World', () => buildProfileWorldScene(worldData));
+                    } else {
+                        buildProfileWorldScene(worldData);
                     }
                 }, 900);
             } catch (e) {
@@ -5848,74 +5865,172 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
         const buildProfileWorldScene = (worldData) => {
             closeProfileWorld();
             const overlay = document.getElementById('profile-world-overlay');
+            const joinLabel = document.getElementById('profile-world-join-label');
             overlay.style.display = 'block';
             const width = window.innerWidth, height = window.innerHeight;
             profileWorldScene = new THREE.Scene();
             profileWorldScene.background = new THREE.Color(0x87ceeb);
-            profileWorldCamera = new THREE.PerspectiveCamera(60, width / height, 0.1, 2000);
-            profileWorldCamera.position.set(0, 22, 36);
+            profileWorldScene.fog = new THREE.Fog(0x87ceeb, 45, 180);
+            profileWorldCamera = new THREE.PerspectiveCamera(72, width / height, 0.1, 2000);
             profileWorldRenderer = new THREE.WebGLRenderer({ antialias: true });
             profileWorldRenderer.setSize(width, height);
             profileWorldRenderer.shadowMap.enabled = true;
             overlay.appendChild(profileWorldRenderer.domElement);
-            const controls = new THREE.OrbitControls(profileWorldCamera, profileWorldRenderer.domElement);
-            controls.target.set(0, 5, 0);
-            controls.enablePan = false;
             const hemi = new THREE.HemisphereLight(0xe0f2fe, 0x355e3b, 1.0); profileWorldScene.add(hemi);
-            const sun = new THREE.DirectionalLight(0xfff7cc, 1.3); sun.position.set(40, 70, 20); sun.castShadow = true; profileWorldScene.add(sun);
+            const sun = new THREE.DirectionalLight(0xfff7cc, 1.35); sun.position.set(40, 70, 20); sun.castShadow = true; profileWorldScene.add(sun);
             const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(5, 24, 24), new THREE.MeshBasicMaterial({ color: 0xffeb7a }));
             sunMesh.position.set(90, 70, -120); profileWorldScene.add(sunMesh);
-            const island = new THREE.Mesh(new THREE.CylinderGeometry(20, 30, 8, 30), new THREE.MeshStandardMaterial({ color: 0x5b7f36 }));
-            island.position.y = 0; island.castShadow = true; island.receiveShadow = true; profileWorldScene.add(island);
-            const top = new THREE.Mesh(new THREE.CylinderGeometry(22, 20, 2, 30), new THREE.MeshStandardMaterial({ color: 0x7ccf63 }));
-            top.position.y = 5; top.receiveShadow = true; profileWorldScene.add(top);
-            for (let i = 0; i < 14; i++) {
-                const cloud = new THREE.Mesh(new THREE.SphereGeometry(2 + Math.random() * 2.8, 16, 16), new THREE.MeshStandardMaterial({ color: 0xffffff }));
-                cloud.position.set((Math.random() - 0.5) * 140, 22 + Math.random() * 30, (Math.random() - 0.5) * 140);
+            const island = new THREE.Mesh(new THREE.CylinderGeometry(52, 66, 18, 44), new THREE.MeshStandardMaterial({ color: 0x4f6b2e }));
+            island.position.y = -2; island.castShadow = true; island.receiveShadow = true; profileWorldScene.add(island);
+            const grassTop = new THREE.Mesh(new THREE.CylinderGeometry(54, 52, 4, 44), new THREE.MeshStandardMaterial({ color: 0x70c458 }));
+            grassTop.position.y = 9; grassTop.receiveShadow = true; profileWorldScene.add(grassTop);
+            const plaza = new THREE.Mesh(new THREE.CylinderGeometry(20, 20, 1.4, 32), new THREE.MeshStandardMaterial({ color: 0xd7dce5 }));
+            plaza.position.y = 11; plaza.receiveShadow = true; profileWorldScene.add(plaza);
+            const pathMaterial = new THREE.MeshStandardMaterial({ color: 0xc2ccd9 });
+            for (let i = 0; i < 6; i++) {
+                const angle = (i / 6) * Math.PI * 2;
+                const path = new THREE.Mesh(new THREE.BoxGeometry(5, 0.8, 22), pathMaterial);
+                path.position.set(Math.cos(angle) * 18, 11.4, Math.sin(angle) * 18);
+                path.rotation.y = -angle;
+                path.receiveShadow = true;
+                profileWorldScene.add(path);
+            }
+            for (let i = 0; i < 20; i++) {
+                const cloud = new THREE.Mesh(new THREE.SphereGeometry(2 + Math.random() * 3.8, 16, 16), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+                cloud.position.set((Math.random() - 0.5) * 180, 28 + Math.random() * 36, (Math.random() - 0.5) * 180);
                 cloud.userData.cloudDrift = 0.01 + Math.random() * 0.03;
                 profileWorldScene.add(cloud);
             }
+            for (let i = 0; i < 10; i++) {
+                const tx = (Math.random() - 0.5) * 70;
+                const tz = (Math.random() - 0.5) * 70;
+                const treeTrunk = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.1, 6, 10), new THREE.MeshStandardMaterial({ color: 0x7c4a21 }));
+                treeTrunk.position.set(tx, 13.8, tz);
+                treeTrunk.castShadow = true;
+                profileWorldScene.add(treeTrunk);
+                const treeTop = new THREE.Mesh(new THREE.SphereGeometry(3.8, 16, 16), new THREE.MeshStandardMaterial({ color: 0x2e8b57 }));
+                treeTop.position.set(tx, 18.2, tz);
+                treeTop.castShadow = true;
+                profileWorldScene.add(treeTop);
+            }
+            const player = new THREE.Mesh(new THREE.CapsuleGeometry(0.8, 2.2, 6, 12), new THREE.MeshStandardMaterial({ color: 0x2563eb }));
+            player.position.set(0, 13.5, 0);
+            player.castShadow = true;
+            profileWorldScene.add(player);
+            profileWorldState.player = player;
+            profileWorldState.keys = {};
+            profileWorldState.yaw = 0;
+            profileWorldState.pitch = -0.22;
+            profileWorldState.joining = false;
+            profileWorldState.portalInfo = [];
             profileWorldPortalMeshes = [];
             (worldData.games || []).slice(0, 3).forEach((g, idx) => {
                 const angle = (idx / 3) * Math.PI * 2;
-                const x = Math.cos(angle) * 10, z = Math.sin(angle) * 10;
+                const x = Math.cos(angle) * 32, z = Math.sin(angle) * 32;
                 const frame = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.35, 16, 48), new THREE.MeshStandardMaterial({ color: 0x4338ca, emissive: 0x1d4ed8, emissiveIntensity: 0.6 }));
-                frame.position.set(x, 7, z); frame.rotation.y = -angle;
+                frame.position.set(x, 14.6, z); frame.rotation.y = -angle;
                 profileWorldScene.add(frame);
-                const plate = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.8, 3.8), new THREE.MeshStandardMaterial({ color: 0x334155 }));
-                plate.position.set(x, 5.4, z); profileWorldScene.add(plate);
+                const pulse = new THREE.Mesh(new THREE.CircleGeometry(3, 24), new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.35 }));
+                pulse.rotation.x = -Math.PI / 2;
+                pulse.position.set(x, 11.8, z);
+                profileWorldScene.add(pulse);
                 frame.userData.gameId = g.id;
+                frame.userData.gameTitle = g.title;
+                frame.userData.pulse = pulse;
                 profileWorldPortalMeshes.push(frame);
+                profileWorldState.portalInfo.push({ mesh: frame, gameId: g.id, title: g.title });
             });
             (worldData.assets || []).slice(0, 4).forEach((a, idx) => {
-                const x = -14 + idx * 9;
-                const stand = new THREE.Mesh(new THREE.BoxGeometry(3.5, 2 + ((idx % 2) * 1.8), 3.5), new THREE.MeshStandardMaterial({ color: 0x64748b }));
-                stand.position.set(x, 6.5, -8); stand.castShadow = true; profileWorldScene.add(stand);
+                const angle = ((idx + 0.5) / 4) * Math.PI * 2;
+                const x = Math.cos(angle) * 19;
+                const z = Math.sin(angle) * 19;
+                const stand = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.6, 4, 12), new THREE.MeshStandardMaterial({ color: 0x64748b }));
+                stand.position.set(x, 13.2, z); stand.castShadow = true; stand.receiveShadow = true; profileWorldScene.add(stand);
+                const assetGem = new THREE.Mesh(new THREE.OctahedronGeometry(1.2, 0), new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0x92400e, emissiveIntensity: 0.25 }));
+                assetGem.position.set(x, 16.2, z);
+                assetGem.rotation.y = idx * 0.7;
+                profileWorldScene.add(assetGem);
+                assetGem.userData.spin = 0.01 + idx * 0.002;
             });
-            const raycaster = new THREE.Raycaster();
-            const mouse = new THREE.Vector2();
-            profileWorldRenderer.domElement.onclick = (ev) => {
-                const rect = profileWorldRenderer.domElement.getBoundingClientRect();
-                mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
-                mouse.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
-                raycaster.setFromCamera(mouse, profileWorldCamera);
-                const hits = raycaster.intersectObjects(profileWorldPortalMeshes, false);
-                if (hits.length && hits[0].object.userData.gameId) {
-                    const gid = hits[0].object.userData.gameId;
-                    closeProfileWorld();
-                    loadGame(gid);
-                }
+            profileWorldKeyDownHandler = (ev) => { profileWorldState.keys[ev.key.toLowerCase()] = true; };
+            profileWorldKeyUpHandler = (ev) => { profileWorldState.keys[ev.key.toLowerCase()] = false; };
+            let mouseDown = false;
+            profileWorldMouseDownHandler = () => { mouseDown = true; };
+            profileWorldMouseUpHandler = () => { mouseDown = false; };
+            profileWorldMouseMoveHandler = (ev) => {
+                if (!mouseDown || !profileWorldState.player) return;
+                profileWorldState.yaw -= ev.movementX * 0.0042;
+                profileWorldState.pitch = Math.max(-1.1, Math.min(0.35, profileWorldState.pitch - ev.movementY * 0.0035));
             };
+            window.addEventListener('keydown', profileWorldKeyDownHandler);
+            window.addEventListener('keyup', profileWorldKeyUpHandler);
+            window.addEventListener('mousedown', profileWorldMouseDownHandler);
+            window.addEventListener('mouseup', profileWorldMouseUpHandler);
+            window.addEventListener('mousemove', profileWorldMouseMoveHandler);
             const animate = () => {
                 profileWorldAnim = requestAnimationFrame(animate);
+                if (!profileWorldState.player) return;
+                const moveSpeed = 0.28;
+                const dir = new THREE.Vector3();
+                const forward = new THREE.Vector3(Math.sin(profileWorldState.yaw), 0, Math.cos(profileWorldState.yaw));
+                const right = new THREE.Vector3(forward.z, 0, -forward.x);
+                if (profileWorldState.keys['w']) dir.add(forward);
+                if (profileWorldState.keys['s']) dir.sub(forward);
+                if (profileWorldState.keys['a']) dir.sub(right);
+                if (profileWorldState.keys['d']) dir.add(right);
+                if (dir.lengthSq() > 0) {
+                    dir.normalize().multiplyScalar(moveSpeed);
+                    profileWorldState.player.position.add(dir);
+                    const maxRadius = 47;
+                    const planar = Math.sqrt((profileWorldState.player.position.x ** 2) + (profileWorldState.player.position.z ** 2));
+                    if (planar > maxRadius) {
+                        const s = maxRadius / planar;
+                        profileWorldState.player.position.x *= s;
+                        profileWorldState.player.position.z *= s;
+                    }
+                }
+                profileWorldState.player.position.y = 13.5;
+                const camDistance = 8.5;
+                const camHeight = 4.8;
+                profileWorldCamera.position.set(
+                    profileWorldState.player.position.x - Math.sin(profileWorldState.yaw) * camDistance,
+                    profileWorldState.player.position.y + camHeight + Math.sin(profileWorldState.pitch) * 3.2,
+                    profileWorldState.player.position.z - Math.cos(profileWorldState.yaw) * camDistance
+                );
+                profileWorldCamera.lookAt(
+                    profileWorldState.player.position.x + Math.sin(profileWorldState.yaw) * 5.5,
+                    profileWorldState.player.position.y + 2.2 + Math.sin(profileWorldState.pitch) * 2,
+                    profileWorldState.player.position.z + Math.cos(profileWorldState.yaw) * 5.5
+                );
                 profileWorldScene.children.forEach(c => {
                     if (c.userData && c.userData.cloudDrift) {
                         c.position.x += c.userData.cloudDrift;
-                        if (c.position.x > 80) c.position.x = -80;
+                        if (c.position.x > 100) c.position.x = -100;
                     }
+                    if (c.userData && c.userData.spin) c.rotation.y += c.userData.spin;
                 });
-                profileWorldPortalMeshes.forEach((p, i) => p.rotation.z += 0.01 + i * 0.002);
-                controls.update();
+                let nearest = null;
+                profileWorldPortalMeshes.forEach((p, i) => {
+                    p.rotation.z += 0.01 + i * 0.002;
+                    if (p.userData.pulse) p.userData.pulse.scale.setScalar(1 + (Math.sin(Date.now() * 0.005 + i) * 0.12));
+                    const d = p.position.distanceTo(profileWorldState.player.position);
+                    if (!nearest || d < nearest.dist) nearest = { dist: d, portal: p };
+                });
+                if (nearest && nearest.dist < 8) {
+                    joinLabel.style.display = 'block';
+                    joinLabel.innerText = `Portal ahead: ${nearest.portal.userData.gameTitle || 'Game'}${nearest.dist < 2 ? ' • Joining...' : ''}`;
+                } else {
+                    joinLabel.style.display = 'none';
+                    joinLabel.innerText = '';
+                }
+                if (nearest && nearest.dist < 1.8 && !profileWorldState.joining) {
+                    profileWorldState.joining = true;
+                    const gid = nearest.portal.userData.gameId;
+                    setTimeout(() => {
+                        closeProfileWorld();
+                        loadGame(gid);
+                    }, 350);
+                }
                 profileWorldRenderer.render(profileWorldScene, profileWorldCamera);
             };
             animate();
