@@ -5027,8 +5027,17 @@ let customGizmo = null;
             mouse = new THREE.Vector2();
 
             selectionBoxHelper = new THREE.BoxHelper(new THREE.Mesh(new THREE.BoxGeometry(1,1,1)), 0x00008b);
-            selectionBoxHelper.material.depthTest = false; 
-            selectionBoxHelper.material.linewidth = 3;
+            const sbMaterials = Array.isArray(selectionBoxHelper.material) ? selectionBoxHelper.material : [selectionBoxHelper.material];
+            sbMaterials.forEach((mat) => {
+                if (!mat) return;
+                mat.depthTest = false;
+                mat.depthWrite = false;
+                mat.transparent = true;
+                mat.opacity = 1;
+                mat.linewidth = 3;
+            });
+            selectionBoxHelper.renderOrder = 9999;
+            selectionBoxHelper.frustumCulled = false;
             selectionBoxHelper.visible = false;
             edScene.add(selectionBoxHelper);
 
@@ -6870,6 +6879,8 @@ let currentTransformSpace = 'local';
             edData = { ...edData, objects: Array.from(nextById.values()) };
         };
         const isTeamCreateLocked = () => !!(currentEditGameId && isTeamEditingMode);
+        // Legacy-safe helper retained so stale callers never crash selection flow.
+        const isMeshEditableByCurrentUser = () => true;
         const getLocalSelectionForTeamShortcuts = () => {
             if (!isTeamCreateLocked() || !currentUser) return selectedObjects.slice();
             return selectedObjects.filter((mesh) => {
