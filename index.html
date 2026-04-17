@@ -695,6 +695,7 @@
                 <a onclick="navigate('friends')">Friends</a>
                 <a onclick="navigate('messages')">Messages</a>
                 <a id="nav-chat-logs" onclick="navigate('chat-logs')" style="display:none;">Chat Logs</a>
+                <a id="nav-economy-admin" onclick="navigate('economy-admin')" style="display:none;">Economy Admin</a>
                 <a onclick="navigate('academy')">Academy</a>
                 <a onclick="navigate('jams')">Jams</a>
                 <a onclick="navigate('funlab')">Fun Lab</a>
@@ -1479,6 +1480,22 @@
                 <div id="chatlogs-list" style="max-height:520px; overflow:auto; border:1px solid #d7def2; border-radius:8px; padding:8px; background:#fbfcff;"></div>
             </div>
         </div>
+        <div id="view-economy-admin" class="view">
+            <div class="card" style="max-width:640px; margin:0 auto;">
+                <h2 class="card-title">Economy Admin</h2>
+                <p style="margin-top:-6px; color:#666;">Grant Sculpt Coins to any user. Available to Admin, Nick, and Austin.</p>
+                <div class="form-group">
+                    <label><strong>Target Username</strong></label>
+                    <input id="eco-admin-username" class="form-control mt-10" placeholder="Username">
+                </div>
+                <div class="form-group">
+                    <label><strong>Amount (SC)</strong></label>
+                    <input id="eco-admin-amount" class="form-control mt-10" type="number" min="1" step="1" placeholder="Amount">
+                </div>
+                <button class="btn btn-success mt-10" onclick="grantEconomyCoins()">Grant Coins</button>
+                <p id="eco-admin-result" style="margin-top:10px; font-size:12px; color:#555;"></p>
+            </div>
+        </div>
 
         <!-- Library View -->
         <div id="view-library" class="view">
@@ -1522,7 +1539,10 @@
                     <p style="font-size: 16px; color: #f39c12; font-weight: bold; margin: 0;"><span id="prof-coins">0</span> SC</p>
                     <p style="margin: 0; color:#e74c3c; font-weight:bold;">Play Streak: <span id="prof-streak">0</span></p>
                     <p style="margin: 0;"><strong>Followers:</strong> <span id="prof-followers-count">0</span></p>
+                    <p style="margin: 0;"><strong>Friends:</strong> <span id="prof-friends-count">0</span></p>
                     <p style="margin: 0;"><strong>Games:</strong> <span id="prof-count">0</span></p>
+                    <p style="margin: 0;"><strong>Joined:</strong> <span id="prof-join-date">-</span></p>
+                    <p style="margin: 0;"><strong>Last Seen:</strong> <span id="prof-last-seen">-</span></p>
                 </div>
 
                 <div class="card-title">
@@ -3195,7 +3215,9 @@ const toggleMultiSelect = () => {
 
         const updateNav = () => {
             const modChatLink = document.getElementById('nav-chat-logs');
+            const ecoAdminLink = document.getElementById('nav-economy-admin');
             const canSeeChatLogs = !!currentUser && ['admin','nick','austin'].includes(String(currentUser.username || '').toLowerCase());
+            const canUseEconomyAdmin = !!currentUser && ['admin','nick','austin'].includes(String(currentUser.username || '').toLowerCase());
             const funlabAdmin = document.getElementById('funlab-admin-shell');
             if (currentUser) {
                 document.getElementById('nav-logged-out').style.display = 'none';
@@ -3207,6 +3229,7 @@ checkDailyReward(); // <-- ADDED HERE
                 document.getElementById('nav-logged-in').style.display = 'none';
             }
             if (modChatLink) modChatLink.style.display = canSeeChatLogs ? 'inline-block' : 'none';
+            if (ecoAdminLink) ecoAdminLink.style.display = canUseEconomyAdmin ? 'inline-block' : 'none';
             if (funlabAdmin) funlabAdmin.style.display = canSeeChatLogs ? 'block' : 'none';
         };
 
@@ -3427,6 +3450,12 @@ else if (viewId === 'chat') {
                 if (adminChatLogsInterval) clearInterval(adminChatLogsInterval);
                 adminChatLogsInterval = setInterval(() => refreshAdminChatLogs(false), 2000);
             }
+            else if (viewId === 'economy-admin') {
+                const canUse = currentUser && ['admin','nick','austin'].includes(String(currentUser.username || '').toLowerCase());
+                if (!canUse) return navigate('dashboard');
+                const result = document.getElementById('eco-admin-result');
+                if (result) result.innerText = '';
+            }
 
 else if (viewId === 'groups') {
                 loadGroupsList();
@@ -3622,6 +3651,19 @@ else if (viewId === 'groups') {
                 document.getElementById('setting-password').value = '';
             } catch (e) {}
         };
+        const grantEconomyCoins = async () => {
+            const username = ((document.getElementById('eco-admin-username') || {}).value || '').trim();
+            const amount = parseInt(((document.getElementById('eco-admin-amount') || {}).value || '0'), 10);
+            if (!username) return showModal('Economy Admin', 'Please enter a username.');
+            if (!Number.isFinite(amount) || amount <= 0) return showModal('Economy Admin', 'Amount must be a positive number.');
+            try {
+                const res = await apiCall('/admin/economy/grant-coins', 'POST', { username, amount });
+                const out = document.getElementById('eco-admin-result');
+                if (out) out.innerText = `Granted ${res.added} SC to ${res.username}. New balance: ${res.newBalance} SC.`;
+                showModal('Economy Admin', `Granted ${res.added} SC to ${res.username}.`);
+            } catch (e) {}
+        };
+        window.grantEconomyCoins = grantEconomyCoins;
 
         const adminDeleteAccount = async () => {
             if (!currentUser || String(currentUser.username || '').toLowerCase() !== 'admin') return showModal('Denied', 'Only Admin can do this.');
@@ -5617,9 +5659,13 @@ const dom = edRenderer.domElement;
                 document.getElementById('prof-count').innerText = profile.gamesCreated;
 document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 document.getElementById('prof-followers-count').innerText = profile.followersCount;
+                document.getElementById('prof-friends-count').innerText = profile.friendsCount || 0;
                 document.getElementById('prof-online-dot').className = `status-dot ${profile.isOnline ? 'online' : 'offline'}`;
                 document.getElementById('prof-coins').innerText = localStorage.getItem('sc_' + profile.id) || '0';
                 document.getElementById('prof-bio').innerText = profile.profileBio || '';
+                document.getElementById('prof-join-date').innerText = new Date(profile.createdAt || Date.now()).toLocaleDateString();
+                const ls = Number(profile.lastSeenAt || 0);
+                document.getElementById('prof-last-seen').innerText = profile.isOnline ? 'Online now' : (ls ? new Date(ls).toLocaleString() : 'Unknown');
                 const profileCard = document.querySelector('#view-profile .card');
                 const themeMap = {
                     theme_playsculpt_blue: ['#e9f6ff', '#a8d7ff'],
@@ -5642,10 +5688,13 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                         profileCard.style.background = '#fff';
                         profileCard.style.animation = '';
                     }
+                    profileCard.style.fontFamily = (profile.profileTextStyle && profile.profileTextStyle.font && profile.profileTextStyle.font !== 'default') ? profile.profileTextStyle.font : '';
+                    profileCard.style.color = (profile.profileTextStyle && profile.profileTextStyle.color) ? profile.profileTextStyle.color : '';
                 }
                 const pinnedWrap = document.getElementById('prof-pinned-game');
                 if (pinnedWrap) {
-                    const canShowPinned = profile.equippedProfileCosmetic === 'cosmetic_pinned_game_feature' && profile.profilePinnedGame && profile.profilePinnedGame.enabled && profile.pinnedGameData;
+                    const equippedCosmetics = profile.equippedProfileCosmetics || (profile.equippedProfileCosmetic ? [profile.equippedProfileCosmetic] : []);
+                    const canShowPinned = equippedCosmetics.includes('cosmetic_pinned_game_feature') && profile.profilePinnedGame && profile.profilePinnedGame.enabled && profile.pinnedGameData;
                     if (canShowPinned) {
                         pinnedWrap.style.display = 'block';
                         pinnedWrap.innerHTML = `<div style="font-size:11px; color:#6b7280; margin-bottom:4px;">Pinned Game</div><div style="font-weight:700; color:#1f2937;">${profile.pinnedGameData.title}</div><div style="font-size:12px; color:#4b5563; margin-top:4px;">${profile.profilePinnedGame.description || ''}</div>`;
@@ -5906,8 +5955,11 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
 
         const equipProfileCosmetic = async (itemId, isEquipped) => {
             try {
-                const res = await apiCall('/profile-store/equip-cosmetic', 'POST', { itemId: isEquipped ? null : itemId });
-                if (currentUser) currentUser.equippedProfileCosmetic = res.equippedProfileCosmetic || null;
+                const res = await apiCall('/profile-store/equip-cosmetic', 'POST', { itemId });
+                if (currentUser) {
+                    currentUser.equippedProfileCosmetic = res.equippedProfileCosmetic || null;
+                    currentUser.equippedProfileCosmetics = res.equippedProfileCosmetics || [];
+                }
                 loadInventoryTab();
                 if (currentUser) loadProfile(currentUser.username);
             } catch (e) {}
@@ -5932,6 +5984,16 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             } catch (e) {}
         };
         window.configurePinnedGameProfile = configurePinnedGameProfile;
+
+        const updateProfileTextStyle = async (changes = {}) => {
+            try {
+                const res = await apiCall('/profile-store/text-style', 'POST', changes);
+                if (currentUser) currentUser.profileTextStyle = res.profileTextStyle;
+                if (currentUser) loadProfile(currentUser.username);
+                loadInventoryTab();
+            } catch (e) {}
+        };
+        window.updateProfileTextStyle = updateProfileTextStyle;
 
         const loadInventoryTab = async () => {
             const grid = document.getElementById('inventory-view-grid');
@@ -5963,8 +6025,21 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                 (profileStore.cosmetics || []).filter(c => c.owned).forEach(c => {
                     const card = document.createElement('div');
                     card.className = 'game-card';
-                    const isEq = (me.equippedProfileCosmetic || '') === c.id;
-                    card.innerHTML = `<h3>${c.name}</h3><p style="font-size:12px;">${c.description || ''}</p><button class="btn btn-sm ${isEq ? 'btn-danger' : 'btn-success'}" onclick="equipProfileCosmetic('${c.id}', ${isEq})">${isEq ? 'Unequip' : 'Equip'}</button>${c.id === 'cosmetic_pinned_game_feature' ? `<div style=\"margin-top:8px;\"><button class=\"btn btn-sm btn-info\" onclick=\"configurePinnedGameProfile()\">Configure Pinned Game</button></div>` : ''}`;
+                    const equippedCosmetics = me.equippedProfileCosmetics || (me.equippedProfileCosmetic ? [me.equippedProfileCosmetic] : []);
+                    const isEq = equippedCosmetics.includes(c.id);
+                    const fontSelect = c.id === 'cosmetic_profile_font_chooser' && isEq ? `
+                        <div style="margin-top:8px; text-align:left;">
+                            <label style="font-size:12px;">Font</label>
+                            <select class="form-control" onchange="updateProfileTextStyle({ font: this.value })">
+                                ${['default','Inter','Georgia','Courier New','Trebuchet MS','Verdana','Palatino','Comic Sans MS','Impact'].map(f => `<option value="${f}" ${(profileStore.textStyle && profileStore.textStyle.font === f) ? 'selected' : ''}>${f}</option>`).join('')}
+                            </select>
+                        </div>` : '';
+                    const colorPicker = c.id === 'cosmetic_profile_text_color' && isEq ? `
+                        <div style="margin-top:8px; text-align:left;">
+                            <label style="font-size:12px;">Text Color</label>
+                            <input type="color" class="form-control" value="${(profileStore.textStyle && profileStore.textStyle.color) || '#2c3e50'}" onchange="updateProfileTextStyle({ color: this.value })">
+                        </div>` : '';
+                    card.innerHTML = `<h3>${c.name}</h3><p style="font-size:12px;">${c.description || ''}</p><button class="btn btn-sm ${isEq ? 'btn-danger' : 'btn-success'}" onclick="equipProfileCosmetic('${c.id}', ${isEq})">${isEq ? 'Unequip' : 'Equip'}</button>${c.id === 'cosmetic_pinned_game_feature' && isEq ? `<div style=\"margin-top:8px;\"><button class=\"btn btn-sm btn-info\" onclick=\"configurePinnedGameProfile()\">Configure Pinned Game</button></div>` : ''}${fontSelect}${colorPicker}`;
                     grid.appendChild(card);
                 });
             } catch (e) {

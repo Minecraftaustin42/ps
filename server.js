@@ -70,7 +70,7 @@ if (!db.sounds) db.sounds = [];
 
         db.users.forEach(u => { 
             if (!u.followers) u.followers = []; 
-if (typeof u.createdAt === 'undefined') u.createdAt = 0;
+if (!u.createdAt) u.createdAt = Date.now();
             if (!u.friends) u.friends = [];
             u.friends = (u.friends || []).map(f => (typeof f === 'string' ? { id: f, addedAt: Date.now(), xp: 0, level: 0, rewardTier: 0, lastXpAt: 0 } : { ...f, xp: f.xp || 0, level: f.level || 0, rewardTier: f.rewardTier || 0, lastXpAt: f.lastXpAt || 0 }));
             if (!u.friendRequests) u.friendRequests = [];
@@ -86,7 +86,7 @@ if (!u.toolboxInventory) u.toolboxInventory = [];
             if (typeof u.equippedShirt === 'undefined') u.equippedShirt = null;
             if (typeof u.equippedPants === 'undefined') u.equippedPants = null;
             if (!u.challengeClaims) u.challengeClaims = {};
-            if (!u.challengeProgress) u.challengeProgress = { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 };
+            if (!u.challengeProgress) u.challengeProgress = { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 };
             if (!u.academyProgress) u.academyProgress = {};
             if (!u.academyClaims) u.academyClaims = {};
             if (!u.jamVotes) u.jamVotes = {};
@@ -109,8 +109,11 @@ if (typeof db.lastUserIdNum === 'undefined') {
             if (!u.profileItems) u.profileItems = [];
             if (typeof u.equippedProfileTheme === 'undefined') u.equippedProfileTheme = null;
             if (typeof u.equippedProfileCosmetic === 'undefined') u.equippedProfileCosmetic = null;
+            if (!Array.isArray(u.equippedProfileCosmetics)) u.equippedProfileCosmetics = (u.equippedProfileCosmetic ? [u.equippedProfileCosmetic] : []);
             if (!u.profilePinnedGame) u.profilePinnedGame = { enabled: false, gameId: null, description: '' };
             if (typeof u.profileBio === 'undefined') u.profileBio = '';
+            if (!u.profileTextStyle) u.profileTextStyle = { font: 'default', color: '#2c3e50' };
+            if (typeof u.lastSeenAt === 'undefined') u.lastSeenAt = Date.now();
             if (typeof u.primaryGroupId === 'undefined') u.primaryGroupId = null; 
             if (typeof u.coins === 'undefined') u.coins = 0; // Migrate coins to backend
 if (typeof u.lastSpinDate === 'undefined') u.lastSpinDate = 0; // NEW: Lucky Spin Tracker
@@ -355,20 +358,32 @@ if (typeof onlineUsers[req.userId] === 'object') {
     } else {
         onlineUsers[req.userId] = { lastSeen: Date.now(), location: 'website' };
     }
-
-
-    onlineUsers[req.userId] = Date.now(); 
+    const reqUser = db.users.find(u => u.id === req.userId);
+    if (reqUser) reqUser.lastSeenAt = Date.now();
     next();
 };
 const inviteCooldowns = {}; 
 
 const isUserOnline = (userId) => {
-    return onlineUsers[userId] && (Date.now() - onlineUsers[userId] < 15000);
+    const slot = onlineUsers[userId];
+    if (!slot) return false;
+    if (typeof slot === 'number') return (Date.now() - slot) < 15000;
+    if (typeof slot.lastSeen === 'number') return (Date.now() - slot.lastSeen) < 15000;
+    return false;
+};
+const getUserLastSeenAt = (userId) => {
+    const slot = onlineUsers[userId];
+    if (typeof slot === 'number') return slot;
+    if (slot && typeof slot.lastSeen === 'number') return slot.lastSeen;
+    const user = db.users.find(u => u.id === userId);
+    return (user && user.lastSeenAt) ? user.lastSeenAt : Date.now();
 };
 
 const isPrimaryAdmin = (user) => !!user && String(user.username || '').toLowerCase() === 'admin';
 const CHAT_LOG_ADMIN_USERS = new Set(['admin', 'nick', 'austin']);
+const ECONOMY_ADMIN_USERS = new Set(['admin', 'nick', 'austin']);
 const canViewChatLogs = (user) => !!user && CHAT_LOG_ADMIN_USERS.has(String(user.username || '').toLowerCase());
+const canUseEconomyAdmin = (user) => !!user && ECONOMY_ADMIN_USERS.has(String(user.username || '').toLowerCase());
 
 const appendChatLog = (entry = {}) => {
     if (!db.chatLogs) db.chatLogs = [];
@@ -805,7 +820,9 @@ const PROFILE_THEME_CATALOG = [
     { id: 'theme_gold', name: 'Gold Theme', price: 900, colorA: '#fff4bf', colorB: '#f5b642', shine: true }
 ];
 const PROFILE_COSMETIC_CATALOG = [
-    { id: 'cosmetic_pinned_game_feature', name: 'Pinned Game Creation Profile Feature', price: 850, description: 'Ability to pin a game you made at the top of your profile and write a short description of it' }
+    { id: 'cosmetic_pinned_game_feature', name: 'Pinned Game Creation Profile Feature', price: 850, description: 'Ability to pin a game you made at the top of your profile and write a short description of it' },
+    { id: 'cosmetic_profile_font_chooser', name: 'Custom Profile Text Font Chooser', price: 725, description: 'Unlock dropdown control to set your profile text font to one of 8 fonts.' },
+    { id: 'cosmetic_profile_text_color', name: 'Profile Text Color Chooser', price: 600, description: 'Unlock color-wheel control to set your profile text color.' }
 ];
 const getProfileStoreItem = (itemId) => PROFILE_THEME_CATALOG.concat(PROFILE_COSMETIC_CATALOG).find(i => i.id === itemId);
 
@@ -905,7 +922,7 @@ userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
         reportCrates: [], accurateReports: 0,
-        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileBio: '', primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, equippedProfileCosmetics: [], profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileBio: '', profileTextStyle: { font: 'default', color: '#2c3e50' }, lastSeenAt: Date.now(), primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
 
@@ -1194,7 +1211,7 @@ if (db.moderation && db.moderation.warnings && db.moderation.warnings[user.id]) 
     pendingWarnings = db.moderation.warnings[user.id].filter(w => w.acknowledged === false);
 }
 
-    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: user.profileBio || '', equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' }, coins: user.coins, pendingWarnings });
+    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: user.profileBio || '', equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' }, coins: user.coins, pendingWarnings });
 });
 
 app.post('/api/logout', requireAuth, (req, res) => {
@@ -1253,6 +1270,20 @@ app.delete('/api/admin/users/:username', requireAuth, (req, res) => {
     deleteUserAccountCompletely(target);
     saveDB();
     res.json({ success: true, deletedUser: target.username });
+});
+
+app.post('/api/admin/economy/grant-coins', requireAuth, (req, res) => {
+    const actingUser = db.users.find(u => u.id === req.userId);
+    if (!canUseEconomyAdmin(actingUser)) return res.status(403).json({ error: 'Economy admin only.' });
+    const { username, amount } = req.body || {};
+    const target = db.users.find(u => String(u.username || '').toLowerCase() === String(username || '').toLowerCase());
+    const amt = parseInt(amount, 10);
+    if (!target) return res.status(404).json({ error: 'Target user not found.' });
+    if (!Number.isFinite(amt) || amt <= 0) return res.status(400).json({ error: 'Amount must be a positive integer.' });
+    if (amt > 1000000) return res.status(400).json({ error: 'Amount too large (max 1,000,000).' });
+    target.coins = (target.coins || 0) + amt;
+    saveDB();
+    res.json({ success: true, username: target.username, added: amt, newBalance: target.coins });
 });
 
 app.get('/api/admin/chat-logs', requireAuth, (req, res) => {
@@ -1376,6 +1407,8 @@ app.post('/api/users/:username/message', requireAuth, (req, res) => {
         timestamp: msgTs,
         meta: { toUserId: targetUser.id, toUsername: targetUser.username }
     });
+    ensureChallengeProgressDay(sender);
+    sender.challengeProgress.messagesSent += 1;
 
     saveDB();
     createNotification(targetUser.id, "message", {
@@ -1541,7 +1574,7 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({
         id: user.id, username: user.username, color: user.color, badges: user.badges, coins: user.coins,
         requests, friends: friendsList, recentlyPlayed: recentGames, bookmarkedGames, 
-        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [], equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: user.profileBio || '', profileItems: user.profileItems || [], equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
+        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [], equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: user.profileBio || '', profileItems: user.profileItems || [], equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
         lastSpinDate: user.lastSpinDate,
         loginStreak: user.loginStreak, playStreak: user.playStreak, lastLoginDate: user.lastLoginDate,
         toolboxInventory: user.toolboxInventory,
@@ -1555,7 +1588,12 @@ const CREATOR_CHALLENGE_POOL = [
     { id: 'publish_1', text: 'Publish one map update', reward: 70, check: (p) => p.publishes >= 1 },
     { id: 'visit_city', text: 'Visit Sculpt City once', reward: 25, check: (p) => p.cityVisits >= 1 },
     { id: 'play_2', text: 'Play 2 community games', reward: 35, check: (p) => p.gamesPlayed >= 2 },
-    { id: 'parts_25', text: 'Place 25 parts in Studio', reward: 60, check: (p) => p.partsPlaced >= 25 }
+    { id: 'parts_25', text: 'Place 25 parts in Studio', reward: 60, check: (p) => p.partsPlaced >= 25 },
+    { id: 'like_3_games', text: 'Like 3 games', reward: 45, check: (p) => (p.likesGiven || 0) >= 3 },
+    { id: 'make_friend_1', text: 'Accept 1 friend request', reward: 55, check: (p) => (p.friendsAdded || 0) >= 1 },
+    { id: 'send_2_messages', text: 'Send 2 friend messages', reward: 40, check: (p) => (p.messagesSent || 0) >= 2 },
+    { id: 'group_wall_post', text: 'Post once on a group wall', reward: 35, check: (p) => (p.groupPosts || 0) >= 1 },
+    { id: 'buy_2_items', text: 'Buy 2 shop items', reward: 50, check: (p) => (p.purchases || 0) >= 2 }
 ];
 const getDayKey = () => new Date().toISOString().slice(0, 10);
 const getDailyChallenges = () => {
@@ -1569,9 +1607,14 @@ const getDailyChallenges = () => {
 const ensureChallengeProgressDay = (user) => {
     const dayKey = getDayKey();
     if (!user.challengeProgress || user.challengeProgress.dayKey !== dayKey) {
-        user.challengeProgress = { dayKey, partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0 };
+        user.challengeProgress = { dayKey, partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 };
     }
     if (!user.challengeClaims) user.challengeClaims = {};
+    if (typeof user.challengeProgress.likesGiven !== 'number') user.challengeProgress.likesGiven = 0;
+    if (typeof user.challengeProgress.friendsAdded !== 'number') user.challengeProgress.friendsAdded = 0;
+    if (typeof user.challengeProgress.messagesSent !== 'number') user.challengeProgress.messagesSent = 0;
+    if (typeof user.challengeProgress.groupPosts !== 'number') user.challengeProgress.groupPosts = 0;
+    if (typeof user.challengeProgress.purchases !== 'number') user.challengeProgress.purchases = 0;
 };
 
 app.get('/api/challenges/daily', requireAuth, (req, res) => {
@@ -1598,6 +1641,11 @@ app.post('/api/challenges/progress', requireAuth, (req, res) => {
     if (event === 'publishes') user.challengeProgress.publishes += amt;
     if (event === 'cityVisits') user.challengeProgress.cityVisits += amt;
     if (event === 'gamesPlayed') user.challengeProgress.gamesPlayed += amt;
+    if (event === 'likesGiven') user.challengeProgress.likesGiven += amt;
+    if (event === 'friendsAdded') user.challengeProgress.friendsAdded += amt;
+    if (event === 'messagesSent') user.challengeProgress.messagesSent += amt;
+    if (event === 'groupPosts') user.challengeProgress.groupPosts += amt;
+    if (event === 'purchases') user.challengeProgress.purchases += amt;
     saveDB();
     res.json({ success: true, progress: user.challengeProgress });
 });
@@ -2009,13 +2057,19 @@ app.get('/api/users/:username', (req, res) => {
     res.json({
         id: user.id, username: user.username, isOnline: isUserOnline(user.id), color: user.color, badges: user.badges,
         followersCount: user.followers.length, isFollowing, friendStatus, friends: friendsDetails, userIdNum: user.userIdNum,
+        playStreak: user.playStreak || 0,
         gamesCreated: userGames.length,
         games: userGames.map(g => ({ id: g.id, title: g.title, authorName: g.authorName, genre: g.genre, likes: g.likes.length, plays: g.plays, groupId: g.groupId })),
         likedGames: likedGames.map(g => ({ id: g.id, title: g.title, authorName: g.authorName, genre: g.genre, likes: g.likes.length, plays: g.plays, groupId: g.groupId })),
         inventory: inventoryItems,
         profileBio: user.profileBio || '',
+        createdAt: user.createdAt || Date.now(),
+        friendsCount: (user.friends || []).length,
+        lastSeenAt: getUserLastSeenAt(user.id),
         equippedProfileTheme: user.equippedProfileTheme || null,
         equippedProfileCosmetic: user.equippedProfileCosmetic || null,
+        equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []),
+        profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' },
         profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
         pinnedGameData: pinnedGame ? { id: pinnedGame.id, title: pinnedGame.title } : null,
         equipped: user.equipped,
@@ -2047,6 +2101,8 @@ app.post('/api/users/:username/accept-friend', requireAuth, (req, res) => {
         reqUser.friendRequests = reqUser.friendRequests.filter(id => id !== targetUser.id);
         if(!reqUser.friends.find(f => f.id === targetUser.id)) reqUser.friends.push({ id: targetUser.id, addedAt: Date.now() });
         if(!targetUser.friends.find(f => f.id === reqUser.id)) targetUser.friends.push({ id: reqUser.id, addedAt: Date.now() });
+        ensureChallengeProgressDay(reqUser);
+        reqUser.challengeProgress.friendsAdded += 1;
         saveDB();
     }
     res.json({ message: 'Friend request accepted.' });
@@ -2548,6 +2604,8 @@ app.post('/api/groups/:id/posts', requireAuth, (req, res) => {
     group.posts.unshift({
         id: crypto.randomUUID(), authorName: user.username, authorId: user.id, text: cleanText, timestamp: ts
     });
+    ensureChallengeProgressDay(user);
+    user.challengeProgress.groupPosts += 1;
     appendChatLog({
         channel: 'group_wall',
         sourceType: 'group',
@@ -2781,10 +2839,12 @@ app.get('/api/shop/items', (req, res) => {
 app.get('/api/profile-store', requireAuth, (req, res) => {
     const user = db.users.find(u => u.id === req.userId);
     const owned = new Set(user.profileItems || []);
+    const equippedSet = new Set(user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []));
     const games = (db.games || []).filter(g => g.authorId === user.id).map(g => ({ id: g.id, title: g.title }));
     res.json({
         themes: PROFILE_THEME_CATALOG.map(t => ({ ...t, owned: owned.has(t.id), equipped: user.equippedProfileTheme === t.id })),
-        cosmetics: PROFILE_COSMETIC_CATALOG.map(c => ({ ...c, owned: owned.has(c.id), equipped: user.equippedProfileCosmetic === c.id })),
+        cosmetics: PROFILE_COSMETIC_CATALOG.map(c => ({ ...c, owned: owned.has(c.id), equipped: equippedSet.has(c.id) })),
+        textStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' },
         pinned: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
         games
     });
@@ -2822,24 +2882,32 @@ app.post('/api/profile-store/equip-theme', requireAuth, (req, res) => {
 app.post('/api/profile-store/equip-cosmetic', requireAuth, (req, res) => {
     const user = db.users.find(u => u.id === req.userId);
     const { itemId } = req.body || {};
-    if (!itemId) {
-        user.equippedProfileCosmetic = null;
-        if (!user.profilePinnedGame) user.profilePinnedGame = { enabled: false, gameId: null, description: '' };
-        user.profilePinnedGame.enabled = false;
-        saveDB();
-        return res.json({ success: true, equippedProfileCosmetic: null });
-    }
+    if (!Array.isArray(user.equippedProfileCosmetics)) user.equippedProfileCosmetics = (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []);
+    if (!itemId) return res.status(400).json({ error: 'itemId required.' });
     const item = PROFILE_COSMETIC_CATALOG.find(c => c.id === itemId);
     if (!item) return res.status(404).json({ error: 'Cosmetic not found.' });
     if (!(user.profileItems || []).includes(item.id)) return res.status(403).json({ error: 'Cosmetic not owned.' });
-    user.equippedProfileCosmetic = item.id;
+    const alreadyEquipped = user.equippedProfileCosmetics.includes(item.id);
+    if (alreadyEquipped) {
+        user.equippedProfileCosmetics = user.equippedProfileCosmetics.filter(id => id !== item.id);
+        if (item.id === 'cosmetic_pinned_game_feature') {
+            if (!user.profilePinnedGame) user.profilePinnedGame = { enabled: false, gameId: null, description: '' };
+            user.profilePinnedGame.enabled = false;
+        }
+        if (item.id === 'cosmetic_profile_font_chooser' && user.profileTextStyle) user.profileTextStyle.font = 'default';
+        if (item.id === 'cosmetic_profile_text_color' && user.profileTextStyle) user.profileTextStyle.color = '#2c3e50';
+    } else {
+        user.equippedProfileCosmetics.push(item.id);
+    }
+    user.equippedProfileCosmetic = user.equippedProfileCosmetics[0] || null;
     saveDB();
-    res.json({ success: true, equippedProfileCosmetic: user.equippedProfileCosmetic });
+    res.json({ success: true, equippedProfileCosmetic: user.equippedProfileCosmetic, equippedProfileCosmetics: user.equippedProfileCosmetics });
 });
 
 app.post('/api/profile-store/pinned-game', requireAuth, (req, res) => {
     const user = db.users.find(u => u.id === req.userId);
-    if (user.equippedProfileCosmetic !== 'cosmetic_pinned_game_feature') return res.status(403).json({ error: 'Pinned Game cosmetic must be equipped.' });
+    const equipped = new Set(user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []));
+    if (!equipped.has('cosmetic_pinned_game_feature')) return res.status(403).json({ error: 'Pinned Game cosmetic must be equipped.' });
     const { gameId, description, enabled } = req.body || {};
     if (!user.profilePinnedGame) user.profilePinnedGame = { enabled: false, gameId: null, description: '' };
     const desc = String(description || '').slice(0, 180);
@@ -2853,6 +2921,27 @@ app.post('/api/profile-store/pinned-game', requireAuth, (req, res) => {
     user.profilePinnedGame = { enabled: true, gameId: game.id, description: desc };
     saveDB();
     res.json({ success: true, profilePinnedGame: user.profilePinnedGame });
+});
+
+app.post('/api/profile-store/text-style', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const equipped = new Set(user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []));
+    const { font, color } = req.body || {};
+    const FONT_OPTIONS = ['default', 'Inter', 'Georgia', 'Courier New', 'Trebuchet MS', 'Verdana', 'Palatino', 'Comic Sans MS', 'Impact'];
+    if (!user.profileTextStyle) user.profileTextStyle = { font: 'default', color: '#2c3e50' };
+    if (font !== undefined) {
+        if (!equipped.has('cosmetic_profile_font_chooser')) return res.status(403).json({ error: 'Font chooser cosmetic must be equipped.' });
+        const cleanFont = FONT_OPTIONS.includes(String(font)) ? String(font) : 'default';
+        user.profileTextStyle.font = cleanFont;
+    }
+    if (color !== undefined) {
+        if (!equipped.has('cosmetic_profile_text_color')) return res.status(403).json({ error: 'Text color cosmetic must be equipped.' });
+        const colorStr = String(color || '').trim();
+        if (!/^#[0-9a-fA-F]{6}$/.test(colorStr)) return res.status(400).json({ error: 'Invalid color format.' });
+        user.profileTextStyle.color = colorStr;
+    }
+    saveDB();
+    res.json({ success: true, profileTextStyle: user.profileTextStyle });
 });
 
 app.post('/api/shop/items', requireAuth, (req, res) => {
@@ -2893,6 +2982,8 @@ app.post('/api/shop/buy/:id', requireAuth, (req, res) => {
     
     user.coins -= item.price;
     user.inventory.push(item.id);
+    ensureChallengeProgressDay(user);
+    user.challengeProgress.purchases += 1;
     const author = db.users.find(u => u.id === item.authorId);
     if (author) author.coins = (author.coins || 0) + item.price;
     saveDB();
@@ -2947,6 +3038,8 @@ app.post('/api/clothing/buy/:id', requireAuth, (req, res) => {
     user.coins -= item.price;
     if (!Array.isArray(user.clothingInventory)) user.clothingInventory = [];
     user.clothingInventory.push(item.id);
+    ensureChallengeProgressDay(user);
+    user.challengeProgress.purchases += 1;
     const author = db.users.find(u => u.id === item.authorId);
     if (author) author.coins = (author.coins || 0) + item.price;
     saveDB();
@@ -3028,8 +3121,10 @@ app.post('/api/games/:id/publish', requireAuth, (req, res) => {
     if (!game.versions) game.versions = [];
     game.versions.push({ versionId: game.versions.length + 1, timestamp: Date.now(), gameData: JSON.parse(JSON.stringify(safeGameData)) });
     const author = db.users.find(u => u.id === req.userId);
-    ensureChallengeProgressDay(author);
-    if (author) author.challengeProgress.publishes += 1;
+    if (author) {
+        ensureChallengeProgressDay(author);
+        author.challengeProgress.publishes += 1;
+    }
 
     saveDB();
     res.json({ success: true, versionId: game.versions.length });
@@ -3366,11 +3461,14 @@ app.post('/api/ping', requireAuth, (req, res) => {
 
     // Count active users and kick out AFK/Disconnected users (no ping for 30 seconds)
     for (let uid in onlineUsers) {
-        if (now - onlineUsers[uid].lastSeen > 30000) {
+        const slot = onlineUsers[uid];
+        const lastSeen = typeof slot === 'number' ? slot : (slot && typeof slot.lastSeen === 'number' ? slot.lastSeen : 0);
+        const location = (slot && typeof slot === 'object' && slot.location) ? slot.location : 'website';
+        if (now - lastSeen > 30000) {
             delete onlineUsers[uid];
         } else {
             totalOnline++;
-            if (onlineUsers[uid].location === 'city') cityOnline++;
+            if (location === 'city') cityOnline++;
         }
     }
 
@@ -3586,6 +3684,11 @@ app.post('/api/games/:id/like', requireAuth, (req, res) => {
     } else {
         game.likes.push(req.userId);
         isLiked = true;
+        const user = db.users.find(u => u.id === req.userId);
+        if (user) {
+            ensureChallengeProgressDay(user);
+            user.challengeProgress.likesGiven += 1;
+        }
         awardBadge(req.userId, 'Critic');
     }
     saveDB();
