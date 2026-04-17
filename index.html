@@ -6863,21 +6863,13 @@ let currentTransformSpace = 'local';
             edData = { ...edData, objects: Array.from(nextById.values()) };
         };
         const isTeamCreateLocked = () => !!(currentEditGameId && isTeamEditingMode);
-        const isObjectOwnedByCurrentUser = (obj) => !!(obj && currentUser && obj.ownerId && obj.ownerId === currentUser.userId);
-        const isMeshEditableByCurrentUser = (mesh) => {
-            if (!mesh) return false;
-            if (!isTeamCreateLocked()) return true;
-            if (mesh.userData?.isSpawn) return false;
-            const obj = (edData.objects || []).find(o => o.id === mesh.userData?.id);
-            return isObjectOwnedByCurrentUser(obj);
-        };
-        const getEditableSelectedMeshes = (showWarning = false) => {
-            if (!isTeamCreateLocked()) return selectedObjects.slice();
-            const editable = selectedObjects.filter(m => isMeshEditableByCurrentUser(m));
-            if (showWarning && editable.length !== selectedObjects.length) {
-                showModal('Team Safety', 'In team create, you can only edit parts you own. Shared parts are view-only.');
-            }
-            return editable;
+        const getOwnedSelectionForTeamShortcuts = () => {
+            if (!isTeamCreateLocked() || !currentUser) return selectedObjects.slice();
+            return selectedObjects.filter((mesh) => {
+                if (!mesh || mesh.userData?.isSpawn) return false;
+                const obj = (edData.objects || []).find(o => o.id === mesh.userData?.id);
+                return !!(obj && obj.ownerId && obj.ownerId === currentUser.userId);
+            });
         };
 
         const undo = () => {
@@ -8806,18 +8798,31 @@ playerObj = {
             if (tag === 'INPUT' || tag === 'TEXTAREA') return; 
 
             if (document.getElementById('view-create').classList.contains('active')) {
-                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); duplicateSelectedParts(); }
+                if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+                    e.preventDefault();
+                    if (isTeamCreateLocked()) {
+                        const previousSelection = selectedObjects.slice();
+                        selectedObjects = getOwnedSelectionForTeamShortcuts();
+                        duplicateSelectedParts();
+                        if (selectedObjects.length === 0) selectedObjects = previousSelection;
+                    } else duplicateSelectedParts();
+                }
                 else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
                     e.preventDefault();
-                    if (isTeamCreateLocked()) showModal('Team Safety', 'Undo is disabled in Team Create to prevent accidental conflicts.');
-                    else undo();
+                    undo();
                 }
                 else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
                     e.preventDefault();
-                    if (isTeamCreateLocked()) showModal('Team Safety', 'Redo is disabled in Team Create to prevent accidental conflicts.');
-                    else redo();
+                    redo();
                 }
-                else if (e.key === 'Delete' || e.key === 'Backspace') { deleteSelectedParts(); }
+                else if (e.key === 'Delete' || e.key === 'Backspace') {
+                    if (isTeamCreateLocked()) {
+                        const previousSelection = selectedObjects.slice();
+                        selectedObjects = getOwnedSelectionForTeamShortcuts();
+                        deleteSelectedParts();
+                        if (selectedObjects.length === 0) selectedObjects = previousSelection;
+                    } else deleteSelectedParts();
+                }
                 else if (e.key.toLowerCase() === 'f') {
                     e.preventDefault();
                     showStudioQuickInsertMenuAt(studioPointerState.lastX || window.innerWidth / 2, studioPointerState.lastY || window.innerHeight / 2);
