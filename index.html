@@ -128,6 +128,15 @@
         .badge-creator { background: #f39c12; }
         .badge-critic { background: #e84393; }
         .badge-genre { background: #34495e; }
+        .profile-role-tag { display:inline-block; margin-left:8px; padding:4px 10px; border-radius:14px; font-size:11px; font-weight:800; color:#fff; background:linear-gradient(135deg,#2563eb,#4f46e5); cursor:pointer; border:1px solid rgba(255,255,255,0.25); box-shadow:0 3px 10px rgba(37,99,235,0.35); }
+        .profile-world-btn { margin-top: 14px; background: linear-gradient(135deg, #0ea5e9, #4338ca); border-bottom-color:#312e81; font-size:15px; padding:12px 18px; box-shadow:0 8px 18px rgba(67,56,202,0.28); }
+        .profile-world-loader { position:fixed; inset:0; z-index:100001; display:none; align-items:center; justify-content:center; flex-direction:column; color:#fff; background: radial-gradient(circle at 20% 20%, #7dd3fc 0%, #2563eb 45%, #1e1b4b 100%); overflow:hidden; }
+        .profile-world-loader .ring { width:90px; height:90px; border-radius:50%; border:8px solid rgba(255,255,255,0.2); border-top-color:#fff; animation:spin 1s linear infinite; margin-bottom:14px; }
+        .profile-world-loader .cloud { position:absolute; border-radius: 999px; background:rgba(255,255,255,0.25); filter:blur(1px); animation:drift 12s linear infinite; }
+        @keyframes drift { from { transform:translateX(-20vw);} to { transform:translateX(120vw);} }
+        .profile-world-overlay { position: fixed; inset: 0; z-index: 100000; display:none; background:#000; }
+        .profile-world-ui { position:absolute; top:14px; left:14px; z-index:5; display:flex; flex-direction:column; gap:8px; }
+        .portal-hint { background:rgba(17,24,39,0.8); color:#fff; padding:8px 10px; border-radius:8px; font-size:12px; }
 
         /* 3D Canvas Container */
         .canvas-container { background: #34495e; padding: 10px; border-radius: 4px; display: inline-block; position: relative; width: 100%; box-sizing: border-box; }
@@ -456,6 +465,20 @@
             <div id="ps-progress-fill"></div>
         </div>
     </div>
+<div id="profile-world-loading" class="profile-world-loader">
+    <div class="cloud" style="width:140px; height:52px; top:18%; left:-12vw;"></div>
+    <div class="cloud" style="width:120px; height:40px; top:58%; left:-30vw; animation-delay:2s;"></div>
+    <div class="cloud" style="width:180px; height:60px; top:38%; left:-50vw; animation-delay:5s;"></div>
+    <div class="ring"></div>
+    <h2 style="margin:0;">Loading Profile World...</h2>
+    <p style="margin-top:8px; opacity:0.9;">Raising floating island and calibrating portals</p>
+</div>
+<div id="profile-world-overlay" class="profile-world-overlay">
+    <div class="profile-world-ui">
+        <button class="btn btn-danger btn-sm" onclick="closeProfileWorld()">Exit Profile World</button>
+        <div class="portal-hint">Click glowing portals to join games.</div>
+    </div>
+</div>
 
 
 <div id="warning-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:999999; color:white; justify-content:center; align-items:center; flex-direction:column; text-align:center;">
@@ -1536,7 +1559,6 @@
                 <p id="prof-bio" style="margin:10px 0 0 0; color:#555; white-space:pre-wrap;"></p>
 
                 <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
-                    <p style="font-size: 16px; color: #f39c12; font-weight: bold; margin: 0;"><span id="prof-coins">0</span> SC</p>
                     <p style="margin: 0; color:#e74c3c; font-weight:bold;">Play Streak: <span id="prof-streak">0</span></p>
                     <p style="margin: 0;"><strong>Followers:</strong> <span id="prof-followers-count">0</span></p>
                     <p style="margin: 0;"><strong>Friends:</strong> <span id="prof-friends-count">0</span></p>
@@ -1549,7 +1571,7 @@
                     <h2 style="margin: 0;">
                         <span id="prof-online-dot" class="status-dot offline"></span>
                         Profile: <span id="prof-username"></span>
-<span style="color: #7f8c8d; font-size: 14px; font-weight: normal;">(ID: #<span id="prof-userid"></span>)</span>
+<span style="color: #7f8c8d; font-size: 14px; font-weight: normal;">(ID: #<span id="prof-userid"></span>)</span><span id="prof-role-tag-wrap"></span>
                     </h2>
                     <div style="display: flex; gap: 10px;">
                         <button id="prof-copy-btn" class="btn btn-sm" style="background-color: #95a5a6; border-bottom-color: #7f8c8d;" onclick="copyProfileLink()">Copy Link</button>
@@ -1560,19 +1582,8 @@
                     </div>
                 </div>
 
-                <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
-                    <p style="font-size: 16px; color: #f39c12; font-weight: bold; margin: 0;"><span id="prof-coins">0</span> SC</p>
-                    <p style="margin: 0;"><strong>Followers:</strong> <span id="prof-followers-count">0</span></p>
-                    <p style="margin: 0;"><strong>Games:</strong> <span id="prof-count">0</span></p>
-                </div>
-
                 <div id="prof-badges" style="margin-top: 15px;"></div>
-
-                <div id="prof-avatar-section" style="display:none; align-items: center; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
-                    <label><strong>Avatar Color:</strong></label>
-                    <input type="color" id="prof-color-picker" style="cursor:pointer;" onchange="updateAvatarColor(this.value)">
-                    <span style="font-size: 12px; color: #7f8c8d;">(This is how you appear in games)</span>
-                </div>
+                <button id="profile-world-enter-btn" class="btn profile-world-btn" style="display:none;" onclick="enterProfileWorld()">Enter Profile World</button>
 
                 <div class="tabs mt-20">
                     <div class="tab active" onclick="switchProfileTab('created')">Created</div>
@@ -5661,11 +5672,13 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 document.getElementById('prof-followers-count').innerText = profile.followersCount;
                 document.getElementById('prof-friends-count').innerText = profile.friendsCount || 0;
                 document.getElementById('prof-online-dot').className = `status-dot ${profile.isOnline ? 'online' : 'offline'}`;
-                document.getElementById('prof-coins').innerText = localStorage.getItem('sc_' + profile.id) || '0';
                 document.getElementById('prof-bio').innerText = profile.profileBio || '';
                 document.getElementById('prof-join-date').innerText = new Date(profile.createdAt || Date.now()).toLocaleDateString();
                 const ls = Number(profile.lastSeenAt || 0);
                 document.getElementById('prof-last-seen').innerText = profile.isOnline ? 'Online now' : (ls ? new Date(ls).toLocaleString() : 'Unknown');
+                const roleWrap = document.getElementById('prof-role-tag-wrap');
+                const roleTag = getSpecialRoleTag(profile.username);
+                roleWrap.innerHTML = roleTag ? `<span class="profile-role-tag" onclick="openRoleTagModal('${profile.username}')">${roleTag.label}</span>` : '';
                 const profileCard = document.querySelector('#view-profile .card');
                 const themeMap = {
                     theme_playsculpt_blue: ['#e9f6ff', '#a8d7ff'],
@@ -5700,7 +5713,7 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                         pinnedWrap.innerHTML = `<div style="font-size:11px; color:#6b7280; margin-bottom:4px;">Pinned Game</div><div style="font-weight:700; color:#1f2937;">${profile.pinnedGameData.title}</div><div style="font-size:12px; color:#4b5563; margin-top:4px;">${profile.profilePinnedGame.description || ''}</div>`;
                     } else pinnedWrap.style.display = 'none';
                 }
-document.getElementById('prof-userid').innerText = currentProfileData.userIdNum || '?';
+                document.getElementById('prof-userid').innerText = currentProfileData.userIdNum || '?';
 
                 const banner = document.getElementById('prof-primary-group-banner');
                 if (profile.primaryGroup) {
@@ -5725,10 +5738,8 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                     badgeContainer.innerHTML = `<span style="font-size:12px; color:#7f8c8d;">No badges earned yet.</span>`;
                 }
 
-                const avatarSect = document.getElementById('prof-avatar-section');
-                if (currentUser && currentUser.username === profile.username) {
-                    avatarSect.style.display = 'flex'; document.getElementById('prof-color-picker').value = profile.color || '#e74c3c';
-                } else { avatarSect.style.display = 'none'; }
+                const pwBtn = document.getElementById('profile-world-enter-btn');
+                if (pwBtn) pwBtn.style.display = profile.profileWorld && profile.profileWorld.equipped ? 'inline-flex' : 'none';
 
                 const followBtn = document.getElementById('prof-follow-btn'), friendBtn = document.getElementById('prof-friend-btn'), msgBtn = document.getElementById('prof-message-btn'), reportBtn = document.getElementById('prof-report-btn');
                 if (currentUser && currentUser.username.toLowerCase() !== profile.username.toLowerCase()) {
@@ -5795,6 +5806,126 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
 
                 switchProfileTab(currentProfTab);
             } catch (e) { navigate('library'); }
+        };
+
+        let profileWorldScene = null, profileWorldCamera = null, profileWorldRenderer = null, profileWorldAnim = null, profileWorldPortalMeshes = [], profileWorldResizeHandler = null;
+        const closeProfileWorld = () => {
+            const overlay = document.getElementById('profile-world-overlay');
+            if (overlay) overlay.style.display = 'none';
+            if (profileWorldAnim) cancelAnimationFrame(profileWorldAnim);
+            profileWorldAnim = null;
+            profileWorldPortalMeshes = [];
+            if (profileWorldRenderer) {
+                try { profileWorldRenderer.dispose(); } catch (e) {}
+                if (profileWorldRenderer.domElement && profileWorldRenderer.domElement.parentElement) profileWorldRenderer.domElement.remove();
+            }
+            if (profileWorldResizeHandler) window.removeEventListener('resize', profileWorldResizeHandler);
+            profileWorldResizeHandler = null;
+            profileWorldRenderer = null; profileWorldScene = null; profileWorldCamera = null;
+        };
+        window.closeProfileWorld = closeProfileWorld;
+        const enterProfileWorld = async () => {
+            if (!currentProfileData || !currentProfileData.username) return;
+            const loader = document.getElementById('profile-world-loading');
+            const overlay = document.getElementById('profile-world-overlay');
+            loader.style.display = 'flex';
+            try {
+                const worldData = await apiCall(`/profile-world/${encodeURIComponent(currentProfileData.username)}`);
+                setTimeout(() => {
+                    loader.style.display = 'none';
+                    overlay.style.display = 'block';
+                    buildProfileWorldScene(worldData);
+                    if (worldData.greeting && String(worldData.greeting).trim()) {
+                        showModal(`${worldData.ownerName}'s Greeting`, String(worldData.greeting).slice(0, 300));
+                    }
+                }, 900);
+            } catch (e) {
+                loader.style.display = 'none';
+                showModal('Profile World', 'Unable to load profile world.');
+            }
+        };
+        window.enterProfileWorld = enterProfileWorld;
+        const buildProfileWorldScene = (worldData) => {
+            closeProfileWorld();
+            const overlay = document.getElementById('profile-world-overlay');
+            overlay.style.display = 'block';
+            const width = window.innerWidth, height = window.innerHeight;
+            profileWorldScene = new THREE.Scene();
+            profileWorldScene.background = new THREE.Color(0x87ceeb);
+            profileWorldCamera = new THREE.PerspectiveCamera(60, width / height, 0.1, 2000);
+            profileWorldCamera.position.set(0, 22, 36);
+            profileWorldRenderer = new THREE.WebGLRenderer({ antialias: true });
+            profileWorldRenderer.setSize(width, height);
+            profileWorldRenderer.shadowMap.enabled = true;
+            overlay.appendChild(profileWorldRenderer.domElement);
+            const controls = new THREE.OrbitControls(profileWorldCamera, profileWorldRenderer.domElement);
+            controls.target.set(0, 5, 0);
+            controls.enablePan = false;
+            const hemi = new THREE.HemisphereLight(0xe0f2fe, 0x355e3b, 1.0); profileWorldScene.add(hemi);
+            const sun = new THREE.DirectionalLight(0xfff7cc, 1.3); sun.position.set(40, 70, 20); sun.castShadow = true; profileWorldScene.add(sun);
+            const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(5, 24, 24), new THREE.MeshBasicMaterial({ color: 0xffeb7a }));
+            sunMesh.position.set(90, 70, -120); profileWorldScene.add(sunMesh);
+            const island = new THREE.Mesh(new THREE.CylinderGeometry(20, 30, 8, 30), new THREE.MeshStandardMaterial({ color: 0x5b7f36 }));
+            island.position.y = 0; island.castShadow = true; island.receiveShadow = true; profileWorldScene.add(island);
+            const top = new THREE.Mesh(new THREE.CylinderGeometry(22, 20, 2, 30), new THREE.MeshStandardMaterial({ color: 0x7ccf63 }));
+            top.position.y = 5; top.receiveShadow = true; profileWorldScene.add(top);
+            for (let i = 0; i < 14; i++) {
+                const cloud = new THREE.Mesh(new THREE.SphereGeometry(2 + Math.random() * 2.8, 16, 16), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+                cloud.position.set((Math.random() - 0.5) * 140, 22 + Math.random() * 30, (Math.random() - 0.5) * 140);
+                cloud.userData.cloudDrift = 0.01 + Math.random() * 0.03;
+                profileWorldScene.add(cloud);
+            }
+            profileWorldPortalMeshes = [];
+            (worldData.games || []).slice(0, 3).forEach((g, idx) => {
+                const angle = (idx / 3) * Math.PI * 2;
+                const x = Math.cos(angle) * 10, z = Math.sin(angle) * 10;
+                const frame = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.35, 16, 48), new THREE.MeshStandardMaterial({ color: 0x4338ca, emissive: 0x1d4ed8, emissiveIntensity: 0.6 }));
+                frame.position.set(x, 7, z); frame.rotation.y = -angle;
+                profileWorldScene.add(frame);
+                const plate = new THREE.Mesh(new THREE.BoxGeometry(3.8, 0.8, 3.8), new THREE.MeshStandardMaterial({ color: 0x334155 }));
+                plate.position.set(x, 5.4, z); profileWorldScene.add(plate);
+                frame.userData.gameId = g.id;
+                profileWorldPortalMeshes.push(frame);
+            });
+            (worldData.assets || []).slice(0, 4).forEach((a, idx) => {
+                const x = -14 + idx * 9;
+                const stand = new THREE.Mesh(new THREE.BoxGeometry(3.5, 2 + ((idx % 2) * 1.8), 3.5), new THREE.MeshStandardMaterial({ color: 0x64748b }));
+                stand.position.set(x, 6.5, -8); stand.castShadow = true; profileWorldScene.add(stand);
+            });
+            const raycaster = new THREE.Raycaster();
+            const mouse = new THREE.Vector2();
+            profileWorldRenderer.domElement.onclick = (ev) => {
+                const rect = profileWorldRenderer.domElement.getBoundingClientRect();
+                mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+                raycaster.setFromCamera(mouse, profileWorldCamera);
+                const hits = raycaster.intersectObjects(profileWorldPortalMeshes, false);
+                if (hits.length && hits[0].object.userData.gameId) {
+                    const gid = hits[0].object.userData.gameId;
+                    closeProfileWorld();
+                    loadGame(gid);
+                }
+            };
+            const animate = () => {
+                profileWorldAnim = requestAnimationFrame(animate);
+                profileWorldScene.children.forEach(c => {
+                    if (c.userData && c.userData.cloudDrift) {
+                        c.position.x += c.userData.cloudDrift;
+                        if (c.position.x > 80) c.position.x = -80;
+                    }
+                });
+                profileWorldPortalMeshes.forEach((p, i) => p.rotation.z += 0.01 + i * 0.002);
+                controls.update();
+                profileWorldRenderer.render(profileWorldScene, profileWorldCamera);
+            };
+            animate();
+            profileWorldResizeHandler = () => {
+                if (!profileWorldRenderer || !profileWorldCamera) return;
+                profileWorldCamera.aspect = window.innerWidth / window.innerHeight;
+                profileWorldCamera.updateProjectionMatrix();
+                profileWorldRenderer.setSize(window.innerWidth, window.innerHeight);
+            };
+            window.addEventListener('resize', profileWorldResizeHandler);
         };
 
         const toggleFollow = async () => {
@@ -5984,6 +6115,28 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             } catch (e) {}
         };
         window.configurePinnedGameProfile = configurePinnedGameProfile;
+        const configureProfileWorld = async () => {
+            try {
+                const data = await apiCall('/profile-world/me');
+                const gameChoices = (data.ownedGames || []).map(g => `${g.id} — ${g.title}`).join('\n') || 'No owned games.';
+                const assetChoices = (data.ownedAssets || []).map(a => `${a.id} — ${a.name}`).join('\n') || 'No owned toolbox assets.';
+                showModal('Profile Worlds Setup', `Enter up to 3 game IDs (comma separated):\n${gameChoices}`, 'Next', (gameInput) => {
+                    showModal('Toolbox Showcase', `Enter up to 4 toolbox item IDs (comma separated):\n${assetChoices}`, 'Next', (assetInput) => {
+                        showModal('Greeting Popup (Optional)', 'Set greeting text shown to visitors (max 300 chars).', 'Save', async (greetingText) => {
+                            try {
+                                await apiCall('/profile-world/config', 'POST', {
+                                    gameIds: String(gameInput || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 3),
+                                    assetIds: String(assetInput || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 4),
+                                    greeting: String(greetingText || '').slice(0, 300)
+                                });
+                                showModal('Saved', 'Profile World configuration updated.');
+                            } catch (e) {}
+                        }, true, true);
+                    }, true, true);
+                }, true, true);
+            } catch (e) {}
+        };
+        window.configureProfileWorld = configureProfileWorld;
 
         const updateProfileTextStyle = async (changes = {}) => {
             try {
@@ -6039,7 +6192,7 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                             <label style="font-size:12px;">Text Color</label>
                             <input type="color" class="form-control" value="${(profileStore.textStyle && profileStore.textStyle.color) || '#2c3e50'}" onchange="updateProfileTextStyle({ color: this.value })">
                         </div>` : '';
-                    card.innerHTML = `<h3>${c.name}</h3><p style="font-size:12px;">${c.description || ''}</p><button class="btn btn-sm ${isEq ? 'btn-danger' : 'btn-success'}" onclick="equipProfileCosmetic('${c.id}', ${isEq})">${isEq ? 'Unequip' : 'Equip'}</button>${c.id === 'cosmetic_pinned_game_feature' && isEq ? `<div style=\"margin-top:8px;\"><button class=\"btn btn-sm btn-info\" onclick=\"configurePinnedGameProfile()\">Configure Pinned Game</button></div>` : ''}${fontSelect}${colorPicker}`;
+                    card.innerHTML = `<h3>${c.name}</h3><p style="font-size:12px;">${c.description || ''}</p><button class="btn btn-sm ${isEq ? 'btn-danger' : 'btn-success'}" onclick="equipProfileCosmetic('${c.id}', ${isEq})">${isEq ? 'Unequip' : 'Equip'}</button>${c.id === 'cosmetic_pinned_game_feature' && isEq ? `<div style=\"margin-top:8px;\"><button class=\"btn btn-sm btn-info\" onclick=\"configurePinnedGameProfile()\">Configure Pinned Game</button></div>` : ''}${c.id === 'cosmetic_profile_worlds' && isEq ? `<div style=\"margin-top:8px;\"><button class=\"btn btn-sm btn-info\" onclick=\"configureProfileWorld()\">Configure Profile World</button></div>` : ''}${fontSelect}${colorPicker}`;
                     grid.appendChild(card);
                 });
             } catch (e) {
@@ -12644,6 +12797,17 @@ const groupAsAircraft = () => {
         let adminChatLogsInterval = null;
         let adminChatLogsLastTs = 0;
         let adminChatLogsCache = [];
+        const SPECIAL_USER_ROLES = {
+            austin: { label: 'Owner', message: 'Owner of Playsculpt' },
+            nick: { label: 'Platform Director', message: 'Platform Director of Playsculpt: Co - Founder' }
+        };
+        const getSpecialRoleTag = (username = '') => SPECIAL_USER_ROLES[String(username || '').trim().toLowerCase()] || null;
+        const openRoleTagModal = (username = '') => {
+            const tag = getSpecialRoleTag(username);
+            if (!tag) return;
+            showModal(tag.label, tag.message);
+        };
+        window.openRoleTagModal = openRoleTagModal;
 
         const loadChat = async () => {
             try {
@@ -12656,9 +12820,12 @@ const groupAsAircraft = () => {
                 box.innerHTML = msgs.length === 0 ? '<p style="color:#777; text-align:center;">No messages yet. Be the first to say hi!</p>' : '';
                 msgs.forEach(m => {
                     const timeStr = new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    const tag = getSpecialRoleTag(m.authorName);
+                    const tagHtml = tag ? `<span class="profile-role-tag" style="margin-left:6px; font-size:10px; padding:2px 8px;" onclick="event.stopPropagation(); openRoleTagModal('${m.authorName}')">${tag.label}</span>` : '';
                     box.innerHTML += `<div>
                         <span style="color:#95a5a6; font-size:11px;">[${timeStr}]</span>
                         <strong style="color:#3498db; cursor:pointer;" onclick="loadProfile('${m.authorName}'); navigate('profile');">${m.authorName}:</strong>
+                        ${tagHtml}
                         <span style="font-size:14px; color:#333; word-break: break-word;">${m.text}</span>
                     </div>`;
                 });
