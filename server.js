@@ -2,6 +2,7 @@ const express = require('express');
 const crypto = require('crypto');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 
 const app = express();
 const PORT = 3000;
@@ -15,6 +16,8 @@ const DB_FILE = path.join(__dirname, 'db.json');
 let db = {
     users: [], sessions: {}, games: [], shopItems: [], clothingItems: [], blueprints: [], jams: [], groups: [], cityPlots: [], datastores: {},
     globalChat: [], toolboxItems: [], // NEW
+    chatLogs: [],
+    systemState: { restartUntil: 0, restartMessage: '' },
     reports: [],
     notifications: [],
     moderation: { bans: {}, ipBans: [], warnings: {} },  // <-- ADD THIS LINE
@@ -32,7 +35,12 @@ let onlineUsers = {};
 let gameChats = {}; // { [gameId]: [messages] }
 let gameChatActivity = {}; // { [gameId_userId]: [timestamps] }
 let gameChatSuspensions = {}; // { [gameId_userId]: unbanTimestamp }
+let gameServerLastSeen = {}; // { [gameId]: timestamp }
 let adminAuth = { attempts: 0, lockoutUntil: 0 };
+const RESTART_POPUP_TEXT = 'Playsculpt servers are restarting! You do not need to take any action if you’re in a game or in studio, you will stay in. Please wait around 10 seconds to be automatically reconnected!';
+let restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
+let httpServer = null;
+const systemEventClients = new Set();
 // Load existing DB if available & migrate data
 if (fs.existsSync(DB_FILE)) {
 
@@ -41,6 +49,8 @@ if (fs.existsSync(DB_FILE)) {
 if (!db.datastores) db.datastores = {};
 if (!db.notifications) db.notifications = [];
 if (!db.reports) db.reports = [];
+if (!db.chatLogs) db.chatLogs = [];
+if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} }; // <-- ADD THIS LINE
 if (!db.friendPetDaily) db.friendPetDaily = {};
     try {
@@ -55,6 +65,8 @@ if (!db.friendPetDaily) db.friendPetDaily = {};
         if (!db.groups) db.groups = [];
 if (!db.sounds) db.sounds = [];
         if (!db.reports) db.reports = [];
+        if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
+        if (!db.chatLogs) db.chatLogs = [];
 
         db.users.forEach(u => { 
             if (!u.followers) u.followers = []; 
@@ -181,6 +193,16 @@ if (!g.analytics) {
     } catch (e) {
         console.error("Error loading db.json, starting fresh.");
     }
+}
+if (db.systemState && Number(db.systemState.restartUntil || 0) > Date.now()) {
+    restartState = {
+        active: true,
+        startedAt: Date.now(),
+        endsAt: Number(db.systemState.restartUntil || 0),
+        message: String(db.systemState.restartMessage || RESTART_POPUP_TEXT)
+    };
+    const remaining = Math.max(0, restartState.endsAt - Date.now());
+    setTimeout(() => finalizeSafeRestart(), remaining);
 }
 
 const saveDB = () => {
@@ -340,6 +362,133 @@ const isUserOnline = (userId) => {
 };
 
 const isPrimaryAdmin = (user) => !!user && String(user.username || '').toLowerCase() === 'admin';
+const CHAT_LOG_ADMIN_USERS = new Set(['admin', 'nick', 'austin']);
+const canViewChatLogs = (user) => !!user && CHAT_LOG_ADMIN_USERS.has(String(user.username || '').toLowerCase());
+
+const appendChatLog = (entry = {}) => {
+    if (!db.chatLogs) db.chatLogs = [];
+    const now = Date.now();
+    const textNorm = String(entry.text || '').trim().toLowerCase();
+    const recentDup = db.chatLogs.slice(-12).find((m) =>
+        String(m.channel || '') === String(entry.channel || '') &&
+        String(m.authorId || '') === String(entry.authorId || '') &&
+        String(m.sourceId || '') === String(entry.sourceId || '') &&
+        String(m.text || '').trim().toLowerCase() === textNorm &&
+        (now - (Number(m.timestamp) || 0)) < 3000
+    );
+    if (recentDup) return;
+    const record = {
+        id: crypto.randomUUID(),
+        timestamp: Number(entry.timestamp) || Date.now(),
+        channel: String(entry.channel || 'unknown').slice(0, 40),
+        sourceType: String(entry.sourceType || '').slice(0, 40),
+        sourceId: entry.sourceId ? String(entry.sourceId).slice(0, 120) : null,
+        gameId: entry.gameId ? String(entry.gameId).slice(0, 120) : null,
+        groupId: entry.groupId ? String(entry.groupId).slice(0, 120) : null,
+        authorId: entry.authorId ? String(entry.authorId).slice(0, 120) : null,
+        authorName: String(entry.authorName || 'Unknown').slice(0, 60),
+        text: String(entry.text || '').slice(0, 600),
+        meta: entry.meta && typeof entry.meta === 'object' ? entry.meta : {}
+    };
+    db.chatLogs.push(record);
+    if (db.chatLogs.length > 50000) db.chatLogs.splice(0, db.chatLogs.length - 50000);
+};
+
+const isLikelyDuplicateMessage = (messages = [], userId, text, windowMs = 1400) => {
+    const normalized = String(text || '').trim().toLowerCase();
+    if (!normalized || !Array.isArray(messages) || !messages.length) return false;
+    const now = Date.now();
+    for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (!m) continue;
+        if ((now - (Number(m.timestamp) || 0)) > windowMs) break;
+        const sameUser = (m.userId && m.userId === userId) || (m.authorId && m.authorId === userId);
+        if (!sameUser) continue;
+        if (String(m.text || '').trim().toLowerCase() === normalized) return true;
+    }
+    return false;
+};
+
+const touchGameServer = (gameId) => {
+    if (!gameId) return;
+    gameServerLastSeen[gameId] = Date.now();
+};
+const clearGameServerState = (gameId) => {
+    if (!gameId) return;
+    delete activePlayers[gameId];
+    delete activePlayDynamic[gameId];
+    delete gameChats[gameId];
+    delete gameServerLastSeen[gameId];
+    for (const key in gameChatActivity) if (key.startsWith(gameId + '_')) delete gameChatActivity[key];
+    for (const key in gameChatSuspensions) if (key.startsWith(gameId + '_')) delete gameChatSuspensions[key];
+};
+const cleanupGameServerIfInactive = (gameId, maxIdleMs = 15000) => {
+    if (!gameId) return;
+    const now = Date.now();
+    const players = activePlayers[gameId] || {};
+    const hasFreshPlayers = Object.values(players).some(p => now - (p.timestamp || 0) < 3500);
+    if (hasFreshPlayers) {
+        touchGameServer(gameId);
+        return;
+    }
+    const lastSeen = gameServerLastSeen[gameId] || 0;
+    if ((now - lastSeen) > maxIdleMs) clearGameServerState(gameId);
+};
+const emitSystemEvent = (type, payload = {}) => {
+    const eventData = `data: ${JSON.stringify({ type, ...payload })}\n\n`;
+    systemEventClients.forEach((res) => {
+        try { res.write(eventData); } catch (_) {}
+    });
+};
+const finalizeSafeRestart = () => {
+    activeEditors = {};
+    activePlayers = {};
+    activePlayDynamic = {};
+    gameChats = {};
+    gameChatActivity = {};
+    gameChatSuspensions = {};
+    gameServerLastSeen = {};
+    restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
+    db.systemState = { restartUntil: 0, restartMessage: '' };
+    saveDB();
+    emitSystemEvent('restart_complete', {});
+};
+const performProcessRestart = () => {
+    try {
+        const child = spawn(process.execPath, process.argv.slice(1), {
+            cwd: process.cwd(),
+            env: process.env,
+            detached: true,
+            stdio: 'ignore'
+        });
+        child.unref();
+    } catch (err) {
+        console.error('Safe restart spawn failed:', err);
+        return;
+    }
+    if (httpServer) {
+        httpServer.close(() => process.exit(0));
+        setTimeout(() => process.exit(0), 4500);
+    } else {
+        setTimeout(() => process.exit(0), 1000);
+    }
+};
+const triggerSafeServerRestart = (actorName = 'system') => {
+    const now = Date.now();
+    const durationMs = 10000;
+    restartState = {
+        active: true,
+        startedAt: now,
+        endsAt: now + durationMs,
+        message: RESTART_POPUP_TEXT,
+        actor: actorName
+    };
+    db.systemState = { restartUntil: restartState.endsAt, restartMessage: restartState.message };
+    saveDB();
+    emitSystemEvent('restart_start', { endsAt: restartState.endsAt, message: restartState.message, actor: actorName });
+    setTimeout(() => performProcessRestart(), 1500);
+    setTimeout(() => finalizeSafeRestart(), durationMs);
+};
 
 const deleteUserAccountCompletely = (user) => {
     if (!user) return;
@@ -1004,6 +1153,80 @@ app.delete('/api/admin/users/:username', requireAuth, (req, res) => {
     res.json({ success: true, deletedUser: target.username });
 });
 
+app.get('/api/admin/chat-logs', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!canViewChatLogs(user)) return res.status(403).json({ error: 'Moderator access only.' });
+
+    const since = Number(req.query.since || 0);
+    const limit = Math.max(1, Math.min(800, Number(req.query.limit || 200)));
+    const usernameQ = String(req.query.username || '').trim().toLowerCase();
+    const channelQ = String(req.query.channel || '').trim().toLowerCase();
+    const gameIdQ = String(req.query.gameId || '').trim();
+    const groupIdQ = String(req.query.groupId || '').trim();
+
+    const list = (db.chatLogs || []).filter((m) => {
+        if (since && (Number(m.timestamp) || 0) <= since) return false;
+        if (usernameQ && !String(m.authorName || '').toLowerCase().includes(usernameQ)) return false;
+        if (channelQ && String(m.channel || '').toLowerCase() !== channelQ) return false;
+        if (gameIdQ && String(m.gameId || '') !== gameIdQ) return false;
+        if (groupIdQ && String(m.groupId || '') !== groupIdQ) return false;
+        return true;
+    });
+
+    const sliced = list.slice(-limit);
+    res.json({
+        logs: sliced,
+        channels: Array.from(new Set((db.chatLogs || []).map(m => String(m.channel || '')).filter(Boolean))).sort(),
+        games: Array.from(new Set((db.chatLogs || []).map(m => String(m.gameId || '')).filter(Boolean))).sort(),
+        groups: Array.from(new Set((db.chatLogs || []).map(m => String(m.groupId || '')).filter(Boolean))).sort()
+    });
+});
+
+app.get('/api/system/status', (req, res) => {
+    const now = Date.now();
+    const active = !!restartState.active && now < (restartState.endsAt || 0);
+    if (!active && restartState.active) restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
+    res.json({
+        restarting: active,
+        endsAt: restartState.endsAt || 0,
+        startedAt: restartState.startedAt || 0,
+        message: restartState.message || RESTART_POPUP_TEXT
+    });
+});
+
+app.get('/api/system/events', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders && res.flushHeaders();
+    systemEventClients.add(res);
+    res.write(`data: ${JSON.stringify({ type: 'hello', restarting: restartState.active, endsAt: restartState.endsAt || 0, message: restartState.message || RESTART_POPUP_TEXT })}\n\n`);
+    req.on('close', () => {
+        systemEventClients.delete(res);
+    });
+});
+
+app.post('/api/system/restart', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!canViewChatLogs(user)) return res.status(403).json({ error: 'Moderator access only.' });
+    if (restartState.active && Date.now() < restartState.endsAt) {
+        return res.status(400).json({ error: 'Restart already in progress.' });
+    }
+    triggerSafeServerRestart(user?.username || 'system');
+    res.json({ success: true, restarting: true, endsAt: restartState.endsAt, message: restartState.message });
+});
+
+app.post('/api/system/command', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!canViewChatLogs(user)) return res.status(403).json({ error: 'Moderator access only.' });
+    const command = String(req.body.command || '').trim().toLowerCase();
+    if (command === 'restart-server-safe' || command === 'safe_restart') {
+        if (!(restartState.active && Date.now() < restartState.endsAt)) triggerSafeServerRestart(user?.username || 'system');
+        return res.json({ success: true, output: `Safe restart initiated by ${user.username}.`, endsAt: restartState.endsAt });
+    }
+    res.status(400).json({ error: 'Unknown command. Try: restart-server-safe' });
+});
+
 app.put('/api/me/primary-group', requireAuth, (req, res) => {
     const { groupId } = req.body;
     const user = db.users.find(u => u.id === req.userId);
@@ -1032,15 +1255,30 @@ app.post('/api/users/:username/message', requireAuth, (req, res) => {
     }
 
     if (!targetUser.messages) targetUser.messages = [];
+    const cleanText = text.trim().substring(0, 500);
+    if (isLikelyDuplicateMessage(targetUser.messages || [], sender.id, cleanText, 1500)) {
+        return res.json({ message: 'Message already sent.' });
+    }
+    const msgTs = Date.now();
     targetUser.messages.push({
         id: crypto.randomUUID(), fromId: sender.id, fromUsername: sender.username,
-        text: text.trim().substring(0, 500), timestamp: Date.now()
+        text: cleanText, timestamp: msgTs
+    });
+    appendChatLog({
+        channel: 'direct_message',
+        sourceType: 'direct',
+        sourceId: targetUser.id,
+        authorId: sender.id,
+        authorName: sender.username,
+        text: cleanText,
+        timestamp: msgTs,
+        meta: { toUserId: targetUser.id, toUsername: targetUser.username }
     });
 
     saveDB();
     createNotification(targetUser.id, "message", {
     from: sender.username,
-    text: text.trim().substring(0, 500)
+    text: cleanText
 });
     res.json({ message: 'Message sent!' });
 });
@@ -1098,6 +1336,42 @@ app.get("/api/friends", requireAuth, (req, res) => {
 
     saveDB();
     res.json(friends);
+});
+
+app.post('/api/friends/team-create-xp', requireAuth, (req, res) => {
+    const { gameId } = req.body || {};
+    if (!gameId) return res.status(400).json({ error: 'gameId required.' });
+    const game = db.games.find(g => g.id === gameId);
+    if (!game) return res.status(404).json({ error: 'Game not found.' });
+
+    let canEdit = game.authorId === req.userId || (game.collaborators || []).includes(req.userId);
+    if (game.groupId) {
+        const group = db.groups.find(gr => gr.id === game.groupId);
+        const perms = getGroupMemberPerms(group, req.userId);
+        if (perms && perms.editGames) canEdit = true;
+    }
+    if (!canEdit) return res.status(403).json({ error: 'Not authorized.' });
+
+    const editorMap = activeEditors[game.id] || {};
+    const now = Date.now();
+    const me = db.users.find(u => u.id === req.userId);
+    if (!me) return res.status(401).json({ error: 'Unauthorized.' });
+    const friendIds = new Set((me.friends || []).map(f => (typeof f === 'string' ? f : f.id)));
+    let awarded = 0;
+
+    Object.keys(editorMap).forEach((uId) => {
+        if (uId === req.userId) return;
+        const seen = editorMap[uId];
+        if (!seen || (now - (seen.timestamp || 0)) > 12000) return;
+        if (!friendIds.has(uId)) return;
+        const link = ensureFriendLink(me, uId);
+        if (now - (link.lastXpAt || 0) < (7 * 60 * 1000)) return;
+        grantFriendshipXp(req.userId, uId, 10);
+        awarded++;
+    });
+
+    if (awarded > 0) saveDB();
+    res.json({ success: true, awarded });
 });
 
 
@@ -1787,6 +2061,40 @@ app.put('/api/groups/:id/logo', requireAuth, (req, res) => {
     res.json({ success: true, logo: group.logo });
 });
 
+app.put('/api/groups/:id/description', requireAuth, (req, res) => {
+    const group = db.groups.find(gr => gr.id === req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+    if (group.ownerId !== req.userId) return res.status(403).json({ error: 'Only the group owner can edit description.' });
+    const description = String((req.body || {}).description || '').slice(0, 800).trim();
+    group.description = description;
+    saveDB();
+    res.json({ success: true, description: group.description });
+});
+
+app.post('/api/groups/:id/change-owner', requireAuth, (req, res) => {
+    const group = db.groups.find(gr => gr.id === req.params.id);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+    if (group.ownerId !== req.userId) return res.status(403).json({ error: 'Only the current owner can transfer ownership.' });
+
+    const username = String((req.body || {}).username || '').trim().toLowerCase();
+    if (!username) return res.status(400).json({ error: 'Username required.' });
+    const target = db.users.find(u => u.username.toLowerCase() === username);
+    if (!target) return res.status(404).json({ error: 'User not found.' });
+    const targetMember = (group.members || []).find(m => m.userId === target.id);
+    if (!targetMember) return res.status(400).json({ error: 'That user must already be a member of the group.' });
+    if (target.id === req.userId) return res.status(400).json({ error: 'You already own this group.' });
+
+    const ownerRole = (group.roles || []).find(r => r.rank === 255) || (group.roles || []).find(r => r.name === 'Owner');
+    const fallbackRole = (group.roles || []).filter(r => r.rank < 255).sort((a, b) => b.rank - a.rank)[0] || (group.roles || [])[0];
+
+    const oldOwnerMember = (group.members || []).find(m => m.userId === req.userId);
+    if (ownerRole && targetMember) targetMember.roleId = ownerRole.id;
+    if (oldOwnerMember && fallbackRole) oldOwnerMember.roleId = fallbackRole.id;
+    group.ownerId = target.id;
+    saveDB();
+    res.json({ success: true, newOwner: target.username });
+});
+
 
 // Post Group Shout
 app.post('/api/groups/:id/shout', requireAuth, (req, res) => {
@@ -1925,6 +2233,7 @@ app.get('/api/groups/:id', (req, res) => {
 res.json({
     id: group.id,
     name: group.name,
+    ownerId: group.ownerId,
     description: group.description,
     logo: group.logo || '',
     groupCoins: group.coins || 0,
@@ -2101,8 +2410,23 @@ app.post('/api/groups/:id/posts', requireAuth, (req, res) => {
     }
 
     const user = db.users.find(u => u.id === req.userId);
+    const cleanText = text.trim().substring(0, 200);
+    if (isLikelyDuplicateMessage(group.posts || [], user.id, cleanText, 1800)) {
+        return res.json({ message: 'Posted successfully!', posts: group.posts.slice(0, 50) });
+    }
+    const ts = Date.now();
     group.posts.unshift({
-        id: crypto.randomUUID(), authorName: user.username, authorId: user.id, text: text.trim().substring(0, 200), timestamp: Date.now()
+        id: crypto.randomUUID(), authorName: user.username, authorId: user.id, text: cleanText, timestamp: ts
+    });
+    appendChatLog({
+        channel: 'group_wall',
+        sourceType: 'group',
+        sourceId: group.id,
+        groupId: group.id,
+        authorId: user.id,
+        authorName: user.username,
+        text: cleanText,
+        timestamp: ts
     });
 
     addGroupXp(group, 5); // Earn XP for posting
@@ -2219,11 +2543,24 @@ app.post('/api/groups/:id/forums/:catId', requireAuth, (req, res) => {
 
     const user = db.users.find(u => u.id === req.userId);
     const { title, content } = req.body;
+    const cleanContent = String(content || '').trim().substring(0, 2000);
+    if (!cleanContent) return res.status(400).json({ error: 'Content cannot be empty.' });
     const thread = {
         id: crypto.randomUUID(), categoryId: req.params.catId, authorId: user.id, authorName: user.username,
-        title, content, timestamp: Date.now(), replies: []
+        title, content: cleanContent, timestamp: Date.now(), replies: []
     };
     group.threads.push(thread);
+    appendChatLog({
+        channel: 'group_forum_thread',
+        sourceType: 'group_forum',
+        sourceId: thread.id,
+        groupId: group.id,
+        authorId: user.id,
+        authorName: user.username,
+        text: `${String(title || '').trim().substring(0, 120)} | ${cleanContent}`,
+        timestamp: thread.timestamp,
+        meta: { categoryId: req.params.catId }
+    });
     addGroupXp(group, 5); // XP for posting thread
     saveDB();
     res.json({ success: true });
@@ -2244,8 +2581,25 @@ app.post('/api/groups/:id/threads/:threadId/replies', requireAuth, (req, res) =>
     const thread = group.threads.find(t => t.id === req.params.threadId);
     if (!thread) return res.status(404).json({ error: 'Thread not found.' });
 
+    const replyText = String(req.body.content || '').trim().substring(0, 2000);
+    if (!replyText) return res.status(400).json({ error: 'Reply cannot be empty.' });
+    if (isLikelyDuplicateMessage(thread.replies || [], user.id, replyText, 1800)) {
+        return res.json({ success: true, replies: thread.replies });
+    }
+    const ts = Date.now();
     thread.replies.push({
-        id: crypto.randomUUID(), authorId: user.id, authorName: user.username, content: req.body.content, timestamp: Date.now()
+        id: crypto.randomUUID(), authorId: user.id, authorName: user.username, content: replyText, timestamp: ts
+    });
+    appendChatLog({
+        channel: 'group_forum_reply',
+        sourceType: 'group_forum',
+        sourceId: thread.id,
+        groupId: group.id,
+        authorId: user.id,
+        authorName: user.username,
+        text: replyText,
+        timestamp: ts,
+        meta: { threadId: thread.id }
     });
     addGroupXp(group, 5); // XP for reply
     saveDB();
@@ -3206,10 +3560,23 @@ app.post('/api/chat', requireAuth, (req, res) => {
     }
 
     if (!db.globalChat) db.globalChat = [];
+    if (isLikelyDuplicateMessage(db.globalChat, req.userId, text, 1600)) {
+        return res.json({ success: true, message: db.globalChat[db.globalChat.length - 1] || null });
+    }
     const newMsg = { id: crypto.randomUUID(), authorName: user.username, text, timestamp: now };
     
     db.globalChat.push(newMsg);
     if (db.globalChat.length > 100) db.globalChat.shift(); // Keep memory clean
+    appendChatLog({
+        channel: 'global_chat',
+        sourceType: 'global',
+        sourceId: 'global',
+        authorId: user.id,
+        authorName: user.username,
+        text,
+        timestamp: now
+    });
+    saveDB();
     
     res.json({ success: true, message: newMsg });
 });
@@ -3220,6 +3587,7 @@ app.post('/api/chat', requireAuth, (req, res) => {
 // ==========================================
 app.get('/api/games/:id/chat', requireAuth, (req, res) => {
     const gameId = req.params.id;
+    cleanupGameServerIfInactive(gameId);
     res.json({ messages: (gameChats[gameId] || []).slice(-50) });
 });
 
@@ -3252,6 +3620,11 @@ app.post('/api/games/:id/chat', requireAuth, (req, res) => {
     }
 
     if (!gameChats[gameId]) gameChats[gameId] = [];
+    cleanupGameServerIfInactive(gameId);
+    if (!gameChats[gameId]) gameChats[gameId] = [];
+    if (isLikelyDuplicateMessage(gameChats[gameId], req.userId, text, 1500)) {
+        return res.json({ success: true, message: gameChats[gameId][gameChats[gameId].length - 1] || null });
+    }
 
     const activePlayer = activePlayers[gameId] && activePlayers[gameId][req.userId];
 
@@ -3271,6 +3644,19 @@ app.post('/api/games/:id/chat', requireAuth, (req, res) => {
 
     gameChats[gameId].push(newMsg);
     if (gameChats[gameId].length > 100) gameChats[gameId].shift();
+    touchGameServer(gameId);
+    appendChatLog({
+        channel: 'game_chat',
+        sourceType: 'game',
+        sourceId: gameId,
+        gameId,
+        authorId: req.userId,
+        authorName: newMsg.username,
+        text,
+        timestamp: now,
+        meta: { sceneId: newMsg.sceneId }
+    });
+    saveDB();
 
     res.json({ success: true, message: newMsg });
 });
@@ -3281,6 +3667,7 @@ app.post('/api/games/:id/play-sync', requireAuth, (req, res) => {
     const user = db.users.find(u => u.id === req.userId);
 
 if (!activePlayers[gameId]) activePlayers[gameId] = {};
+touchGameServer(gameId);
 
 const lastChatMessage = (gameChats[gameId] || [])
     .slice()
@@ -3336,19 +3723,7 @@ for (let uId in activePlayers[gameId]) {
 }
 
 // If nobody is left in this game server, wipe its temporary server chat too
-if (!activePlayers[gameId] || Object.keys(activePlayers[gameId]).length === 0) {
-    delete activePlayers[gameId];
-    delete activePlayDynamic[gameId];
-    delete gameChats[gameId];
-
-    // Clean any per-user chat cooldown/spam data for this game too
-    for (const key in gameChatActivity) {
-        if (key.startsWith(gameId + '_')) delete gameChatActivity[key];
-    }
-    for (const key in gameChatSuspensions) {
-        if (key.startsWith(gameId + '_')) delete gameChatSuspensions[key];
-    }
-}
+if (!activePlayers[gameId] || Object.keys(activePlayers[gameId]).length === 0) clearGameServerState(gameId);
 
 const dynamicPayload = activePlayDynamic[gameId] && (Date.now() - activePlayDynamic[gameId].updatedAt < 3000)
     ? activePlayDynamic[gameId].states
@@ -3418,6 +3793,9 @@ app.get('/seo/*any', (req, res, next) => {
 app.get('*any', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
-app.listen(PORT, () => {
+setInterval(() => {
+    Object.keys(gameServerLastSeen).forEach((gameId) => cleanupGameServerIfInactive(gameId, 15000));
+}, 5000);
+httpServer = app.listen(PORT, () => {
     console.log(`Playsculpt server running on http://localhost:${PORT}`);
 });
