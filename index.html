@@ -5814,7 +5814,7 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
 
         let profileWorldScene = null, profileWorldCamera = null, profileWorldRenderer = null, profileWorldAnim = null, profileWorldPortalMeshes = [], profileWorldResizeHandler = null;
         let profileWorldKeyDownHandler = null, profileWorldKeyUpHandler = null, profileWorldMouseMoveHandler = null, profileWorldMouseDownHandler = null, profileWorldMouseUpHandler = null;
-        let profileWorldState = { keys: {}, player: null, yaw: 0, pitch: -0.25, joining: false, portalInfo: [] };
+        let profileWorldState = { keys: {}, player: null, playerAvatar: null, yaw: 0, pitch: -0.25, joining: false, portalInfo: [] };
         const closeProfileWorld = () => {
             const overlay = document.getElementById('profile-world-overlay');
             if (overlay) overlay.style.display = 'none';
@@ -5835,7 +5835,7 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
             if (profileWorldMouseDownHandler) window.removeEventListener('mousedown', profileWorldMouseDownHandler);
             if (profileWorldMouseUpHandler) window.removeEventListener('mouseup', profileWorldMouseUpHandler);
             profileWorldKeyDownHandler = null; profileWorldKeyUpHandler = null; profileWorldMouseMoveHandler = null; profileWorldMouseDownHandler = null; profileWorldMouseUpHandler = null;
-            profileWorldState = { keys: {}, player: null, yaw: 0, pitch: -0.25, joining: false, portalInfo: [] };
+            profileWorldState = { keys: {}, player: null, playerAvatar: null, yaw: 0, pitch: -0.25, joining: false, portalInfo: [] };
             profileWorldRenderer = null; profileWorldScene = null; profileWorldCamera = null;
         };
         window.closeProfileWorld = closeProfileWorld;
@@ -5913,17 +5913,20 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 treeTop.castShadow = true;
                 profileWorldScene.add(treeTop);
             }
-            const player = new THREE.Group();
-            const playerBody = new THREE.Mesh(new THREE.CylinderGeometry(0.75, 0.85, 2.6, 14), new THREE.MeshStandardMaterial({ color: 0x2563eb }));
-            playerBody.position.y = 1.25;
-            playerBody.castShadow = true;
-            const playerHead = new THREE.Mesh(new THREE.SphereGeometry(0.62, 14, 14), new THREE.MeshStandardMaterial({ color: 0x93c5fd }));
-            playerHead.position.y = 2.85;
-            playerHead.castShadow = true;
-            player.add(playerBody);
-            player.add(playerHead);
-            player.position.set(0, 11.8, 0);
+            ensureAvatarBodyColors();
+            const player = new THREE.Object3D();
+            player.position.set(0, 12.2, 0);
+            const avatarMesh = createPlayerMesh(
+                currentUser ? currentUser.color : '#e74c3c',
+                currentUser ? currentUser.equipped : null,
+                currentUser ? (currentUser.bodyColors || null) : null,
+                currentUser ? { shirtImage: currentUser.equippedShirtImage || null, pantsImage: currentUser.equippedPantsImage || null } : null
+            );
+            avatarMesh.scale.set(0.44, 0.44, 0.44);
+            avatarMesh.position.set(0, 0, 0);
+            player.add(avatarMesh);
             profileWorldScene.add(player);
+            profileWorldState.playerAvatar = avatarMesh;
             profileWorldState.player = player;
             profileWorldState.keys = {};
             profileWorldState.yaw = 0;
@@ -5976,7 +5979,12 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
             window.addEventListener('mousemove', profileWorldMouseMoveHandler);
             const animate = () => {
                 profileWorldAnim = requestAnimationFrame(animate);
-                if (!profileWorldState.player) return;
+                if (!profileWorldState.player) {
+                    profileWorldCamera.position.set(0, 20, 30);
+                    profileWorldCamera.lookAt(0, 10, 0);
+                    profileWorldRenderer.render(profileWorldScene, profileWorldCamera);
+                    return;
+                }
                 const moveSpeed = 0.28;
                 const dir = new THREE.Vector3();
                 const forward = new THREE.Vector3(Math.sin(profileWorldState.yaw), 0, Math.cos(profileWorldState.yaw));
@@ -5996,7 +6004,8 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                         profileWorldState.player.position.z *= s;
                     }
                 }
-                profileWorldState.player.position.y = 11.8;
+                profileWorldState.player.position.y = 12.2;
+                if (profileWorldState.playerAvatar) profileWorldState.playerAvatar.rotation.y = Math.PI + profileWorldState.yaw;
                 const camDistance = 8.5;
                 const camHeight = 4.8;
                 profileWorldCamera.position.set(
