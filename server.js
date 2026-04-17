@@ -111,6 +111,7 @@ if (typeof db.lastUserIdNum === 'undefined') {
             if (typeof u.equippedProfileCosmetic === 'undefined') u.equippedProfileCosmetic = null;
             if (!Array.isArray(u.equippedProfileCosmetics)) u.equippedProfileCosmetics = (u.equippedProfileCosmetic ? [u.equippedProfileCosmetic] : []);
             if (!u.profilePinnedGame) u.profilePinnedGame = { enabled: false, gameId: null, description: '' };
+            if (!u.profileWorld) u.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
             if (typeof u.profileBio === 'undefined') u.profileBio = '';
             if (!u.profileTextStyle) u.profileTextStyle = { font: 'default', color: '#2c3e50' };
             if (typeof u.lastSeenAt === 'undefined') u.lastSeenAt = Date.now();
@@ -822,7 +823,8 @@ const PROFILE_THEME_CATALOG = [
 const PROFILE_COSMETIC_CATALOG = [
     { id: 'cosmetic_pinned_game_feature', name: 'Pinned Game Creation Profile Feature', price: 850, description: 'Ability to pin a game you made at the top of your profile and write a short description of it' },
     { id: 'cosmetic_profile_font_chooser', name: 'Custom Profile Text Font Chooser', price: 725, description: 'Unlock dropdown control to set your profile text font to one of 8 fonts.' },
-    { id: 'cosmetic_profile_text_color', name: 'Profile Text Color Chooser', price: 600, description: 'Unlock color-wheel control to set your profile text color.' }
+    { id: 'cosmetic_profile_text_color', name: 'Profile Text Color Chooser', price: 600, description: 'Unlock color-wheel control to set your profile text color.' },
+    { id: 'cosmetic_profile_worlds', name: 'Profile Worlds', price: 2500, description: 'A addition to your Playsculpt profile that enables other users to join your profile world, see your games and creations, and join them through portals, all in one place!' }
 ];
 const getProfileStoreItem = (itemId) => PROFILE_THEME_CATALOG.concat(PROFILE_COSMETIC_CATALOG).find(i => i.id === itemId);
 
@@ -922,7 +924,7 @@ userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
         reportCrates: [], accurateReports: 0,
-        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, equippedProfileCosmetics: [], profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileBio: '', profileTextStyle: { font: 'default', color: '#2c3e50' }, lastSeenAt: Date.now(), primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, equippedProfileCosmetics: [], profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileWorld: { equipped: false, gameIds: [], assetIds: [], greeting: '' }, profileBio: '', profileTextStyle: { font: 'default', color: '#2c3e50' }, lastSeenAt: Date.now(), primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
 
@@ -2071,6 +2073,7 @@ app.get('/api/users/:username', (req, res) => {
         equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []),
         profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' },
         profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
+        profileWorld: user.profileWorld || { equipped: false, gameIds: [], assetIds: [], greeting: '' },
         pinnedGameData: pinnedGame ? { id: pinnedGame.id, title: pinnedGame.title } : null,
         equipped: user.equipped,
         groups: userGroups, primaryGroup
@@ -2846,6 +2849,7 @@ app.get('/api/profile-store', requireAuth, (req, res) => {
         cosmetics: PROFILE_COSMETIC_CATALOG.map(c => ({ ...c, owned: owned.has(c.id), equipped: equippedSet.has(c.id) })),
         textStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' },
         pinned: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
+        profileWorld: user.profileWorld || { equipped: false, gameIds: [], assetIds: [], greeting: '' },
         games
     });
 });
@@ -2894,10 +2898,18 @@ app.post('/api/profile-store/equip-cosmetic', requireAuth, (req, res) => {
             if (!user.profilePinnedGame) user.profilePinnedGame = { enabled: false, gameId: null, description: '' };
             user.profilePinnedGame.enabled = false;
         }
+        if (item.id === 'cosmetic_profile_worlds') {
+            if (!user.profileWorld) user.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
+            user.profileWorld.equipped = false;
+        }
         if (item.id === 'cosmetic_profile_font_chooser' && user.profileTextStyle) user.profileTextStyle.font = 'default';
         if (item.id === 'cosmetic_profile_text_color' && user.profileTextStyle) user.profileTextStyle.color = '#2c3e50';
     } else {
         user.equippedProfileCosmetics.push(item.id);
+        if (item.id === 'cosmetic_profile_worlds') {
+            if (!user.profileWorld) user.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
+            user.profileWorld.equipped = true;
+        }
     }
     user.equippedProfileCosmetic = user.equippedProfileCosmetics[0] || null;
     saveDB();
@@ -2942,6 +2954,43 @@ app.post('/api/profile-store/text-style', requireAuth, (req, res) => {
     }
     saveDB();
     res.json({ success: true, profileTextStyle: user.profileTextStyle });
+});
+
+app.get('/api/profile-world/me', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user.profileWorld) user.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
+    const ownedGames = (db.games || []).filter(g => g.authorId === user.id).map(g => ({ id: g.id, title: g.title }));
+    const ownedAssets = (db.toolboxItems || []).filter(i => i.authorId === user.id).map(i => ({ id: i.id, name: i.name }));
+    res.json({ profileWorld: user.profileWorld, ownedGames, ownedAssets });
+});
+
+app.post('/api/profile-world/config', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user.profileWorld) user.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
+    const equipped = new Set(user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []));
+    if (!equipped.has('cosmetic_profile_worlds')) return res.status(403).json({ error: 'Profile Worlds must be equipped.' });
+    const gameIdsRaw = Array.isArray(req.body.gameIds) ? req.body.gameIds : [];
+    const assetIdsRaw = Array.isArray(req.body.assetIds) ? req.body.assetIds : [];
+    const greeting = String(req.body.greeting || '').slice(0, 300);
+    const ownedGameSet = new Set((db.games || []).filter(g => g.authorId === user.id).map(g => g.id));
+    const ownedAssetSet = new Set((db.toolboxItems || []).filter(i => i.authorId === user.id).map(i => i.id));
+    user.profileWorld.gameIds = gameIdsRaw.map(id => String(id)).filter(id => ownedGameSet.has(id)).slice(0, 3);
+    user.profileWorld.assetIds = assetIdsRaw.map(id => String(id)).filter(id => ownedAssetSet.has(id)).slice(0, 4);
+    user.profileWorld.greeting = greeting;
+    user.profileWorld.equipped = true;
+    saveDB();
+    res.json({ success: true, profileWorld: user.profileWorld });
+});
+
+app.get('/api/profile-world/:username', (req, res) => {
+    const user = db.users.find(u => String(u.username || '').toLowerCase() === String(req.params.username || '').toLowerCase());
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    if (!user.profileWorld || !user.profileWorld.equipped) return res.status(404).json({ error: 'Profile world not equipped.' });
+    const gameIds = (user.profileWorld.gameIds || []).slice(0, 3);
+    const assetIds = (user.profileWorld.assetIds || []).slice(0, 4);
+    const games = gameIds.map(id => (db.games || []).find(g => g.id === id && g.authorId === user.id)).filter(Boolean).map(g => ({ id: g.id, title: g.title }));
+    const assets = assetIds.map(id => (db.toolboxItems || []).find(i => i.id === id && i.authorId === user.id)).filter(Boolean).map(i => ({ id: i.id, name: i.name }));
+    res.json({ ownerName: user.username, greeting: String(user.profileWorld.greeting || '').slice(0, 300), games, assets });
 });
 
 app.post('/api/shop/items', requireAuth, (req, res) => {
