@@ -2444,15 +2444,19 @@
     <div class="modal-box" style="text-align:left; max-width:520px; width:100%;">
         <h2 style="margin-top:0;">Import OBJ Model</h2>
         <p style="font-size:12px; color:#666; margin-top:-6px;">Choose OBJ + MTL + textures from the same export folder. Textures will auto-attach from MTL references.</p>
+        <p style="font-size:12px; color:#666;">You can also upload a Minecraft <code>.schem</code> file and convert it to OBJ automatically, then import it as Playsculpt parts.</p>
         <label style="font-size:12px; font-weight:700;">OBJ File</label>
         <input type="file" id="obj-import-obj" class="form-control mb-10" accept=".obj,text/plain,model/obj">
         <label style="font-size:12px; font-weight:700;">MTL File (Optional)</label>
         <input type="file" id="obj-import-mtl" class="form-control mb-10" accept=".mtl,text/plain">
         <label style="font-size:12px; font-weight:700;">Texture Files (Optional, multiple)</label>
         <input type="file" id="obj-import-textures" class="form-control mb-10" accept=".png,.jpg,.jpeg,.bmp,.tga,image/*" multiple>
+        <label style="font-size:12px; font-weight:700;">Minecraft Schematic (.schem)</label>
+        <input type="file" id="obj-import-schem" class="form-control mb-10" accept=".schem,application/octet-stream">
         <div class="flex-center" style="justify-content:flex-end;">
             <button class="btn btn-danger" onclick="closeOBJImportModal()">Cancel</button>
             <button class="btn btn-success" onclick="handleOBJImportFromModal()">Import</button>
+            <button class="btn btn-info" onclick="handleSchemImportFromModal()">Convert .schem → Import</button>
         </div>
     </div>
 </div>
@@ -9374,9 +9378,34 @@ const promptClearEditor = () => {
             const textureFiles = Array.from(texInput?.files || []);
             await handleOBJImport({ objFile, mtlFile, textureFiles });
         };
+        const handleSchemImportFromModal = async () => {
+            const schemInput = document.getElementById('obj-import-schem');
+            const schemFile = (schemInput?.files || [])[0];
+            if (!schemFile) return showModal('Import Failed', 'Please choose a .schem file first.');
+            try {
+                const arrBuffer = await schemFile.arrayBuffer();
+                const bytes = new Uint8Array(arrBuffer);
+                let binary = '';
+                const chunk = 0x8000;
+                for (let i = 0; i < bytes.length; i += chunk) {
+                    binary += String.fromCharCode(...bytes.slice(i, i + chunk));
+                }
+                const schemBase64 = btoa(binary);
+                const converted = await apiCall('/tools/schem-to-obj', 'POST', { schemBase64 });
+                const objName = (schemFile.name || 'import').replace(/\.schem$/i, '') + '.obj';
+                const objFile = new File([converted.objText || ''], objName, { type: 'text/plain' });
+                await handleOBJImport({ objFile, mtlFile: null, textureFiles: [] });
+                if (converted.truncated) {
+                    showModal('Import Note', `Schematic imported with a block cap (${converted.blocksIncluded} blocks) for performance.`);
+                }
+            } catch (e) {
+                showModal('Conversion Failed', e.message || 'Could not convert .schem file.');
+            }
+        };
         window.triggerOBJImport = triggerOBJImport;
         window.handleOBJImport = handleOBJImport;
         window.handleOBJImportFromModal = handleOBJImportFromModal;
+        window.handleSchemImportFromModal = handleSchemImportFromModal;
         window.closeOBJImportModal = closeOBJImportModal;
 
 
