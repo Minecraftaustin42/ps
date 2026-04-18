@@ -9383,15 +9383,24 @@ const promptClearEditor = () => {
             const schemFile = (schemInput?.files || [])[0];
             if (!schemFile) return showModal('Import Failed', 'Please choose a .schem file first.');
             try {
+                const MAX_SCHEM_UPLOAD_MB = 24;
+                if (schemFile.size > MAX_SCHEM_UPLOAD_MB * 1024 * 1024) {
+                    return showModal('Schematic Too Large', `This .schem is ${Math.ceil(schemFile.size / (1024 * 1024))}MB. The web converter currently supports up to ${MAX_SCHEM_UPLOAD_MB}MB to avoid gateway/proxy failures. Try exporting a smaller section.`);
+                }
+                showModal('Converting...', 'Uploading and converting schematic. Please wait.');
                 const token = localStorage.getItem('ps_token');
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 45000);
                 const res = await fetch(API_BASE + '/tools/schem-to-obj', {
                     method: 'POST',
                     headers: {
                         ...(token ? { Authorization: token } : {}),
                         'Content-Type': 'application/octet-stream'
                     },
-                    body: schemFile
+                    body: schemFile,
+                    signal: controller.signal
                 });
+                clearTimeout(timeout);
                 const raw = await res.text();
                 let converted = null;
                 try {
@@ -9400,7 +9409,13 @@ const promptClearEditor = () => {
                     converted = null;
                 }
                 if (!res.ok) {
-                    const msg = converted?.error || (raw ? raw.slice(0, 180) : `HTTP ${res.status}`);
+                    const looksLikeHtml = /^\s*</.test(raw || '');
+                    const proxyish = [413, 502, 503, 504, 524].includes(res.status);
+                    const msg = converted?.error || (looksLikeHtml
+                        ? (proxyish
+                            ? `Upload/conversion failed at the gateway (HTTP ${res.status}). Try a smaller .schem export.`
+                            : `Server returned an HTML error page (HTTP ${res.status}). Please retry.`)
+                        : (raw ? raw.slice(0, 180) : `HTTP ${res.status}`));
                     throw new Error(msg);
                 }
                 if (!converted || !converted.objText) throw new Error('Server did not return converted OBJ data.');
@@ -9411,7 +9426,8 @@ const promptClearEditor = () => {
                     showModal('Import Note', `Schematic imported with a block cap (${converted.blocksIncluded} blocks) for performance.`);
                 }
             } catch (e) {
-                showModal('Conversion Failed', e.message || 'Could not convert .schem file.');
+                const isAbort = e?.name === 'AbortError';
+                showModal('Conversion Failed', isAbort ? 'Schematic conversion timed out. Try a smaller .schem export.' : (e.message || 'Could not convert .schem file.'));
             }
         };
         window.triggerOBJImport = triggerOBJImport;
