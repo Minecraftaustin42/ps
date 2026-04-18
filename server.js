@@ -21,7 +21,8 @@ let db = {
     reports: [],
     notifications: [],
     moderation: { bans: {}, ipBans: [], warnings: {} },  // <-- ADD THIS LINE
-    friendPetDaily: {}
+    friendPetDaily: {},
+    live: { accounts: [], channelStats: {} }
 };
 
 let chatActivity = {}; // Tracks timestamps for spam { userId: [timestamps] }
@@ -36,6 +37,7 @@ let gameChats = {}; // { [gameId]: [messages] }
 let gameChatActivity = {}; // { [gameId_userId]: [timestamps] }
 let gameChatSuspensions = {}; // { [gameId_userId]: unbanTimestamp }
 let gameServerLastSeen = {}; // { [gameId]: timestamp }
+let liveStreams = {}; // { [streamId]: { ...runtime state... } }
 let adminAuth = { attempts: 0, lockoutUntil: 0 };
 const RESTART_POPUP_TEXT = 'Playsculpt servers are restarting! You do not need to take any action if you’re in a game or in studio, you will stay in. Please wait around 10 seconds to be automatically reconnected!';
 let restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
@@ -53,6 +55,7 @@ if (!db.chatLogs) db.chatLogs = [];
 if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} }; // <-- ADD THIS LINE
 if (!db.friendPetDaily) db.friendPetDaily = {};
+if (!db.live) db.live = { accounts: [], channelStats: {} };
     try {
         const loaded = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
         db = { ...db, ...loaded };
@@ -67,6 +70,7 @@ if (!db.sounds) db.sounds = [];
         if (!db.reports) db.reports = [];
         if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
         if (!db.chatLogs) db.chatLogs = [];
+        if (!db.live) db.live = { accounts: [], channelStats: {} };
 
         db.users.forEach(u => { 
             if (!u.followers) u.followers = []; 
@@ -111,6 +115,7 @@ if (typeof db.lastUserIdNum === 'undefined') {
             if (typeof u.equippedProfileCosmetic === 'undefined') u.equippedProfileCosmetic = null;
             if (!Array.isArray(u.equippedProfileCosmetics)) u.equippedProfileCosmetics = (u.equippedProfileCosmetic ? [u.equippedProfileCosmetic] : []);
             if (!u.profilePinnedGame) u.profilePinnedGame = { enabled: false, gameId: null, description: '' };
+            if (!u.profileWorld) u.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
             if (typeof u.profileBio === 'undefined') u.profileBio = '';
             if (!u.profileTextStyle) u.profileTextStyle = { font: 'default', color: '#2c3e50' };
             if (typeof u.lastSeenAt === 'undefined') u.lastSeenAt = Date.now();
@@ -822,7 +827,8 @@ const PROFILE_THEME_CATALOG = [
 const PROFILE_COSMETIC_CATALOG = [
     { id: 'cosmetic_pinned_game_feature', name: 'Pinned Game Creation Profile Feature', price: 850, description: 'Ability to pin a game you made at the top of your profile and write a short description of it' },
     { id: 'cosmetic_profile_font_chooser', name: 'Custom Profile Text Font Chooser', price: 725, description: 'Unlock dropdown control to set your profile text font to one of 8 fonts.' },
-    { id: 'cosmetic_profile_text_color', name: 'Profile Text Color Chooser', price: 600, description: 'Unlock color-wheel control to set your profile text color.' }
+    { id: 'cosmetic_profile_text_color', name: 'Profile Text Color Chooser', price: 600, description: 'Unlock color-wheel control to set your profile text color.' },
+    { id: 'cosmetic_profile_worlds', name: 'Profile Worlds', price: 2500, description: 'A addition to your Playsculpt profile that enables other users to join your profile world, see your games and creations, and join them through portals, all in one place!' }
 ];
 const getProfileStoreItem = (itemId) => PROFILE_THEME_CATALOG.concat(PROFILE_COSMETIC_CATALOG).find(i => i.id === itemId);
 
@@ -922,7 +928,7 @@ userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
         reportCrates: [], accurateReports: 0,
-        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, equippedProfileCosmetics: [], profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileBio: '', profileTextStyle: { font: 'default', color: '#2c3e50' }, lastSeenAt: Date.now(), primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, equippedProfileCosmetics: [], profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileWorld: { equipped: false, gameIds: [], assetIds: [], greeting: '' }, profileBio: '', profileTextStyle: { font: 'default', color: '#2c3e50' }, lastSeenAt: Date.now(), primaryGroupId: null, coins: 0
     };
     db.users.push(newUser);
 
@@ -1152,6 +1158,22 @@ app.post('/api/moderate/reports/:id', requireAuth, requireModerator, requireModP
             reporter.accurateReports = (reporter.accurateReports || 0) + 1;
             if ((reporter.accurateReports || 0) === 1) {
                 awardBadge(reporter.id, 'Guardian');
+            }
+        }
+        if (report.category === 'live_channel_logo' && report.targetId) {
+            const acc = (db.live?.accounts || []).find(a => a.id === report.targetId);
+            if (acc && acc.pendingLogo) {
+                acc.logo = acc.pendingLogo;
+                acc.pendingLogo = '';
+                acc.logoStatus = 'approved';
+            }
+        }
+    } else if (action === 'deny') {
+        if (report.category === 'live_channel_logo' && report.targetId) {
+            const acc = (db.live?.accounts || []).find(a => a.id === report.targetId);
+            if (acc) {
+                acc.pendingLogo = '';
+                acc.logoStatus = 'rejected';
             }
         }
     }
@@ -2071,6 +2093,7 @@ app.get('/api/users/:username', (req, res) => {
         equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []),
         profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' },
         profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
+        profileWorld: user.profileWorld || { equipped: false, gameIds: [], assetIds: [], greeting: '' },
         pinnedGameData: pinnedGame ? { id: pinnedGame.id, title: pinnedGame.title } : null,
         equipped: user.equipped,
         groups: userGroups, primaryGroup
@@ -2846,6 +2869,7 @@ app.get('/api/profile-store', requireAuth, (req, res) => {
         cosmetics: PROFILE_COSMETIC_CATALOG.map(c => ({ ...c, owned: owned.has(c.id), equipped: equippedSet.has(c.id) })),
         textStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' },
         pinned: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
+        profileWorld: user.profileWorld || { equipped: false, gameIds: [], assetIds: [], greeting: '' },
         games
     });
 });
@@ -2894,10 +2918,18 @@ app.post('/api/profile-store/equip-cosmetic', requireAuth, (req, res) => {
             if (!user.profilePinnedGame) user.profilePinnedGame = { enabled: false, gameId: null, description: '' };
             user.profilePinnedGame.enabled = false;
         }
+        if (item.id === 'cosmetic_profile_worlds') {
+            if (!user.profileWorld) user.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
+            user.profileWorld.equipped = false;
+        }
         if (item.id === 'cosmetic_profile_font_chooser' && user.profileTextStyle) user.profileTextStyle.font = 'default';
         if (item.id === 'cosmetic_profile_text_color' && user.profileTextStyle) user.profileTextStyle.color = '#2c3e50';
     } else {
         user.equippedProfileCosmetics.push(item.id);
+        if (item.id === 'cosmetic_profile_worlds') {
+            if (!user.profileWorld) user.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
+            user.profileWorld.equipped = true;
+        }
     }
     user.equippedProfileCosmetic = user.equippedProfileCosmetics[0] || null;
     saveDB();
@@ -2942,6 +2974,43 @@ app.post('/api/profile-store/text-style', requireAuth, (req, res) => {
     }
     saveDB();
     res.json({ success: true, profileTextStyle: user.profileTextStyle });
+});
+
+app.get('/api/profile-world/me', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user.profileWorld) user.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
+    const ownedGames = (db.games || []).filter(g => g.authorId === user.id).map(g => ({ id: g.id, title: g.title }));
+    const ownedAssets = (db.toolboxItems || []).filter(i => i.authorId === user.id).map(i => ({ id: i.id, name: i.name }));
+    res.json({ profileWorld: user.profileWorld, ownedGames, ownedAssets });
+});
+
+app.post('/api/profile-world/config', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user.profileWorld) user.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
+    const equipped = new Set(user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []));
+    if (!equipped.has('cosmetic_profile_worlds')) return res.status(403).json({ error: 'Profile Worlds must be equipped.' });
+    const gameIdsRaw = Array.isArray(req.body.gameIds) ? req.body.gameIds : [];
+    const assetIdsRaw = Array.isArray(req.body.assetIds) ? req.body.assetIds : [];
+    const greeting = String(req.body.greeting || '').slice(0, 300);
+    const ownedGameSet = new Set((db.games || []).filter(g => g.authorId === user.id).map(g => g.id));
+    const ownedAssetSet = new Set((db.toolboxItems || []).filter(i => i.authorId === user.id).map(i => i.id));
+    user.profileWorld.gameIds = gameIdsRaw.map(id => String(id)).filter(id => ownedGameSet.has(id)).slice(0, 3);
+    user.profileWorld.assetIds = assetIdsRaw.map(id => String(id)).filter(id => ownedAssetSet.has(id)).slice(0, 4);
+    user.profileWorld.greeting = greeting;
+    user.profileWorld.equipped = true;
+    saveDB();
+    res.json({ success: true, profileWorld: user.profileWorld });
+});
+
+app.get('/api/profile-world/:username', (req, res) => {
+    const user = db.users.find(u => String(u.username || '').toLowerCase() === String(req.params.username || '').toLowerCase());
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    if (!user.profileWorld || !user.profileWorld.equipped) return res.status(404).json({ error: 'Profile world not equipped.' });
+    const gameIds = (user.profileWorld.gameIds || []).slice(0, 3);
+    const assetIds = (user.profileWorld.assetIds || []).slice(0, 4);
+    const games = gameIds.map(id => (db.games || []).find(g => g.id === id && g.authorId === user.id)).filter(Boolean).map(g => ({ id: g.id, title: g.title }));
+    const assets = assetIds.map(id => (db.toolboxItems || []).find(i => i.id === id && i.authorId === user.id)).filter(Boolean).map(i => ({ id: i.id, name: i.name }));
+    res.json({ ownerName: user.username, greeting: String(user.profileWorld.greeting || '').slice(0, 300), games, assets });
 });
 
 app.post('/api/shop/items', requireAuth, (req, res) => {
@@ -3865,6 +3934,306 @@ app.post("/api/invite", requireAuth, (req, res) => {
     });
 
     res.json({ success: true });
+});
+
+// ==========================================
+// PLAYSCULPT LIVE
+// ==========================================
+const LIVE_USERNAME_RE = /^[A-Za-z0-9._]{1,20}$/;
+const cleanupLiveViewers = () => {
+    const now = Date.now();
+    Object.values(liveStreams).forEach((s) => {
+        if (!s || !s.activeViewers) return;
+        Object.keys(s.activeViewers).forEach((uid) => {
+            if ((s.activeViewers[uid] || 0) < now - 15000) delete s.activeViewers[uid];
+        });
+    });
+};
+const getLiveAccountByUserId = (userId) => (db.live?.accounts || []).find(a => a.userId === userId) || null;
+const getLiveStats = (userId) => {
+    if (!db.live.channelStats) db.live.channelStats = {};
+    if (!db.live.channelStats[userId]) db.live.channelStats[userId] = { likesTotal: 0, viewsTotal: 0, tipsTotal: 0, earningsCoins: 0 };
+    return db.live.channelStats[userId];
+};
+
+app.get('/api/live/status', requireAuth, (req, res) => {
+    cleanupLiveViewers();
+    const account = getLiveAccountByUserId(req.userId);
+    const stream = Object.values(liveStreams).find(s => s.ownerId === req.userId && s.active);
+    res.json({
+        account,
+        stream: stream ? { id: stream.id, startedAt: stream.startedAt, viewerCount: Object.keys(stream.activeViewers || {}).length, likes: (stream.likes || []).length } : null,
+        stats: getLiveStats(req.userId)
+    });
+});
+
+app.post('/api/live/account', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const username = String(req.body.username || '').trim();
+    const agreed = !!req.body.agreed;
+    if (!agreed) return res.status(400).json({ error: 'You must agree to Playsculpt Live rules.' });
+    if (!LIVE_USERNAME_RE.test(username)) return res.status(400).json({ error: 'Username must be 1-20 chars using letters, numbers, underscores, periods.' });
+    if (getLiveAccountByUserId(user.id)) return res.status(400).json({ error: 'You already have a Playsculpt Live account.' });
+    if ((db.live.accounts || []).some(a => String(a.username || '').toLowerCase() === username.toLowerCase())) return res.status(400).json({ error: 'Live username already taken.' });
+    const acc = { id: crypto.randomUUID(), userId: user.id, mainUsername: user.username, username, createdAt: Date.now(), description: '', subscribers: [], logo: '', logoStatus: 'none', pendingLogo: '' };
+    db.live.accounts.push(acc);
+    if (!db.live.channelStats[user.id]) db.live.channelStats[user.id] = { likesTotal: 0, viewsTotal: 0, tipsTotal: 0, earningsCoins: 0 };
+    saveDB();
+    res.json({ success: true, account: acc });
+});
+
+app.get('/api/live/streams', requireAuth, (req, res) => {
+    cleanupLiveViewers();
+    const streams = Object.values(liveStreams).filter(s => s.active).map(s => ({
+        id: s.id,
+        ownerId: s.ownerId,
+        liveUsername: s.liveUsername,
+        viewerCount: Object.keys(s.activeViewers || {}).length,
+        likes: (s.likes || []).length,
+        startedAt: s.startedAt
+    })).sort((a, b) => b.startedAt - a.startedAt);
+    res.json({ streams });
+});
+
+app.post('/api/live/go-live', requireAuth, (req, res) => {
+    const account = getLiveAccountByUserId(req.userId);
+    if (!account) return res.status(403).json({ error: 'Create a Playsculpt Live account first.' });
+    const existing = Object.values(liveStreams).find(s => s.ownerId === req.userId && s.active);
+    if (existing) return res.json({ success: true, streamId: existing.id, startedAt: existing.startedAt });
+    const streamId = crypto.randomUUID();
+    liveStreams[streamId] = {
+        id: streamId,
+        ownerId: req.userId,
+        liveUsername: account.username,
+        startedAt: Date.now(),
+        likes: [],
+        likedBy: {},
+        chat: [],
+        tips: [],
+        active: true,
+        activeViewers: {},
+        viewedUsers: {},
+        watchMs: 0,
+        watchCoinUnits: 0,
+        signal: { forBroadcaster: [], forViewer: {} }
+    };
+    res.json({ success: true, streamId, startedAt: liveStreams[streamId].startedAt });
+});
+
+app.post('/api/live/stop', requireAuth, (req, res) => {
+    const stream = Object.values(liveStreams).find(s => s.ownerId === req.userId && s.active);
+    if (!stream) return res.json({ success: true });
+    stream.active = false;
+    const account = getLiveAccountByUserId(req.userId);
+    if (account) account.lastLiveAt = Date.now();
+    saveDB();
+    res.json({ success: true });
+});
+
+app.post('/api/live/stream/:id/watch', requireAuth, (req, res) => {
+    cleanupLiveViewers();
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    if (req.body && req.body.leave) {
+        delete stream.activeViewers[req.userId];
+        return res.json({ success: true });
+    }
+    const now = Date.now();
+    const prev = stream.activeViewers[req.userId] || 0;
+    stream.activeViewers[req.userId] = now;
+    if (prev > 0) {
+        const delta = Math.max(0, Math.min(20000, now - prev));
+        stream.watchMs = (stream.watchMs || 0) + delta;
+        const units = Math.floor((stream.watchMs || 0) / 45000);
+        if (units > (stream.watchCoinUnits || 0)) {
+            const add = units - (stream.watchCoinUnits || 0);
+            stream.watchCoinUnits = units;
+            const owner = db.users.find(u => u.id === stream.ownerId);
+            if (owner) owner.coins = (owner.coins || 0) + add;
+            const stats = getLiveStats(stream.ownerId);
+            stats.earningsCoins += add;
+            saveDB();
+        }
+    }
+    if (!stream.viewedUsers[req.userId]) {
+        stream.viewedUsers[req.userId] = true;
+        const stats = getLiveStats(stream.ownerId);
+        stats.viewsTotal += 1;
+        stats.earningsCoins += 1;
+        saveDB();
+    }
+    res.json({ success: true, viewerCount: Object.keys(stream.activeViewers || {}).length });
+});
+
+app.get('/api/live/stream/:id', requireAuth, (req, res) => {
+    cleanupLiveViewers();
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    res.json({
+        id: stream.id,
+        liveUsername: stream.liveUsername,
+        ownerUsername: db.users.find(u => u.id === stream.ownerId)?.username || '',
+        likes: (stream.likes || []).length,
+        viewerCount: Object.keys(stream.activeViewers || {}).length,
+        recentTips: (stream.tips || []).slice(-8)
+    });
+});
+
+app.get('/api/live/stream/:id/chat', requireAuth, (req, res) => {
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    res.json({ messages: (stream.chat || []).slice(-120) });
+});
+
+app.post('/api/live/stream/:id/chat', requireAuth, (req, res) => {
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    const user = db.users.find(u => u.id === req.userId);
+    const text = String(req.body.text || '').trim().slice(0, 180);
+    if (!text) return res.status(400).json({ error: 'Message required.' });
+    stream.chat.push({ id: crypto.randomUUID(), authorId: user.id, authorName: user.username, text, timestamp: Date.now() });
+    if (stream.chat.length > 200) stream.chat.shift();
+    res.json({ success: true });
+});
+
+app.post('/api/live/stream/:id/like', requireAuth, (req, res) => {
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    if (!stream.likedBy[req.userId]) {
+        stream.likedBy[req.userId] = true;
+        stream.likes.push(req.userId);
+        const stats = getLiveStats(stream.ownerId);
+        stats.likesTotal += 1;
+        stats.earningsCoins += 2;
+        saveDB();
+    }
+    res.json({ success: true, likes: stream.likes.length });
+});
+
+app.post('/api/live/stream/:id/tip', requireAuth, (req, res) => {
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    const viewer = db.users.find(u => u.id === req.userId);
+    const owner = db.users.find(u => u.id === stream.ownerId);
+    if (!viewer || !owner) return res.status(404).json({ error: 'User not found.' });
+    const amount = Math.max(1, parseInt(req.body.amount, 10) || 0);
+    const message = String(req.body.message || '').slice(0, 150);
+    if (amount <= 0) return res.status(400).json({ error: 'Invalid tip amount.' });
+    if (viewer.coins < amount) return res.status(400).json({ error: 'Insufficient Sculpt Coins.' });
+    viewer.coins -= amount;
+    owner.coins = (owner.coins || 0) + amount;
+    const tip = { id: crypto.randomUUID(), fromUserId: viewer.id, fromUsername: viewer.username, amount, message, timestamp: Date.now() };
+    if (!Array.isArray(stream.tips)) stream.tips = [];
+    stream.tips.push(tip);
+    if (stream.tips.length > 100) stream.tips.shift();
+    const stats = getLiveStats(owner.id);
+    stats.tipsTotal += amount;
+    stats.earningsCoins += amount;
+    saveDB();
+    res.json({ success: true, tip });
+});
+
+app.post('/api/live/channel/description', requireAuth, (req, res) => {
+    const acc = getLiveAccountByUserId(req.userId);
+    if (!acc) return res.status(404).json({ error: 'Live channel not found.' });
+    acc.description = String(req.body.description || '').slice(0, 2000);
+    saveDB();
+    res.json({ success: true, description: acc.description });
+});
+
+app.post('/api/live/channel/logo', requireAuth, (req, res) => {
+    const acc = getLiveAccountByUserId(req.userId);
+    if (!acc) return res.status(404).json({ error: 'Live channel not found.' });
+    const image = String(req.body.image || '').slice(0, 3000000);
+    if (!image.startsWith('data:image/')) return res.status(400).json({ error: 'Logo must be an image.' });
+    acc.pendingLogo = image;
+    acc.logoStatus = 'pending';
+    if (!Array.isArray(db.reports)) db.reports = [];
+    db.reports.unshift({
+        id: crypto.randomUUID(),
+        reporterId: req.userId,
+        reporterName: db.users.find(u => u.id === req.userId)?.username || req.userId,
+        category: 'live_channel_logo',
+        categoryLabel: 'Playsculpt Live Channel Logos',
+        targetType: 'live_channel_logo',
+        targetId: acc.id,
+        targetName: acc.username,
+        text: 'Please review this Playsculpt Live channel logo.',
+        evidence: image.slice(0, 1000),
+        status: 'pending',
+        createdAt: Date.now()
+    });
+    saveDB();
+    res.json({ success: true, message: 'Logo submitted for manual moderation approval.' });
+});
+
+app.get('/api/live/channel/:username', requireAuth, (req, res) => {
+    const uname = String(req.params.username || '').toLowerCase();
+    const acc = (db.live.accounts || []).find(a => String(a.username || '').toLowerCase() === uname || String(a.mainUsername || '').toLowerCase() === uname);
+    if (!acc) return res.status(404).json({ error: 'Channel not found.' });
+    const isSub = (acc.subscribers || []).includes(req.userId);
+    res.json({
+        username: acc.username,
+        mainUsername: acc.mainUsername,
+        description: acc.description || '',
+        subscribersCount: (acc.subscribers || []).length,
+        isSubscribed: isSub,
+        lastLiveAt: acc.lastLiveAt || 0,
+        logo: acc.logo || '',
+        logoStatus: acc.logoStatus || 'none'
+    });
+});
+
+app.post('/api/live/channel/:username/subscribe', requireAuth, (req, res) => {
+    const uname = String(req.params.username || '').toLowerCase();
+    const acc = (db.live.accounts || []).find(a => String(a.username || '').toLowerCase() === uname || String(a.mainUsername || '').toLowerCase() === uname);
+    if (!acc) return res.status(404).json({ error: 'Channel not found.' });
+    if (!Array.isArray(acc.subscribers)) acc.subscribers = [];
+    const idx = acc.subscribers.indexOf(req.userId);
+    let subscribed = false;
+    if (idx >= 0) acc.subscribers.splice(idx, 1);
+    else { acc.subscribers.push(req.userId); subscribed = true; }
+    saveDB();
+    res.json({ success: true, subscribed, subscribersCount: acc.subscribers.length });
+});
+
+app.post('/api/live/stream/:id/signal', requireAuth, (req, res) => {
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    const role = String(req.body.role || '');
+    if (role === 'viewer') {
+        if (!stream.signal.forBroadcaster) stream.signal.forBroadcaster = [];
+        stream.signal.forBroadcaster.push({ viewerId: req.userId, type: req.body.type, offer: req.body.offer || null, candidate: req.body.candidate || null });
+        return res.json({ success: true });
+    }
+    if (role === 'broadcaster') {
+        if (stream.ownerId !== req.userId) return res.status(403).json({ error: 'Only stream owner can send broadcaster signals.' });
+        const viewerId = String(req.body.viewerId || '');
+        if (!viewerId) return res.status(400).json({ error: 'viewerId required.' });
+        if (!stream.signal.forViewer[viewerId]) stream.signal.forViewer[viewerId] = [];
+        stream.signal.forViewer[viewerId].push({ type: req.body.type, answer: req.body.answer || null, candidate: req.body.candidate || null });
+        return res.json({ success: true });
+    }
+    res.status(400).json({ error: 'Invalid role.' });
+});
+
+app.get('/api/live/stream/:id/signal/pull', requireAuth, (req, res) => {
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    const role = String(req.query.role || '');
+    if (role === 'broadcaster') {
+        if (stream.ownerId !== req.userId) return res.status(403).json({ error: 'Only stream owner can pull broadcaster queue.' });
+        const messages = stream.signal.forBroadcaster || [];
+        stream.signal.forBroadcaster = [];
+        return res.json({ messages });
+    }
+    if (role === 'viewer') {
+        const key = req.userId;
+        const messages = (stream.signal.forViewer && stream.signal.forViewer[key]) ? stream.signal.forViewer[key] : [];
+        if (stream.signal.forViewer && stream.signal.forViewer[key]) stream.signal.forViewer[key] = [];
+        return res.json({ messages });
+    }
+    res.status(400).json({ error: 'Invalid role.' });
 });
 
 
