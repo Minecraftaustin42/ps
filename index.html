@@ -9383,15 +9383,27 @@ const promptClearEditor = () => {
             const schemFile = (schemInput?.files || [])[0];
             if (!schemFile) return showModal('Import Failed', 'Please choose a .schem file first.');
             try {
-                const arrBuffer = await schemFile.arrayBuffer();
-                const bytes = new Uint8Array(arrBuffer);
-                let binary = '';
-                const chunk = 0x8000;
-                for (let i = 0; i < bytes.length; i += chunk) {
-                    binary += String.fromCharCode(...bytes.slice(i, i + chunk));
+                const token = localStorage.getItem('ps_token');
+                const res = await fetch(API_BASE + '/tools/schem-to-obj', {
+                    method: 'POST',
+                    headers: {
+                        ...(token ? { Authorization: token } : {}),
+                        'Content-Type': 'application/octet-stream'
+                    },
+                    body: schemFile
+                });
+                const raw = await res.text();
+                let converted = null;
+                try {
+                    converted = raw ? JSON.parse(raw) : {};
+                } catch (_) {
+                    converted = null;
                 }
-                const schemBase64 = btoa(binary);
-                const converted = await apiCall('/tools/schem-to-obj', 'POST', { schemBase64 });
+                if (!res.ok) {
+                    const msg = converted?.error || (raw ? raw.slice(0, 180) : `HTTP ${res.status}`);
+                    throw new Error(msg);
+                }
+                if (!converted || !converted.objText) throw new Error('Server did not return converted OBJ data.');
                 const objName = (schemFile.name || 'import').replace(/\.schem$/i, '') + '.obj';
                 const objFile = new File([converted.objText || ''], objName, { type: 'text/plain' });
                 await handleOBJImport({ objFile, mtlFile: null, textureFiles: [] });

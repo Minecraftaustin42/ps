@@ -3492,11 +3492,16 @@ app.get('/api/sounds/:id', (req, res) => {
     res.json({ data: sound.data });
 });
 
-app.post('/api/tools/schem-to-obj', requireAuth, (req, res) => {
+app.post('/api/tools/schem-to-obj', requireAuth, express.raw({ type: 'application/octet-stream', limit: '100mb' }), (req, res) => {
     try {
-        const b64 = String(req.body?.schemBase64 || '');
-        if (!b64) return res.status(400).json({ error: 'Missing schemBase64.' });
-        const inputBuffer = Buffer.from(b64, 'base64');
+        let inputBuffer = null;
+        if (Buffer.isBuffer(req.body) && req.body.length) {
+            inputBuffer = req.body;
+        } else {
+            const b64 = String(req.body?.schemBase64 || '');
+            if (b64) inputBuffer = Buffer.from(b64, 'base64');
+        }
+        if (!inputBuffer || !inputBuffer.length) return res.status(400).json({ error: 'Missing schematic payload (octet-stream body or schemBase64).' });
         const converted = buildObjFromSchematic(inputBuffer);
         res.json(converted);
     } catch (e) {
