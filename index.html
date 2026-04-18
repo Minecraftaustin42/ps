@@ -9435,18 +9435,21 @@ const promptClearEditor = () => {
             const root = rootObj?.Schematic || rootObj || {};
             const toNum = (v, d = 0) => (typeof v === 'bigint' ? Number(v) : (Number.isFinite(Number(v)) ? Number(v) : d));
             const DIM_LIMIT = 2048;
-            const VOLUME_LIMIT = 5_000_000;
+            const VOLUME_LIMIT = 8_000_000;
             const normDim = (v) => Math.max(0, Math.min(DIM_LIMIT, Math.floor(Math.abs(toNum(v, 0)))));
             const safeVolume = (w, h, l) => {
                 const vol = w * h * l;
-                if (!Number.isFinite(vol) || vol < 0 || vol > VOLUME_LIMIT) return -1;
+                if (!Number.isFinite(vol) || vol < 0) return -1;
                 return vol;
             };
             let width = normDim(root.Width ?? root.width);
             let height = normDim(root.Height ?? root.height);
             let length = normDim(root.Length ?? root.length);
             let blockTotal = safeVolume(width, height, length);
-            if (blockTotal < 0) throw new Error(`Schematic is too large for browser conversion (max ${VOLUME_LIMIT.toLocaleString()} blocks).`);
+            if (blockTotal < 0) throw new Error('Invalid schematic dimensions.');
+            const originalTotal = blockTotal;
+            const clampedMode = blockTotal > VOLUME_LIMIT;
+            if (clampedMode) blockTotal = VOLUME_LIMIT;
             let blockIds = [];
             let blockNameAt = null;
             const varints = (arr, maxCount) => {
@@ -9521,37 +9524,42 @@ const promptClearEditor = () => {
                 blockNameAt = (idx) => String(palette[idx] || 'minecraft:air');
             }
             if (!width || !height || !length) throw new Error('Missing schematic dimensions.');
-            if (blockTotal < 0) throw new Error(`Schematic is too large for browser conversion (max ${VOLUME_LIMIT.toLocaleString()} blocks).`);
             if (!blockIds.length) throw new Error('Unsupported schematic block storage format.');
             if (blockIds.length < blockTotal) blockIds = blockIds.concat(new Array(blockTotal - blockIds.length).fill(0));
             if (!blockNameAt) blockNameAt = (idx) => idx === 0 ? 'minecraft:air' : `block_${idx}`;
             const toIndex = (x, y, z) => y * width * length + z * width + x;
             const solid = (x, y, z) => {
                 if (x < 0 || y < 0 || z < 0 || x >= width || y >= height || z >= length) return false;
-                const n = blockNameAt(blockIds[toIndex(x, y, z)]);
+                const idx = toIndex(x, y, z);
+                if (idx < 0 || idx >= blockIds.length) return false;
+                const n = blockNameAt(blockIds[idx]);
                 return !n.endsWith(':air') && !n.includes('air[');
             };
             const maxBlocks = 18000;
             const lines = ['# Generated from .schem in browser'];
             let vb = 1, count = 0;
-            for (let y = 0; y < height; y++) for (let z = 0; z < length; z++) for (let x = 0; x < width; x++) {
-                const name = blockNameAt(blockIds[toIndex(x, y, z)]);
+            const row = width * length;
+            for (let idx = 0; idx < blockTotal && count < maxBlocks; idx++) {
+                const x = idx % width;
+                const z = Math.floor(idx / width) % length;
+                const y = Math.floor(idx / row);
+                const name = blockNameAt(blockIds[idx]);
                 if (name.endsWith(':air') || name.includes('air[')) continue;
-                const exposed = !solid(x+1,y,z)||!solid(x-1,y,z)||!solid(x,y+1,z)||!solid(x,y-1,z)||!solid(x,y,z+1)||!solid(x,y,z-1);
+                const exposed = clampedMode ? true : (!solid(x+1,y,z)||!solid(x-1,y,z)||!solid(x,y+1,z)||!solid(x,y-1,z)||!solid(x,y,z+1)||!solid(x,y,z-1));
                 if (!exposed) continue;
-                count++; if (count > maxBlocks) break;
+                count++;
                 lines.push(`o b_${x}_${y}_${z}`);
                 lines.push(`v ${x} ${y} ${z}`); lines.push(`v ${x+1} ${y} ${z}`); lines.push(`v ${x+1} ${y+1} ${z}`); lines.push(`v ${x} ${y+1} ${z}`);
                 lines.push(`v ${x} ${y} ${z+1}`); lines.push(`v ${x+1} ${y} ${z+1}`); lines.push(`v ${x+1} ${y+1} ${z+1}`); lines.push(`v ${x} ${y+1} ${z+1}`);
-                if (!solid(x,y,z-1)) lines.push(`f ${vb} ${vb+1} ${vb+2} ${vb+3}`);
-                if (!solid(x,y,z+1)) lines.push(`f ${vb+5} ${vb+4} ${vb+7} ${vb+6}`);
-                if (!solid(x-1,y,z)) lines.push(`f ${vb+4} ${vb} ${vb+3} ${vb+7}`);
-                if (!solid(x+1,y,z)) lines.push(`f ${vb+1} ${vb+5} ${vb+6} ${vb+2}`);
-                if (!solid(x,y+1,z)) lines.push(`f ${vb+3} ${vb+2} ${vb+6} ${vb+7}`);
-                if (!solid(x,y-1,z)) lines.push(`f ${vb+4} ${vb+5} ${vb+1} ${vb}`);
+                if (clampedMode || !solid(x,y,z-1)) lines.push(`f ${vb} ${vb+1} ${vb+2} ${vb+3}`);
+                if (clampedMode || !solid(x,y,z+1)) lines.push(`f ${vb+5} ${vb+4} ${vb+7} ${vb+6}`);
+                if (clampedMode || !solid(x-1,y,z)) lines.push(`f ${vb+4} ${vb} ${vb+3} ${vb+7}`);
+                if (clampedMode || !solid(x+1,y,z)) lines.push(`f ${vb+1} ${vb+5} ${vb+6} ${vb+2}`);
+                if (clampedMode || !solid(x,y+1,z)) lines.push(`f ${vb+3} ${vb+2} ${vb+6} ${vb+7}`);
+                if (clampedMode || !solid(x,y-1,z)) lines.push(`f ${vb+4} ${vb+5} ${vb+1} ${vb}`);
                 vb += 8;
             }
-            return { objText: lines.join('\n'), blocksIncluded: Math.min(count, maxBlocks), truncated: count > maxBlocks };
+            return { objText: lines.join('\n'), blocksIncluded: Math.min(count, maxBlocks), truncated: (count >= maxBlocks) || clampedMode || (originalTotal > blockTotal) };
         };
         const convertSchemInBrowser = async (file) => {
             const bytes = new Uint8Array(await file.arrayBuffer());
