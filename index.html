@@ -145,6 +145,15 @@
             .profile-world-joystick { display:block; }
             .profile-world-controls { font-size:11px; bottom:10px; left:auto; right:12px; transform:none; max-width: 52vw; }
         }
+        #play-container-3d:fullscreen, #play-container-3d:-webkit-full-screen { width:100vw !important; height:100vh !important; max-height:none !important; aspect-ratio:auto !important; }
+        #play-container-3d:fullscreen #game-chat-ui, #play-container-3d:-webkit-full-screen #game-chat-ui { width:min(340px, calc(100vw - 24px)) !important; top:10px !important; left:10px !important; z-index:80 !important; }
+        #play-container-3d:fullscreen #server-leaderboard-ui, #play-container-3d:-webkit-full-screen #server-leaderboard-ui { top:10px !important; right:10px !important; z-index:81 !important; }
+        #play-container-3d:fullscreen #server-leaderboard-modal, #play-container-3d:-webkit-full-screen #server-leaderboard-modal { top:52px !important; right:10px !important; max-height:calc(100vh - 70px) !important; z-index:82 !important; }
+        @media (max-width: 768px) {
+            #game-chat-ui { width:min(88vw, 320px) !important; }
+            #server-leaderboard-modal { width:min(88vw, 300px) !important; }
+        }
+        .live-stream-indicator { position:fixed; top:8px; right:8px; z-index:120000; background:rgba(20,20,20,.88); color:#fff; border:1px solid #ff4d4d; border-radius:8px; padding:6px 8px; font-size:11px; display:none; gap:6px; align-items:center; }
 
         /* 3D Canvas Container */
         .canvas-container { background: #34495e; padding: 10px; border-radius: 4px; display: inline-block; position: relative; width: 100%; box-sizing: border-box; }
@@ -735,12 +744,17 @@
                 <a onclick="navigate('academy')">Academy</a>
                 <a onclick="navigate('jams')">Jams</a>
                 <a onclick="navigate('funlab')">Fun Lab</a>
+                <a onclick="navigate('live')">Playsculpt Live</a>
                 <a id="nav-mod-panel" onclick="openModPanel()" style="display:none;">Mod Panel</a>
                 <a onclick="navigateProfile()">Profile</a>
                 <a onclick="navigate('settings')">Settings</a>
                 <a onclick="logout()">Logout</a>
             </div>
         </div>
+    </div>
+    <div id="live-stream-indicator" class="live-stream-indicator">
+        <span id="live-stream-elapsed">LIVE 00:00</span>
+        <button class="btn btn-danger btn-sm" onclick="stopLiveStream()">Stop</button>
     </div>
     <div id="system-restart-banner" style="display:none; position:fixed; inset:0; background:rgba(8,12,24,0.75); z-index:999998; align-items:center; justify-content:center; padding:20px;">
         <div style="max-width:760px; width:100%; background:#fff; border-radius:12px; padding:18px; box-shadow:0 16px 34px rgba(0,0,0,0.38);">
@@ -1514,6 +1528,76 @@
                 </div>
                 <div id="chatlogs-status" style="font-size:12px; color:#667; margin-bottom:8px;">Live updating every 2s.</div>
                 <div id="chatlogs-list" style="max-height:520px; overflow:auto; border:1px solid #d7def2; border-radius:8px; padding:8px; background:#fbfcff;"></div>
+            </div>
+        </div>
+        <div id="view-live" class="view">
+            <div class="card">
+                <h2 class="card-title">Playsculpt Live</h2>
+                <div id="live-account-gate">
+                    <p>Create and manage your Playsculpt Live creator account.</p>
+                    <button class="btn btn-success" onclick="openLiveCreateModal()">Create a Playsculpt Live Account</button>
+                </div>
+                <div id="live-dashboard" style="display:none;">
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                        <button class="btn btn-danger" onclick="openGoLiveModal()">Go Live</button>
+                        <div class="nav-chip">Total Likes: <span id="live-total-likes">0</span></div>
+                        <div class="nav-chip">Total Views: <span id="live-total-views">0</span></div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h3 style="margin-top:0;">Live Streams</h3>
+                <div id="live-streams-grid" class="game-grid"></div>
+            </div>
+            <div class="card" id="live-watch-card" style="display:none;">
+                <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+                    <h3 style="margin:0;">Watching: <span id="live-watch-title">-</span></h3>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-success btn-sm" onclick="likeCurrentLiveStream()">Like</button>
+                        <button class="btn btn-danger btn-sm" onclick="closeLiveWatch()">Close</button>
+                    </div>
+                </div>
+                <video id="live-watch-video" autoplay playsinline controls style="width:100%; max-height:420px; background:#000; border-radius:8px; margin-top:10px;"></video>
+                <div style="margin-top:8px; font-size:12px; color:#4b5563;">Viewers: <span id="live-watch-viewers">0</span> • Likes: <span id="live-watch-likes">0</span></div>
+                <div style="margin-top:10px; border:1px solid #d1d5db; border-radius:8px; padding:8px;">
+                    <div id="live-watch-chat" style="max-height:180px; overflow-y:auto; font-size:13px;"></div>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        <input id="live-watch-chat-input" class="form-control" maxlength="180" placeholder="Chat in stream...">
+                        <button class="btn btn-info btn-sm" onclick="sendLiveStreamChat()">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="live-create-modal" class="modal-overlay">
+            <div class="modal-box" style="text-align:left; max-width:520px;">
+                <h3>Create Playsculpt Live Account</h3>
+                <label>Username</label>
+                <input id="live-create-username" class="form-control" maxlength="20" placeholder="letters, numbers, underscores, periods">
+                <div style="margin-top:10px;">
+                    <label style="font-size:13px;"><input id="live-create-rules-check" type="checkbox"> I agree to Playsculpt Live Rules</label>
+                    <button class="btn btn-sm btn-info" style="margin-left:8px;" onclick="openLiveRulesModal()">View Rules</button>
+                </div>
+                <div style="display:flex; gap:8px; margin-top:14px;">
+                    <button class="btn btn-success" onclick="createLiveAccount()">Create Account</button>
+                    <button class="btn btn-danger" onclick="closeLiveCreateModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+        <div id="live-rules-modal" class="modal-overlay">
+            <div class="modal-box" style="text-align:left; max-width:760px; max-height:80vh; overflow:auto;">
+                <h3>Playsculpt Live Rules</h3>
+                <pre id="live-rules-text" style="white-space:pre-wrap; font-family:inherit; font-size:13px;"></pre>
+                <button class="btn btn-danger mt-10" onclick="closeLiveRulesModal()">Close</button>
+            </div>
+        </div>
+        <div id="live-go-live-modal" class="modal-overlay">
+            <div class="modal-box" style="max-width:620px;">
+                <h3>Go Live</h3>
+                <p style="white-space:pre-wrap;" id="live-go-live-copy"></p>
+                <div style="display:flex; gap:8px; justify-content:center;">
+                    <button class="btn btn-success" onclick="startLiveStream()">Go Live</button>
+                    <button class="btn btn-danger" onclick="closeGoLiveModal()">Cancel</button>
+                </div>
             </div>
         </div>
         <div id="view-economy-admin" class="view">
@@ -3449,6 +3533,8 @@ checkDailyReward(); // <-- ADDED HERE
             if (viewId !== 'shop') stopAccEditorLoop();
             if (viewId !== 'group-detail') if(grpWallSyncInterval) clearInterval(grpWallSyncInterval);
             if (viewId !== 'chat-logs' && adminChatLogsInterval) { clearInterval(adminChatLogsInterval); adminChatLogsInterval = null; }
+            if (viewId !== 'live' && liveState.listPoll) { clearInterval(liveState.listPoll); liveState.listPoll = null; }
+            if (viewId !== 'live' && liveState.viewerStreamId) closeLiveWatch();
 
             if (viewId === 'dashboard' && currentUser) {
                 document.getElementById('dash-username').innerText = currentUser.username;
@@ -3479,6 +3565,13 @@ else if (viewId === 'chat') {
                 if (!canUse) return navigate('dashboard');
                 const result = document.getElementById('eco-admin-result');
                 if (result) result.innerText = '';
+            }
+            else if (viewId === 'live') {
+                loadPlaysculptLive();
+                if (liveState.listPoll) clearInterval(liveState.listPoll);
+                liveState.listPoll = setInterval(() => {
+                    if (document.getElementById('view-live').classList.contains('active')) loadPlaysculptLive();
+                }, 2000);
             }
 
 else if (viewId === 'groups') {
@@ -3652,6 +3745,8 @@ else if (viewId === 'groups') {
         };
         const logout = async () => {
             if (currentUser) {
+                if (liveState && liveState.isLive) await stopLiveStream();
+                if (liveState && liveState.viewerStreamId) await closeLiveWatch();
                 try { await apiCall('/logout', 'POST'); } catch (e) {}
                 localStorage.removeItem('ps_token');
                 currentUser = null; updateNav(); navigate('landing');
@@ -13068,6 +13163,253 @@ const groupAsAircraft = () => {
             input.disabled = false;
             input.focus();
         };
+
+        // --- PLAYSCULPT LIVE ---
+        const LIVE_RULES_TEXT = `Playsculpt Live accounts are secondary creator accounts used only for streaming and live interaction features. Each user may only create one Playsculpt Live account, and it must be connected to their main Playsculpt account. Creating multiple Live accounts to avoid restrictions, bans, or limits is not allowed.
+
+All content streamed on Playsculpt Live must follow the main Playsculpt platform rules. This includes no harassment, no hate speech, no sexual content, no scams, and no copyrighted content that you do not own or have permission to use. Live content must remain appropriate at all times.
+
+Streamers are responsible for everything that happens in their live session. This includes viewer interactions, in-game actions, chat messages, and any triggered events. Allowing viewers to cause rule-breaking behavior through interaction systems is still considered the streamer’s responsibility.
+
+Live chat must follow all community guidelines. Spamming, harassment, threats, or inappropriate messages are not allowed. Streamers are expected to manage their chat and remove harmful behavior when needed.
+
+Using viewer interaction systems to exploit the economy is not allowed. This includes misleading users into spending currency, creating unfair systems that force spending, or faking engagement to gain rewards.
+
+Impersonation is not allowed. Your Playsculpt Live account must clearly represent you and cannot pretend to be another creator, staff member, or official Playsculpt account.
+
+Spam streaming is not allowed. This includes starting multiple streams to gain visibility, streaming misleading or inactive content, or using bots to inflate viewers, likes, or interactions.
+
+Exploiting bugs or systems within Playsculpt Live is not allowed. This includes abusing interaction features, rewards, or any part of the system to gain an unfair advantage.
+
+Streams must clearly represent what viewers will experience. Misleading titles, fake events, or bait content designed to trick users into joining are not allowed.
+
+Playsculpt reserves the right to suspend or remove Playsculpt Live accounts that break these rules. Severe violations may also affect your main Playsculpt account.
+
+Your Playsculpt Live account is directly tied to your main account, and all actions taken through it will impact your reputation and standing on the platform.`;
+        let liveState = {
+            account: null,
+            activeStreams: [],
+            streamId: null,
+            startedAt: 0,
+            localStream: null,
+            broadcasterPoll: null,
+            listPoll: null,
+            timerPoll: null,
+            viewerPoll: null,
+            watchMetaPoll: null,
+            watchChatPoll: null,
+            viewerPc: null,
+            viewerStreamId: null,
+            broadcasterPeers: {},
+            isLive: false
+        };
+        const openLiveCreateModal = () => { document.getElementById('live-create-modal').style.display = 'flex'; };
+        const closeLiveCreateModal = () => { document.getElementById('live-create-modal').style.display = 'none'; };
+        const openLiveRulesModal = () => {
+            document.getElementById('live-rules-text').innerText = LIVE_RULES_TEXT;
+            document.getElementById('live-rules-modal').style.display = 'flex';
+        };
+        const closeLiveRulesModal = () => { document.getElementById('live-rules-modal').style.display = 'none'; };
+        const openGoLiveModal = () => {
+            document.getElementById('live-go-live-copy').innerText = `Playsculpt livestreams do not include voice recording, it is solely sharing your screen (users will only be able to see playsculpt.net content, not other tabs) as you stream. Click "Go live" to start the stream automatically, and it will redirect you to your Playsculpt dashboard. Have fun!`;
+            document.getElementById('live-go-live-modal').style.display = 'flex';
+        };
+        const closeGoLiveModal = () => { document.getElementById('live-go-live-modal').style.display = 'none'; };
+        window.openLiveCreateModal = openLiveCreateModal; window.closeLiveCreateModal = closeLiveCreateModal;
+        window.openLiveRulesModal = openLiveRulesModal; window.closeLiveRulesModal = closeLiveRulesModal;
+        window.openGoLiveModal = openGoLiveModal; window.closeGoLiveModal = closeGoLiveModal;
+        const createLiveAccount = async () => {
+            const username = String(document.getElementById('live-create-username').value || '').trim();
+            const agreed = !!document.getElementById('live-create-rules-check').checked;
+            try {
+                await apiCall('/live/account', 'POST', { username, agreed });
+                closeLiveCreateModal();
+                loadPlaysculptLive();
+            } catch (e) {}
+        };
+        window.createLiveAccount = createLiveAccount;
+        const loadPlaysculptLive = async () => {
+            try {
+                const [status, streams] = await Promise.all([apiCall('/live/status', 'GET'), apiCall('/live/streams', 'GET')]);
+                liveState.account = status.account || null;
+                liveState.activeStreams = streams.streams || [];
+                const gate = document.getElementById('live-account-gate');
+                const dash = document.getElementById('live-dashboard');
+                gate.style.display = liveState.account ? 'none' : 'block';
+                dash.style.display = liveState.account ? 'block' : 'none';
+                document.getElementById('live-total-likes').innerText = status.stats ? (status.stats.likesTotal || 0) : 0;
+                document.getElementById('live-total-views').innerText = status.stats ? (status.stats.viewsTotal || 0) : 0;
+                const grid = document.getElementById('live-streams-grid');
+                grid.innerHTML = (liveState.activeStreams || []).length ? '' : '<p>No one is live right now.</p>';
+                (liveState.activeStreams || []).forEach(s => {
+                    const c = document.createElement('div');
+                    c.className = 'game-card';
+                    c.innerHTML = `<h3>${s.liveUsername}</h3><p>Viewers: ${s.viewerCount || 0}</p><p>Likes: ${s.likes || 0}</p><button class="btn btn-success btn-sm" onclick="watchLiveStream('${s.id}')">Watch</button>`;
+                    grid.appendChild(c);
+                });
+            } catch (e) {}
+        };
+        window.loadPlaysculptLive = loadPlaysculptLive;
+        const updateLiveIndicator = () => {
+            const ind = document.getElementById('live-stream-indicator');
+            if (!ind) return;
+            if (!liveState.isLive || !liveState.startedAt) { ind.style.display = 'none'; return; }
+            ind.style.display = 'inline-flex';
+            const secs = Math.floor((Date.now() - liveState.startedAt) / 1000);
+            const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+            const ss = String(secs % 60).padStart(2, '0');
+            document.getElementById('live-stream-elapsed').innerText = `LIVE ${mm}:${ss}`;
+        };
+        const startBroadcasterSignalLoop = () => {
+            if (liveState.broadcasterPoll) clearInterval(liveState.broadcasterPoll);
+            liveState.broadcasterPoll = setInterval(async () => {
+                if (!liveState.isLive || !liveState.streamId || !liveState.localStream) return;
+                try {
+                    const inbox = await apiCall(`/live/stream/${liveState.streamId}/signal/pull?role=broadcaster`, 'GET');
+                    for (const msg of (inbox.messages || [])) {
+                        const viewerId = msg.viewerId;
+                        let pc = liveState.broadcasterPeers[viewerId];
+                        if (!pc) {
+                            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                            liveState.localStream.getTracks().forEach(t => pc.addTrack(t, liveState.localStream));
+                            pc.onicecandidate = (ev) => {
+                                if (ev.candidate) apiCall(`/live/stream/${liveState.streamId}/signal`, 'POST', { role: 'broadcaster', viewerId, type: 'candidate', candidate: ev.candidate }).catch(() => {});
+                            };
+                            liveState.broadcasterPeers[viewerId] = pc;
+                        }
+                        if (msg.type === 'offer') {
+                            await pc.setRemoteDescription(new RTCSessionDescription(msg.offer));
+                            const ans = await pc.createAnswer();
+                            await pc.setLocalDescription(ans);
+                            await apiCall(`/live/stream/${liveState.streamId}/signal`, 'POST', { role: 'broadcaster', viewerId, type: 'answer', answer: ans });
+                        } else if (msg.type === 'candidate' && msg.candidate) {
+                            try { await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch (_) {}
+                        }
+                    }
+                } catch (e) {}
+            }, 900);
+        };
+        const startLiveStream = async () => {
+            try {
+                const media = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 20, width: 1280, height: 720, displaySurface: 'browser' }, audio: false });
+                const res = await apiCall('/live/go-live', 'POST', {});
+                liveState.localStream = media;
+                liveState.streamId = res.streamId;
+                liveState.startedAt = res.startedAt || Date.now();
+                liveState.isLive = true;
+                closeGoLiveModal();
+                navigate('dashboard');
+                if (liveState.timerPoll) clearInterval(liveState.timerPoll);
+                liveState.timerPoll = setInterval(updateLiveIndicator, 1000);
+                updateLiveIndicator();
+                startBroadcasterSignalLoop();
+                media.getVideoTracks().forEach(t => t.onended = () => stopLiveStream());
+            } catch (e) {
+                showModal('Go Live', 'Live start failed. Make sure screen/tab share permission is granted.');
+            }
+        };
+        window.startLiveStream = startLiveStream;
+        const stopLiveStream = async () => {
+            try { if (liveState.streamId) await apiCall('/live/stop', 'POST', {}); } catch (_) {}
+            if (liveState.localStream) liveState.localStream.getTracks().forEach(t => t.stop());
+            Object.values(liveState.broadcasterPeers || {}).forEach(pc => { try { pc.close(); } catch (_) {} });
+            liveState.broadcasterPeers = {};
+            liveState.localStream = null;
+            liveState.streamId = null;
+            liveState.isLive = false;
+            liveState.startedAt = 0;
+            if (liveState.broadcasterPoll) clearInterval(liveState.broadcasterPoll);
+            liveState.broadcasterPoll = null;
+            if (liveState.timerPoll) clearInterval(liveState.timerPoll);
+            liveState.timerPoll = null;
+            updateLiveIndicator();
+            if (document.getElementById('view-live') && document.getElementById('view-live').classList.contains('active')) loadPlaysculptLive();
+        };
+        window.stopLiveStream = stopLiveStream;
+        const watchLiveStream = async (streamId) => {
+            try {
+                await closeLiveWatch();
+                const card = document.getElementById('live-watch-card');
+                card.style.display = 'block';
+                liveState.viewerStreamId = streamId;
+                const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                liveState.viewerPc = pc;
+                pc.ontrack = (ev) => {
+                    const v = document.getElementById('live-watch-video');
+                    if (v && ev.streams && ev.streams[0]) v.srcObject = ev.streams[0];
+                };
+                pc.onicecandidate = (ev) => {
+                    if (ev.candidate) apiCall(`/live/stream/${streamId}/signal`, 'POST', { role: 'viewer', type: 'candidate', candidate: ev.candidate }).catch(() => {});
+                };
+                pc.addTransceiver('video', { direction: 'recvonly' });
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                await apiCall(`/live/stream/${streamId}/watch`, 'POST', {});
+                await apiCall(`/live/stream/${streamId}/signal`, 'POST', { role: 'viewer', type: 'offer', offer });
+                liveState.viewerPoll = setInterval(async () => {
+                    if (!liveState.viewerStreamId || !liveState.viewerPc) return;
+                    try {
+                        const inbox = await apiCall(`/live/stream/${streamId}/signal/pull?role=viewer`, 'GET');
+                        for (const m of (inbox.messages || [])) {
+                            if (m.type === 'answer' && m.answer && !liveState.viewerPc.currentRemoteDescription) {
+                                await liveState.viewerPc.setRemoteDescription(new RTCSessionDescription(m.answer));
+                            } else if (m.type === 'candidate' && m.candidate) {
+                                try { await liveState.viewerPc.addIceCandidate(new RTCIceCandidate(m.candidate)); } catch (_) {}
+                            }
+                        }
+                    } catch (e) {}
+                }, 900);
+                liveState.watchMetaPoll = setInterval(async () => {
+                    try {
+                        const meta = await apiCall(`/live/stream/${streamId}`, 'GET');
+                        document.getElementById('live-watch-title').innerText = meta.liveUsername || '';
+                        document.getElementById('live-watch-viewers').innerText = meta.viewerCount || 0;
+                        document.getElementById('live-watch-likes').innerText = meta.likes || 0;
+                    } catch (e) {}
+                }, 1400);
+                liveState.watchChatPoll = setInterval(fetchLiveStreamChat, 1200);
+                fetchLiveStreamChat();
+            } catch (e) { showModal('Live', 'Unable to watch stream.'); }
+        };
+        window.watchLiveStream = watchLiveStream;
+        const closeLiveWatch = async () => {
+            if (liveState.viewerPoll) clearInterval(liveState.viewerPoll);
+            if (liveState.watchMetaPoll) clearInterval(liveState.watchMetaPoll);
+            if (liveState.watchChatPoll) clearInterval(liveState.watchChatPoll);
+            liveState.viewerPoll = liveState.watchMetaPoll = liveState.watchChatPoll = null;
+            if (liveState.viewerPc) { try { liveState.viewerPc.close(); } catch (_) {} }
+            liveState.viewerPc = null;
+            const old = liveState.viewerStreamId;
+            liveState.viewerStreamId = null;
+            if (old) { try { await apiCall(`/live/stream/${old}/watch`, 'POST', { leave: true }); } catch (_) {} }
+            const card = document.getElementById('live-watch-card');
+            if (card) card.style.display = 'none';
+            const vid = document.getElementById('live-watch-video');
+            if (vid) vid.srcObject = null;
+        };
+        window.closeLiveWatch = closeLiveWatch;
+        const fetchLiveStreamChat = async () => {
+            if (!liveState.viewerStreamId) return;
+            try {
+                const res = await apiCall(`/live/stream/${liveState.viewerStreamId}/chat`, 'GET');
+                const box = document.getElementById('live-watch-chat');
+                if (!box) return;
+                box.innerHTML = (res.messages || []).map(m => `<div><strong>${m.authorName}:</strong> ${m.text}</div>`).join('') || '<div style="color:#6b7280;">No messages yet.</div>';
+            } catch (e) {}
+        };
+        const sendLiveStreamChat = async () => {
+            const input = document.getElementById('live-watch-chat-input');
+            if (!input || !liveState.viewerStreamId) return;
+            const text = String(input.value || '').trim();
+            if (!text) return;
+            try { await apiCall(`/live/stream/${liveState.viewerStreamId}/chat`, 'POST', { text }); input.value = ''; fetchLiveStreamChat(); } catch (e) {}
+        };
+        window.sendLiveStreamChat = sendLiveStreamChat;
+        const likeCurrentLiveStream = async () => {
+            if (!liveState.viewerStreamId) return;
+            try { await apiCall(`/live/stream/${liveState.viewerStreamId}/like`, 'POST', {}); } catch (e) {}
+        };
+        window.likeCurrentLiveStream = likeCurrentLiveStream;
         const renderAdminChatLogs = (payload = {}) => {
             const listEl = document.getElementById('chatlogs-list');
             const statusEl = document.getElementById('chatlogs-status');

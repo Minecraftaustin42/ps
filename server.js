@@ -21,7 +21,8 @@ let db = {
     reports: [],
     notifications: [],
     moderation: { bans: {}, ipBans: [], warnings: {} },  // <-- ADD THIS LINE
-    friendPetDaily: {}
+    friendPetDaily: {},
+    live: { accounts: [], channelStats: {} }
 };
 
 let chatActivity = {}; // Tracks timestamps for spam { userId: [timestamps] }
@@ -36,6 +37,7 @@ let gameChats = {}; // { [gameId]: [messages] }
 let gameChatActivity = {}; // { [gameId_userId]: [timestamps] }
 let gameChatSuspensions = {}; // { [gameId_userId]: unbanTimestamp }
 let gameServerLastSeen = {}; // { [gameId]: timestamp }
+let liveStreams = {}; // { [streamId]: { ...runtime state... } }
 let adminAuth = { attempts: 0, lockoutUntil: 0 };
 const RESTART_POPUP_TEXT = 'Playsculpt servers are restarting! You do not need to take any action if you’re in a game or in studio, you will stay in. Please wait around 10 seconds to be automatically reconnected!';
 let restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
@@ -53,6 +55,7 @@ if (!db.chatLogs) db.chatLogs = [];
 if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} }; // <-- ADD THIS LINE
 if (!db.friendPetDaily) db.friendPetDaily = {};
+if (!db.live) db.live = { accounts: [], channelStats: {} };
     try {
         const loaded = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
         db = { ...db, ...loaded };
@@ -67,6 +70,7 @@ if (!db.sounds) db.sounds = [];
         if (!db.reports) db.reports = [];
         if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
         if (!db.chatLogs) db.chatLogs = [];
+        if (!db.live) db.live = { accounts: [], channelStats: {} };
 
         db.users.forEach(u => { 
             if (!u.followers) u.followers = []; 
@@ -3914,6 +3918,188 @@ app.post("/api/invite", requireAuth, (req, res) => {
     });
 
     res.json({ success: true });
+});
+
+// ==========================================
+// PLAYSCULPT LIVE
+// ==========================================
+const LIVE_USERNAME_RE = /^[A-Za-z0-9._]{1,20}$/;
+const cleanupLiveViewers = () => {
+    const now = Date.now();
+    Object.values(liveStreams).forEach((s) => {
+        if (!s || !s.activeViewers) return;
+        Object.keys(s.activeViewers).forEach((uid) => {
+            if ((s.activeViewers[uid] || 0) < now - 15000) delete s.activeViewers[uid];
+        });
+    });
+};
+const getLiveAccountByUserId = (userId) => (db.live?.accounts || []).find(a => a.userId === userId) || null;
+const getLiveStats = (userId) => {
+    if (!db.live.channelStats) db.live.channelStats = {};
+    if (!db.live.channelStats[userId]) db.live.channelStats[userId] = { likesTotal: 0, viewsTotal: 0 };
+    return db.live.channelStats[userId];
+};
+
+app.get('/api/live/status', requireAuth, (req, res) => {
+    cleanupLiveViewers();
+    const account = getLiveAccountByUserId(req.userId);
+    const stream = Object.values(liveStreams).find(s => s.ownerId === req.userId && s.active);
+    res.json({
+        account,
+        stream: stream ? { id: stream.id, startedAt: stream.startedAt, viewerCount: Object.keys(stream.activeViewers || {}).length, likes: (stream.likes || []).length } : null,
+        stats: getLiveStats(req.userId)
+    });
+});
+
+app.post('/api/live/account', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    const username = String(req.body.username || '').trim();
+    const agreed = !!req.body.agreed;
+    if (!agreed) return res.status(400).json({ error: 'You must agree to Playsculpt Live rules.' });
+    if (!LIVE_USERNAME_RE.test(username)) return res.status(400).json({ error: 'Username must be 1-20 chars using letters, numbers, underscores, periods.' });
+    if (getLiveAccountByUserId(user.id)) return res.status(400).json({ error: 'You already have a Playsculpt Live account.' });
+    if ((db.live.accounts || []).some(a => String(a.username || '').toLowerCase() === username.toLowerCase())) return res.status(400).json({ error: 'Live username already taken.' });
+    const acc = { id: crypto.randomUUID(), userId: user.id, mainUsername: user.username, username, createdAt: Date.now() };
+    db.live.accounts.push(acc);
+    if (!db.live.channelStats[user.id]) db.live.channelStats[user.id] = { likesTotal: 0, viewsTotal: 0 };
+    saveDB();
+    res.json({ success: true, account: acc });
+});
+
+app.get('/api/live/streams', requireAuth, (req, res) => {
+    cleanupLiveViewers();
+    const streams = Object.values(liveStreams).filter(s => s.active).map(s => ({
+        id: s.id,
+        ownerId: s.ownerId,
+        liveUsername: s.liveUsername,
+        viewerCount: Object.keys(s.activeViewers || {}).length,
+        likes: (s.likes || []).length,
+        startedAt: s.startedAt
+    })).sort((a, b) => b.startedAt - a.startedAt);
+    res.json({ streams });
+});
+
+app.post('/api/live/go-live', requireAuth, (req, res) => {
+    const account = getLiveAccountByUserId(req.userId);
+    if (!account) return res.status(403).json({ error: 'Create a Playsculpt Live account first.' });
+    const existing = Object.values(liveStreams).find(s => s.ownerId === req.userId && s.active);
+    if (existing) return res.json({ success: true, streamId: existing.id, startedAt: existing.startedAt });
+    const streamId = crypto.randomUUID();
+    liveStreams[streamId] = {
+        id: streamId,
+        ownerId: req.userId,
+        liveUsername: account.username,
+        startedAt: Date.now(),
+        likes: [],
+        likedBy: {},
+        chat: [],
+        active: true,
+        activeViewers: {},
+        viewedUsers: {},
+        signal: { forBroadcaster: [], forViewer: {} }
+    };
+    res.json({ success: true, streamId, startedAt: liveStreams[streamId].startedAt });
+});
+
+app.post('/api/live/stop', requireAuth, (req, res) => {
+    const stream = Object.values(liveStreams).find(s => s.ownerId === req.userId && s.active);
+    if (!stream) return res.json({ success: true });
+    stream.active = false;
+    res.json({ success: true });
+});
+
+app.post('/api/live/stream/:id/watch', requireAuth, (req, res) => {
+    cleanupLiveViewers();
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    if (req.body && req.body.leave) {
+        delete stream.activeViewers[req.userId];
+        return res.json({ success: true });
+    }
+    stream.activeViewers[req.userId] = Date.now();
+    if (!stream.viewedUsers[req.userId]) {
+        stream.viewedUsers[req.userId] = true;
+        const stats = getLiveStats(stream.ownerId);
+        stats.viewsTotal += 1;
+        saveDB();
+    }
+    res.json({ success: true, viewerCount: Object.keys(stream.activeViewers || {}).length });
+});
+
+app.get('/api/live/stream/:id', requireAuth, (req, res) => {
+    cleanupLiveViewers();
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    res.json({ id: stream.id, liveUsername: stream.liveUsername, likes: (stream.likes || []).length, viewerCount: Object.keys(stream.activeViewers || {}).length });
+});
+
+app.get('/api/live/stream/:id/chat', requireAuth, (req, res) => {
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    res.json({ messages: (stream.chat || []).slice(-120) });
+});
+
+app.post('/api/live/stream/:id/chat', requireAuth, (req, res) => {
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    const user = db.users.find(u => u.id === req.userId);
+    const text = String(req.body.text || '').trim().slice(0, 180);
+    if (!text) return res.status(400).json({ error: 'Message required.' });
+    stream.chat.push({ id: crypto.randomUUID(), authorId: user.id, authorName: user.username, text, timestamp: Date.now() });
+    if (stream.chat.length > 200) stream.chat.shift();
+    res.json({ success: true });
+});
+
+app.post('/api/live/stream/:id/like', requireAuth, (req, res) => {
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    if (!stream.likedBy[req.userId]) {
+        stream.likedBy[req.userId] = true;
+        stream.likes.push(req.userId);
+        const stats = getLiveStats(stream.ownerId);
+        stats.likesTotal += 1;
+        saveDB();
+    }
+    res.json({ success: true, likes: stream.likes.length });
+});
+
+app.post('/api/live/stream/:id/signal', requireAuth, (req, res) => {
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    const role = String(req.body.role || '');
+    if (role === 'viewer') {
+        if (!stream.signal.forBroadcaster) stream.signal.forBroadcaster = [];
+        stream.signal.forBroadcaster.push({ viewerId: req.userId, type: req.body.type, offer: req.body.offer || null, candidate: req.body.candidate || null });
+        return res.json({ success: true });
+    }
+    if (role === 'broadcaster') {
+        if (stream.ownerId !== req.userId) return res.status(403).json({ error: 'Only stream owner can send broadcaster signals.' });
+        const viewerId = String(req.body.viewerId || '');
+        if (!viewerId) return res.status(400).json({ error: 'viewerId required.' });
+        if (!stream.signal.forViewer[viewerId]) stream.signal.forViewer[viewerId] = [];
+        stream.signal.forViewer[viewerId].push({ type: req.body.type, answer: req.body.answer || null, candidate: req.body.candidate || null });
+        return res.json({ success: true });
+    }
+    res.status(400).json({ error: 'Invalid role.' });
+});
+
+app.get('/api/live/stream/:id/signal/pull', requireAuth, (req, res) => {
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    const role = String(req.query.role || '');
+    if (role === 'broadcaster') {
+        if (stream.ownerId !== req.userId) return res.status(403).json({ error: 'Only stream owner can pull broadcaster queue.' });
+        const messages = stream.signal.forBroadcaster || [];
+        stream.signal.forBroadcaster = [];
+        return res.json({ messages });
+    }
+    if (role === 'viewer') {
+        const key = req.userId;
+        const messages = (stream.signal.forViewer && stream.signal.forViewer[key]) ? stream.signal.forViewer[key] : [];
+        if (stream.signal.forViewer && stream.signal.forViewer[key]) stream.signal.forViewer[key] = [];
+        return res.json({ messages });
+    }
+    res.status(400).json({ error: 'Invalid role.' });
 });
 
 
