@@ -128,6 +128,32 @@
         .badge-creator { background: #f39c12; }
         .badge-critic { background: #e84393; }
         .badge-genre { background: #34495e; }
+        .profile-role-tag { display:inline-block; margin-left:8px; padding:4px 10px; border-radius:14px; font-size:11px; font-weight:800; color:#fff; background:linear-gradient(135deg,#2563eb,#4f46e5); cursor:pointer; border:1px solid rgba(255,255,255,0.25); box-shadow:0 3px 10px rgba(37,99,235,0.35); }
+        .profile-world-btn { margin-top: 14px; background: linear-gradient(135deg, #0ea5e9, #4338ca); border-bottom-color:#312e81; font-size:15px; padding:12px 18px; box-shadow:0 8px 18px rgba(67,56,202,0.28); }
+        .profile-world-loader { position:fixed; inset:0; z-index:100001; display:none; align-items:center; justify-content:center; flex-direction:column; color:#fff; background: radial-gradient(circle at 20% 20%, #7dd3fc 0%, #2563eb 45%, #1e1b4b 100%); overflow:hidden; }
+        .profile-world-loader .ring { width:90px; height:90px; border-radius:50%; border:8px solid rgba(255,255,255,0.2); border-top-color:#fff; animation:spin 1s linear infinite; margin-bottom:14px; }
+        .profile-world-loader .cloud { position:absolute; border-radius: 999px; background:rgba(255,255,255,0.25); filter:blur(1px); animation:drift 12s linear infinite; }
+        @keyframes drift { from { transform:translateX(-20vw);} to { transform:translateX(120vw);} }
+        .profile-world-overlay { position: fixed; inset: 0; z-index: 100000; display:none; background:#000; }
+        .profile-world-ui { position:absolute; top:14px; left:14px; z-index:5; display:flex; flex-direction:column; gap:8px; }
+        .portal-hint { background:rgba(17,24,39,0.8); color:#fff; padding:8px 10px; border-radius:8px; font-size:12px; }
+        .profile-world-join-label { position:absolute; top:18px; left:50%; transform:translateX(-50%); z-index:6; background:rgba(15,23,42,0.82); color:#fff; padding:8px 14px; border-radius:10px; border:1px solid rgba(255,255,255,0.2); font-size:13px; font-weight:700; display:none; }
+        .profile-world-controls { position:absolute; bottom:16px; left:50%; transform:translateX(-50%); z-index:6; background:rgba(15,23,42,0.74); color:#e2e8f0; padding:8px 12px; border-radius:8px; font-size:12px; }
+        .profile-world-joystick { position:absolute; left:14px; bottom:18px; width:110px; height:110px; border-radius:50%; border:2px solid rgba(255,255,255,0.32); background:rgba(15,23,42,0.45); z-index:7; display:none; touch-action:none; }
+        .profile-world-joystick-knob { position:absolute; width:44px; height:44px; border-radius:50%; background:rgba(148,163,184,0.86); left:33px; top:33px; border:2px solid rgba(255,255,255,0.5); }
+        @media (max-width: 900px) {
+            .profile-world-joystick { display:block; }
+            .profile-world-controls { font-size:11px; bottom:10px; left:auto; right:12px; transform:none; max-width: 52vw; }
+        }
+        #play-container-3d:fullscreen, #play-container-3d:-webkit-full-screen { width:100vw !important; height:100vh !important; max-height:none !important; aspect-ratio:auto !important; }
+        #play-container-3d:fullscreen #game-chat-ui, #play-container-3d:-webkit-full-screen #game-chat-ui { width:min(340px, calc(100vw - 24px)) !important; top:10px !important; left:10px !important; z-index:80 !important; }
+        #play-container-3d:fullscreen #server-leaderboard-ui, #play-container-3d:-webkit-full-screen #server-leaderboard-ui { top:10px !important; right:10px !important; z-index:81 !important; }
+        #play-container-3d:fullscreen #server-leaderboard-modal, #play-container-3d:-webkit-full-screen #server-leaderboard-modal { top:52px !important; right:10px !important; max-height:calc(100vh - 70px) !important; z-index:82 !important; }
+        @media (max-width: 768px) {
+            #game-chat-ui { width:min(88vw, 320px) !important; }
+            #server-leaderboard-modal { width:min(88vw, 300px) !important; }
+        }
+        .live-stream-indicator { position:fixed; top:8px; right:8px; z-index:120000; background:rgba(20,20,20,.88); color:#fff; border:1px solid #ff4d4d; border-radius:8px; padding:6px 8px; font-size:11px; display:none; gap:6px; align-items:center; }
 
         /* 3D Canvas Container */
         .canvas-container { background: #34495e; padding: 10px; border-radius: 4px; display: inline-block; position: relative; width: 100%; box-sizing: border-box; }
@@ -456,6 +482,25 @@
             <div id="ps-progress-fill"></div>
         </div>
     </div>
+<div id="profile-world-loading" class="profile-world-loader">
+    <div class="cloud" style="width:140px; height:52px; top:18%; left:-12vw;"></div>
+    <div class="cloud" style="width:120px; height:40px; top:58%; left:-30vw; animation-delay:2s;"></div>
+    <div class="cloud" style="width:180px; height:60px; top:38%; left:-50vw; animation-delay:5s;"></div>
+    <div class="ring"></div>
+    <h2 style="margin:0;">Loading Profile World...</h2>
+    <p style="margin-top:8px; opacity:0.9;">Raising floating island and calibrating portals</p>
+</div>
+<div id="profile-world-overlay" class="profile-world-overlay">
+    <div class="profile-world-ui">
+        <button class="btn btn-danger btn-sm" onclick="closeProfileWorld()">Exit Profile World</button>
+        <div class="portal-hint">Click a glowing portal to join that game.</div>
+    </div>
+    <div id="profile-world-join-label" class="profile-world-join-label"></div>
+    <div class="profile-world-controls">WASD / joystick to move • Drag to look • Click portal to join game</div>
+    <div id="profile-world-joystick" class="profile-world-joystick">
+        <div id="profile-world-joystick-knob" class="profile-world-joystick-knob"></div>
+    </div>
+</div>
 
 
 <div id="warning-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.95); z-index:999999; color:white; justify-content:center; align-items:center; flex-direction:column; text-align:center;">
@@ -699,12 +744,25 @@
                 <a onclick="navigate('academy')">Academy</a>
                 <a onclick="navigate('jams')">Jams</a>
                 <a onclick="navigate('funlab')">Fun Lab</a>
+                <a onclick="navigate('live')">Playsculpt Live</a>
                 <a id="nav-mod-panel" onclick="openModPanel()" style="display:none;">Mod Panel</a>
                 <a onclick="navigateProfile()">Profile</a>
                 <a onclick="navigate('settings')">Settings</a>
                 <a onclick="logout()">Logout</a>
             </div>
         </div>
+    </div>
+    <div id="live-stream-indicator" class="live-stream-indicator">
+        <span id="live-stream-elapsed">LIVE 00:00</span>
+        <button class="btn btn-info btn-sm" onclick="toggleStreamerChatPanel()">Chat</button>
+        <button class="btn btn-danger btn-sm" onclick="stopLiveStream()">Stop</button>
+    </div>
+    <div id="live-streamer-chat-panel" style="display:none; position:fixed; top:44px; right:8px; z-index:120001; width:300px; max-width:calc(100vw - 16px); background:rgba(12,18,34,0.92); color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:8px; padding:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; margin-bottom:6px;">
+            <strong>Live Stream Chat</strong>
+            <button class="btn btn-danger btn-sm" onclick="toggleStreamerChatPanel()">Hide</button>
+        </div>
+        <div id="live-streamer-chat-list" style="max-height:180px; overflow-y:auto; font-size:12px;"></div>
     </div>
     <div id="system-restart-banner" style="display:none; position:fixed; inset:0; background:rgba(8,12,24,0.75); z-index:999998; align-items:center; justify-content:center; padding:20px;">
         <div style="max-width:760px; width:100%; background:#fff; border-radius:12px; padding:18px; box-shadow:0 16px 34px rgba(0,0,0,0.38);">
@@ -1480,6 +1538,83 @@
                 <div id="chatlogs-list" style="max-height:520px; overflow:auto; border:1px solid #d7def2; border-radius:8px; padding:8px; background:#fbfcff;"></div>
             </div>
         </div>
+        <div id="view-live" class="view">
+            <div class="card">
+                <h2 class="card-title">Playsculpt Live</h2>
+                <div id="live-account-gate">
+                    <p>Create and manage your Playsculpt Live creator account.</p>
+                    <button class="btn btn-success" onclick="openLiveCreateModal()">Create a Playsculpt Live Account</button>
+                </div>
+                <div id="live-dashboard" style="display:none;">
+                    <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+                        <button class="btn btn-danger" onclick="openGoLiveModal()">Go Live</button>
+                        <div class="nav-chip">Total Likes: <span id="live-total-likes">0</span></div>
+                        <div class="nav-chip">Total Views: <span id="live-total-views">0</span></div>
+                        <div class="nav-chip">Tips: <span id="live-total-tips">0</span></div>
+                        <div class="nav-chip">Earnings: <span id="live-total-earnings">0</span> SC</div>
+                    </div>
+                </div>
+            </div>
+            <div class="card">
+                <h3 style="margin-top:0;">Live Streams</h3>
+                <div id="live-streams-grid" class="game-grid"></div>
+            </div>
+            <div class="card" id="live-watch-card" style="display:none;">
+                <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;">
+                    <h3 style="margin:0;">Watching: <span id="live-watch-title">-</span></h3>
+                    <div style="display:flex; gap:8px;">
+                        <button class="btn btn-success btn-sm" onclick="likeCurrentLiveStream()">Like</button>
+                        <button class="btn btn-danger btn-sm" onclick="closeLiveWatch()">Close</button>
+                    </div>
+                </div>
+                <video id="live-watch-video" autoplay playsinline controls style="width:100%; max-height:420px; background:#000; border-radius:8px; margin-top:10px;"></video>
+                <div style="margin-top:8px; font-size:12px; color:#4b5563;">Viewers: <span id="live-watch-viewers">0</span> • Likes: <span id="live-watch-likes">0</span></div>
+                <div style="margin-top:10px; border:1px solid #d1d5db; border-radius:8px; padding:8px;">
+                    <div id="live-watch-chat" style="max-height:180px; overflow-y:auto; font-size:13px;"></div>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        <input id="live-watch-chat-input" class="form-control" maxlength="180" placeholder="Chat in stream...">
+                        <button class="btn btn-info btn-sm" onclick="sendLiveStreamChat()">Send</button>
+                    </div>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        <input id="live-tip-amount" type="number" min="1" step="1" class="form-control" placeholder="Tip amount (SC)">
+                        <input id="live-tip-message" maxlength="150" class="form-control" placeholder="Tip message (150 max)">
+                        <button class="btn btn-warning btn-sm" onclick="tipCurrentLiveStream()">Tip</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="live-create-modal" class="modal-overlay">
+            <div class="modal-box" style="text-align:left; max-width:520px;">
+                <h3>Create Playsculpt Live Account</h3>
+                <label>Username</label>
+                <input id="live-create-username" class="form-control" maxlength="20" placeholder="letters, numbers, underscores, periods">
+                <div style="margin-top:10px;">
+                    <label style="font-size:13px;"><input id="live-create-rules-check" type="checkbox"> I agree to Playsculpt Live Rules</label>
+                    <button class="btn btn-sm btn-info" style="margin-left:8px;" onclick="openLiveRulesModal()">View Rules</button>
+                </div>
+                <div style="display:flex; gap:8px; margin-top:14px;">
+                    <button class="btn btn-success" onclick="createLiveAccount()">Create Account</button>
+                    <button class="btn btn-danger" onclick="closeLiveCreateModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+        <div id="live-rules-modal" class="modal-overlay">
+            <div class="modal-box" style="text-align:left; max-width:760px; max-height:80vh; overflow:auto;">
+                <h3>Playsculpt Live Rules</h3>
+                <pre id="live-rules-text" style="white-space:pre-wrap; font-family:inherit; font-size:13px;"></pre>
+                <button class="btn btn-danger mt-10" onclick="closeLiveRulesModal()">Close</button>
+            </div>
+        </div>
+        <div id="live-go-live-modal" class="modal-overlay">
+            <div class="modal-box" style="max-width:620px;">
+                <h3>Go Live</h3>
+                <p style="white-space:pre-wrap;" id="live-go-live-copy"></p>
+                <div style="display:flex; gap:8px; justify-content:center;">
+                    <button class="btn btn-success" onclick="startLiveStream()">Go Live</button>
+                    <button class="btn btn-danger" onclick="closeGoLiveModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
         <div id="view-economy-admin" class="view">
             <div class="card" style="max-width:640px; margin:0 auto;">
                 <h2 class="card-title">Economy Admin</h2>
@@ -1536,7 +1671,6 @@
                 <p id="prof-bio" style="margin:10px 0 0 0; color:#555; white-space:pre-wrap;"></p>
 
                 <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
-                    <p style="font-size: 16px; color: #f39c12; font-weight: bold; margin: 0;"><span id="prof-coins">0</span> SC</p>
                     <p style="margin: 0; color:#e74c3c; font-weight:bold;">Play Streak: <span id="prof-streak">0</span></p>
                     <p style="margin: 0;"><strong>Followers:</strong> <span id="prof-followers-count">0</span></p>
                     <p style="margin: 0;"><strong>Friends:</strong> <span id="prof-friends-count">0</span></p>
@@ -1549,7 +1683,7 @@
                     <h2 style="margin: 0;">
                         <span id="prof-online-dot" class="status-dot offline"></span>
                         Profile: <span id="prof-username"></span>
-<span style="color: #7f8c8d; font-size: 14px; font-weight: normal;">(ID: #<span id="prof-userid"></span>)</span>
+<span style="color: #7f8c8d; font-size: 14px; font-weight: normal;">(ID: #<span id="prof-userid"></span>)</span><span id="prof-role-tag-wrap"></span>
                     </h2>
                     <div style="display: flex; gap: 10px;">
                         <button id="prof-copy-btn" class="btn btn-sm" style="background-color: #95a5a6; border-bottom-color: #7f8c8d;" onclick="copyProfileLink()">Copy Link</button>
@@ -1560,19 +1694,8 @@
                     </div>
                 </div>
 
-                <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
-                    <p style="font-size: 16px; color: #f39c12; font-weight: bold; margin: 0;"><span id="prof-coins">0</span> SC</p>
-                    <p style="margin: 0;"><strong>Followers:</strong> <span id="prof-followers-count">0</span></p>
-                    <p style="margin: 0;"><strong>Games:</strong> <span id="prof-count">0</span></p>
-                </div>
-
                 <div id="prof-badges" style="margin-top: 15px;"></div>
-
-                <div id="prof-avatar-section" style="display:none; align-items: center; gap: 10px; margin-top: 15px; padding-top: 15px; border-top: 1px solid #eee;">
-                    <label><strong>Avatar Color:</strong></label>
-                    <input type="color" id="prof-color-picker" style="cursor:pointer;" onchange="updateAvatarColor(this.value)">
-                    <span style="font-size: 12px; color: #7f8c8d;">(This is how you appear in games)</span>
-                </div>
+                <button id="profile-world-enter-btn" class="btn profile-world-btn" style="display:none;" onclick="enterProfileWorld()">Enter Profile World</button>
 
                 <div class="tabs mt-20">
                     <div class="tab active" onclick="switchProfileTab('created')">Created</div>
@@ -3425,6 +3548,8 @@ checkDailyReward(); // <-- ADDED HERE
             if (viewId !== 'shop') stopAccEditorLoop();
             if (viewId !== 'group-detail') if(grpWallSyncInterval) clearInterval(grpWallSyncInterval);
             if (viewId !== 'chat-logs' && adminChatLogsInterval) { clearInterval(adminChatLogsInterval); adminChatLogsInterval = null; }
+            if (viewId !== 'live' && liveState.listPoll) { clearInterval(liveState.listPoll); liveState.listPoll = null; }
+            if (viewId !== 'live' && liveState.viewerStreamId) closeLiveWatch();
 
             if (viewId === 'dashboard' && currentUser) {
                 document.getElementById('dash-username').innerText = currentUser.username;
@@ -3455,6 +3580,13 @@ else if (viewId === 'chat') {
                 if (!canUse) return navigate('dashboard');
                 const result = document.getElementById('eco-admin-result');
                 if (result) result.innerText = '';
+            }
+            else if (viewId === 'live') {
+                loadPlaysculptLive();
+                if (liveState.listPoll) clearInterval(liveState.listPoll);
+                liveState.listPoll = setInterval(() => {
+                    if (document.getElementById('view-live').classList.contains('active')) loadPlaysculptLive();
+                }, 2000);
             }
 
 else if (viewId === 'groups') {
@@ -3628,6 +3760,8 @@ else if (viewId === 'groups') {
         };
         const logout = async () => {
             if (currentUser) {
+                if (liveState && liveState.isLive) await stopLiveStream();
+                if (liveState && liveState.viewerStreamId) await closeLiveWatch();
                 try { await apiCall('/logout', 'POST'); } catch (e) {}
                 localStorage.removeItem('ps_token');
                 currentUser = null; updateNav(); navigate('landing');
@@ -5661,11 +5795,13 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 document.getElementById('prof-followers-count').innerText = profile.followersCount;
                 document.getElementById('prof-friends-count').innerText = profile.friendsCount || 0;
                 document.getElementById('prof-online-dot').className = `status-dot ${profile.isOnline ? 'online' : 'offline'}`;
-                document.getElementById('prof-coins').innerText = localStorage.getItem('sc_' + profile.id) || '0';
                 document.getElementById('prof-bio').innerText = profile.profileBio || '';
                 document.getElementById('prof-join-date').innerText = new Date(profile.createdAt || Date.now()).toLocaleDateString();
                 const ls = Number(profile.lastSeenAt || 0);
                 document.getElementById('prof-last-seen').innerText = profile.isOnline ? 'Online now' : (ls ? new Date(ls).toLocaleString() : 'Unknown');
+                const roleWrap = document.getElementById('prof-role-tag-wrap');
+                const roleTag = getSpecialRoleTag(profile.username);
+                roleWrap.innerHTML = roleTag ? `<span class="profile-role-tag" onclick="openRoleTagModal('${profile.username}')">${roleTag.label}</span>` : '';
                 const profileCard = document.querySelector('#view-profile .card');
                 const themeMap = {
                     theme_playsculpt_blue: ['#e9f6ff', '#a8d7ff'],
@@ -5700,7 +5836,7 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                         pinnedWrap.innerHTML = `<div style="font-size:11px; color:#6b7280; margin-bottom:4px;">Pinned Game</div><div style="font-weight:700; color:#1f2937;">${profile.pinnedGameData.title}</div><div style="font-size:12px; color:#4b5563; margin-top:4px;">${profile.profilePinnedGame.description || ''}</div>`;
                     } else pinnedWrap.style.display = 'none';
                 }
-document.getElementById('prof-userid').innerText = currentProfileData.userIdNum || '?';
+                document.getElementById('prof-userid').innerText = currentProfileData.userIdNum || '?';
 
                 const banner = document.getElementById('prof-primary-group-banner');
                 if (profile.primaryGroup) {
@@ -5725,10 +5861,8 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                     badgeContainer.innerHTML = `<span style="font-size:12px; color:#7f8c8d;">No badges earned yet.</span>`;
                 }
 
-                const avatarSect = document.getElementById('prof-avatar-section');
-                if (currentUser && currentUser.username === profile.username) {
-                    avatarSect.style.display = 'flex'; document.getElementById('prof-color-picker').value = profile.color || '#e74c3c';
-                } else { avatarSect.style.display = 'none'; }
+                const pwBtn = document.getElementById('profile-world-enter-btn');
+                if (pwBtn) pwBtn.style.display = profile.profileWorld && profile.profileWorld.equipped ? 'inline-flex' : 'none';
 
                 const followBtn = document.getElementById('prof-follow-btn'), friendBtn = document.getElementById('prof-friend-btn'), msgBtn = document.getElementById('prof-message-btn'), reportBtn = document.getElementById('prof-report-btn');
                 if (currentUser && currentUser.username.toLowerCase() !== profile.username.toLowerCase()) {
@@ -5795,6 +5929,328 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
 
                 switchProfileTab(currentProfTab);
             } catch (e) { navigate('library'); }
+        };
+
+        let profileWorldScene = null, profileWorldCamera = null, profileWorldRenderer = null, profileWorldAnim = null, profileWorldPortalMeshes = [], profileWorldResizeHandler = null;
+        let profileWorldKeyDownHandler = null, profileWorldKeyUpHandler = null, profileWorldMouseMoveHandler = null, profileWorldMouseDownHandler = null, profileWorldMouseUpHandler = null;
+        let profileWorldJoystickStartHandler = null, profileWorldJoystickMoveHandler = null, profileWorldJoystickEndHandler = null;
+        let profileWorldState = { keys: {}, player: null, playerAvatar: null, yaw: 0, pitch: -0.25, joining: false, portalInfo: [], joystick: { x: 0, y: 0 }, colliders: [] };
+        const closeProfileWorld = () => {
+            const overlay = document.getElementById('profile-world-overlay');
+            if (overlay) overlay.style.display = 'none';
+            const joinLabel = document.getElementById('profile-world-join-label');
+            if (joinLabel) { joinLabel.style.display = 'none'; joinLabel.innerText = ''; }
+            if (profileWorldAnim) cancelAnimationFrame(profileWorldAnim);
+            profileWorldAnim = null;
+            profileWorldPortalMeshes = [];
+            if (profileWorldRenderer) {
+                try { profileWorldRenderer.dispose(); } catch (e) {}
+                if (profileWorldRenderer.domElement && profileWorldRenderer.domElement.parentElement) profileWorldRenderer.domElement.remove();
+            }
+            if (profileWorldResizeHandler) window.removeEventListener('resize', profileWorldResizeHandler);
+            profileWorldResizeHandler = null;
+            if (profileWorldKeyDownHandler) window.removeEventListener('keydown', profileWorldKeyDownHandler);
+            if (profileWorldKeyUpHandler) window.removeEventListener('keyup', profileWorldKeyUpHandler);
+            if (profileWorldMouseMoveHandler) window.removeEventListener('mousemove', profileWorldMouseMoveHandler);
+            if (profileWorldMouseDownHandler) window.removeEventListener('mousedown', profileWorldMouseDownHandler);
+            if (profileWorldMouseUpHandler) window.removeEventListener('mouseup', profileWorldMouseUpHandler);
+            profileWorldKeyDownHandler = null; profileWorldKeyUpHandler = null; profileWorldMouseMoveHandler = null; profileWorldMouseDownHandler = null; profileWorldMouseUpHandler = null;
+            const joy = document.getElementById('profile-world-joystick');
+            if (joy) {
+                if (profileWorldJoystickStartHandler) joy.removeEventListener('touchstart', profileWorldJoystickStartHandler);
+                if (profileWorldJoystickMoveHandler) joy.removeEventListener('touchmove', profileWorldJoystickMoveHandler);
+                if (profileWorldJoystickEndHandler) {
+                    joy.removeEventListener('touchend', profileWorldJoystickEndHandler);
+                    joy.removeEventListener('touchcancel', profileWorldJoystickEndHandler);
+                }
+            }
+            profileWorldJoystickStartHandler = null; profileWorldJoystickMoveHandler = null; profileWorldJoystickEndHandler = null;
+            const knob = document.getElementById('profile-world-joystick-knob');
+            if (knob) { knob.style.left = '33px'; knob.style.top = '33px'; }
+            profileWorldState = { keys: {}, player: null, playerAvatar: null, yaw: 0, pitch: -0.25, joining: false, portalInfo: [], joystick: { x: 0, y: 0 }, colliders: [] };
+            profileWorldRenderer = null; profileWorldScene = null; profileWorldCamera = null;
+        };
+        window.closeProfileWorld = closeProfileWorld;
+        const enterProfileWorld = async () => {
+            if (!currentProfileData || !currentProfileData.username) return;
+            const loader = document.getElementById('profile-world-loading');
+            const overlay = document.getElementById('profile-world-overlay');
+            loader.style.display = 'flex';
+            try {
+                const worldData = await apiCall(`/profile-world/${encodeURIComponent(currentProfileData.username)}`);
+                loader.style.display = 'none';
+                overlay.style.display = 'block';
+                buildProfileWorldScene(worldData);
+                const greeting = String(worldData.greeting || '').trim();
+                if (greeting) showModal(`${worldData.ownerName}'s Greeting`, greeting.slice(0, 300));
+            } catch (e) {
+                loader.style.display = 'none';
+                showModal('Profile World', 'Unable to load profile world.');
+            }
+        };
+        window.enterProfileWorld = enterProfileWorld;
+        const buildProfileWorldScene = (worldData) => {
+            closeProfileWorld();
+            const overlay = document.getElementById('profile-world-overlay');
+            const joinLabel = document.getElementById('profile-world-join-label');
+            overlay.style.display = 'block';
+            const width = window.innerWidth, height = window.innerHeight;
+            profileWorldScene = new THREE.Scene();
+            profileWorldScene.background = new THREE.Color(0x87ceeb);
+            profileWorldScene.fog = new THREE.Fog(0x87ceeb, 45, 180);
+            profileWorldCamera = new THREE.PerspectiveCamera(72, width / height, 0.1, 2000);
+            profileWorldRenderer = new THREE.WebGLRenderer({ antialias: true });
+            profileWorldRenderer.setSize(width, height);
+            profileWorldRenderer.shadowMap.enabled = true;
+            overlay.appendChild(profileWorldRenderer.domElement);
+            const hemi = new THREE.HemisphereLight(0xe0f2fe, 0x355e3b, 1.0); profileWorldScene.add(hemi);
+            const sun = new THREE.DirectionalLight(0xfff7cc, 1.35); sun.position.set(40, 70, 20); sun.castShadow = true; profileWorldScene.add(sun);
+            const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(5, 24, 24), new THREE.MeshBasicMaterial({ color: 0xffeb7a }));
+            sunMesh.position.set(90, 70, -120); profileWorldScene.add(sunMesh);
+            const island = new THREE.Mesh(new THREE.CylinderGeometry(52, 66, 18, 44), new THREE.MeshStandardMaterial({ color: 0x4f6b2e }));
+            island.position.y = -2; island.castShadow = true; island.receiveShadow = true; profileWorldScene.add(island);
+            const grassTop = new THREE.Mesh(new THREE.CylinderGeometry(54, 52, 4, 44), new THREE.MeshStandardMaterial({ color: 0x70c458 }));
+            grassTop.position.y = 9; grassTop.receiveShadow = true; profileWorldScene.add(grassTop);
+            const plaza = new THREE.Mesh(new THREE.CylinderGeometry(20, 20, 1.4, 32), new THREE.MeshStandardMaterial({ color: 0xd7dce5 }));
+            plaza.position.y = 11; plaza.receiveShadow = true; profileWorldScene.add(plaza);
+            const pathMaterial = new THREE.MeshStandardMaterial({ color: 0xc2ccd9 });
+            for (let i = 0; i < 6; i++) {
+                const angle = (i / 6) * Math.PI * 2;
+                const path = new THREE.Mesh(new THREE.BoxGeometry(5, 0.8, 22), pathMaterial);
+                path.position.set(Math.cos(angle) * 18, 11.4, Math.sin(angle) * 18);
+                path.rotation.y = -angle;
+                path.receiveShadow = true;
+                profileWorldScene.add(path);
+            }
+            for (let i = 0; i < 20; i++) {
+                const cloud = new THREE.Mesh(new THREE.SphereGeometry(2 + Math.random() * 3.8, 16, 16), new THREE.MeshStandardMaterial({ color: 0xffffff }));
+                cloud.position.set((Math.random() - 0.5) * 180, 28 + Math.random() * 36, (Math.random() - 0.5) * 180);
+                cloud.userData.cloudDrift = 0.01 + Math.random() * 0.03;
+                profileWorldScene.add(cloud);
+            }
+            for (let i = 0; i < 10; i++) {
+                const tx = (Math.random() - 0.5) * 70;
+                const tz = (Math.random() - 0.5) * 70;
+                const treeTrunk = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.1, 6, 10), new THREE.MeshStandardMaterial({ color: 0x7c4a21 }));
+                treeTrunk.position.set(tx, 13.8, tz);
+                treeTrunk.castShadow = true;
+                profileWorldScene.add(treeTrunk);
+                const treeTop = new THREE.Mesh(new THREE.SphereGeometry(3.8, 16, 16), new THREE.MeshStandardMaterial({ color: 0x2e8b57 }));
+                treeTop.position.set(tx, 18.2, tz);
+                treeTop.castShadow = true;
+                profileWorldScene.add(treeTop);
+                profileWorldState.colliders.push({ x: tx, z: tz, radius: 2.3 });
+            }
+            ensureAvatarBodyColors();
+            const player = new THREE.Object3D();
+            player.position.set(0, 12.85, 0);
+            const avatarMesh = createPlayerMesh(
+                currentUser ? currentUser.color : '#e74c3c',
+                currentUser ? currentUser.equipped : null,
+                currentUser ? (currentUser.bodyColors || null) : null,
+                currentUser ? { shirtImage: currentUser.equippedShirtImage || null, pantsImage: currentUser.equippedPantsImage || null } : null
+            );
+            avatarMesh.scale.set(0.44, 0.44, 0.44);
+            avatarMesh.position.set(0, 0, 0);
+            player.add(avatarMesh);
+            profileWorldScene.add(player);
+            profileWorldState.playerAvatar = avatarMesh;
+            profileWorldState.player = player;
+            profileWorldState.keys = {};
+            profileWorldState.yaw = 0;
+            profileWorldState.pitch = -0.22;
+            profileWorldState.joining = false;
+            profileWorldState.portalInfo = [];
+            profileWorldState.joystick = { x: 0, y: 0 };
+            profileWorldState.colliders = [];
+            profileWorldPortalMeshes = [];
+            (worldData.games || []).slice(0, 3).forEach((g, idx) => {
+                const angle = (idx / 3) * Math.PI * 2;
+                const x = Math.cos(angle) * 32, z = Math.sin(angle) * 32;
+                const frame = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.35, 16, 48), new THREE.MeshStandardMaterial({ color: 0x4338ca, emissive: 0x1d4ed8, emissiveIntensity: 0.6 }));
+                frame.position.set(x, 14.6, z); frame.rotation.y = -angle;
+                profileWorldScene.add(frame);
+                const pulse = new THREE.Mesh(new THREE.CircleGeometry(3, 24), new THREE.MeshBasicMaterial({ color: 0x38bdf8, transparent: true, opacity: 0.35 }));
+                pulse.rotation.x = -Math.PI / 2;
+                pulse.position.set(x, 11.8, z);
+                profileWorldScene.add(pulse);
+                frame.userData.gameId = g.id;
+                frame.userData.gameTitle = g.title;
+                frame.userData.pulse = pulse;
+                profileWorldPortalMeshes.push(frame);
+                profileWorldState.portalInfo.push({ mesh: frame, gameId: g.id, title: g.title });
+                profileWorldState.colliders.push({ x, z, radius: 1.6 });
+            });
+            (worldData.assets || []).slice(0, 4).forEach((a, idx) => {
+                const angle = ((idx + 0.5) / 4) * Math.PI * 2;
+                const x = Math.cos(angle) * 19;
+                const z = Math.sin(angle) * 19;
+                const stand = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.6, 4, 12), new THREE.MeshStandardMaterial({ color: 0x64748b }));
+                stand.position.set(x, 13.2, z); stand.castShadow = true; stand.receiveShadow = true; profileWorldScene.add(stand);
+                const assetGem = new THREE.Mesh(new THREE.OctahedronGeometry(1.2, 0), new THREE.MeshStandardMaterial({ color: 0xf59e0b, emissive: 0x92400e, emissiveIntensity: 0.25 }));
+                assetGem.position.set(x, 16.2, z);
+                assetGem.rotation.y = idx * 0.7;
+                profileWorldScene.add(assetGem);
+                assetGem.userData.spin = 0.01 + idx * 0.002;
+                profileWorldState.colliders.push({ x, z, radius: 2.1 });
+            });
+            profileWorldKeyDownHandler = (ev) => { profileWorldState.keys[ev.key.toLowerCase()] = true; };
+            profileWorldKeyUpHandler = (ev) => { profileWorldState.keys[ev.key.toLowerCase()] = false; };
+            let mouseDown = false;
+            profileWorldMouseDownHandler = () => { mouseDown = true; };
+            profileWorldMouseUpHandler = () => { mouseDown = false; };
+            profileWorldMouseMoveHandler = (ev) => {
+                if (!mouseDown || !profileWorldState.player) return;
+                profileWorldState.yaw -= ev.movementX * 0.0042;
+                profileWorldState.pitch = Math.max(-1.1, Math.min(0.35, profileWorldState.pitch - ev.movementY * 0.0035));
+            };
+            window.addEventListener('keydown', profileWorldKeyDownHandler);
+            window.addEventListener('keyup', profileWorldKeyUpHandler);
+            window.addEventListener('mousedown', profileWorldMouseDownHandler);
+            window.addEventListener('mouseup', profileWorldMouseUpHandler);
+            window.addEventListener('mousemove', profileWorldMouseMoveHandler);
+            const joy = document.getElementById('profile-world-joystick');
+            const knob = document.getElementById('profile-world-joystick-knob');
+            const resetJoy = () => {
+                profileWorldState.joystick.x = 0;
+                profileWorldState.joystick.y = 0;
+                if (knob) { knob.style.left = '33px'; knob.style.top = '33px'; }
+            };
+            profileWorldJoystickStartHandler = (ev) => { ev.preventDefault(); };
+            profileWorldJoystickMoveHandler = (ev) => {
+                ev.preventDefault();
+                const t = ev.touches && ev.touches[0];
+                if (!t || !joy || !knob) return;
+                const rect = joy.getBoundingClientRect();
+                const cx = rect.left + rect.width / 2;
+                const cy = rect.top + rect.height / 2;
+                let dx = t.clientX - cx;
+                let dy = t.clientY - cy;
+                const max = 36;
+                const len = Math.sqrt((dx * dx) + (dy * dy));
+                if (len > max) { dx = (dx / len) * max; dy = (dy / len) * max; }
+                knob.style.left = `${33 + dx}px`;
+                knob.style.top = `${33 + dy}px`;
+                profileWorldState.joystick.x = dx / max;
+                profileWorldState.joystick.y = dy / max;
+            };
+            profileWorldJoystickEndHandler = () => resetJoy();
+            if (joy) {
+                joy.addEventListener('touchstart', profileWorldJoystickStartHandler, { passive: false });
+                joy.addEventListener('touchmove', profileWorldJoystickMoveHandler, { passive: false });
+                joy.addEventListener('touchend', profileWorldJoystickEndHandler, { passive: false });
+                joy.addEventListener('touchcancel', profileWorldJoystickEndHandler, { passive: false });
+            }
+            const portalRaycaster = new THREE.Raycaster();
+            const pointer = new THREE.Vector2();
+            const clickPortal = (clientX, clientY) => {
+                if (!profileWorldRenderer || !profileWorldPortalMeshes.length) return;
+                const rect = profileWorldRenderer.domElement.getBoundingClientRect();
+                pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+                pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+                portalRaycaster.setFromCamera(pointer, profileWorldCamera);
+                const hits = portalRaycaster.intersectObjects(profileWorldPortalMeshes, false);
+                if (hits.length && hits[0].object && hits[0].object.userData && hits[0].object.userData.gameId) {
+                    const target = hits[0].object.userData;
+                    joinLabel.style.display = 'block';
+                    joinLabel.innerText = `Joining: ${target.gameTitle || 'Game'}`;
+                    closeProfileWorld();
+                    loadGame(target.gameId);
+                }
+            };
+            profileWorldRenderer.domElement.onclick = (ev) => clickPortal(ev.clientX, ev.clientY);
+            profileWorldRenderer.domElement.ontouchend = (ev) => {
+                const t = ev.changedTouches && ev.changedTouches[0];
+                if (t) clickPortal(t.clientX, t.clientY);
+            };
+            const animate = () => {
+                profileWorldAnim = requestAnimationFrame(animate);
+                if (!profileWorldState.player) {
+                    profileWorldCamera.position.set(0, 20, 30);
+                    profileWorldCamera.lookAt(0, 10, 0);
+                    profileWorldRenderer.render(profileWorldScene, profileWorldCamera);
+                    return;
+                }
+                const moveSpeed = 0.28;
+                const dir = new THREE.Vector3();
+                const forward = new THREE.Vector3(-Math.sin(profileWorldState.yaw), 0, -Math.cos(profileWorldState.yaw));
+                const right = new THREE.Vector3(-forward.z, 0, forward.x);
+                if (profileWorldState.keys['w']) dir.add(forward);
+                if (profileWorldState.keys['s']) dir.sub(forward);
+                if (profileWorldState.keys['a']) dir.sub(right);
+                if (profileWorldState.keys['d']) dir.add(right);
+                if (Math.abs(profileWorldState.joystick.x) > 0.06 || Math.abs(profileWorldState.joystick.y) > 0.06) {
+                    dir.addScaledVector(forward, -profileWorldState.joystick.y);
+                    dir.addScaledVector(right, profileWorldState.joystick.x);
+                }
+                if (dir.lengthSq() > 0) {
+                    dir.normalize().multiplyScalar(moveSpeed);
+                    const prevX = profileWorldState.player.position.x;
+                    const prevZ = profileWorldState.player.position.z;
+                    profileWorldState.player.position.add(dir);
+                    const maxRadius = 47;
+                    const planar = Math.sqrt((profileWorldState.player.position.x ** 2) + (profileWorldState.player.position.z ** 2));
+                    if (planar > maxRadius) {
+                        const s = maxRadius / planar;
+                        profileWorldState.player.position.x *= s;
+                        profileWorldState.player.position.z *= s;
+                    }
+                    for (const col of (profileWorldState.colliders || [])) {
+                        const dx = profileWorldState.player.position.x - col.x;
+                        const dz = profileWorldState.player.position.z - col.z;
+                        const dist = Math.sqrt((dx * dx) + (dz * dz));
+                        if (dist < col.radius) {
+                            profileWorldState.player.position.x = prevX;
+                            profileWorldState.player.position.z = prevZ;
+                            break;
+                        }
+                    }
+                }
+                profileWorldState.player.position.y = 12.85;
+                if (profileWorldState.playerAvatar) profileWorldState.playerAvatar.rotation.y = Math.PI + profileWorldState.yaw;
+                const camDistance = 8.5;
+                const camHeight = 4.8;
+                profileWorldCamera.position.set(
+                    profileWorldState.player.position.x - Math.sin(profileWorldState.yaw) * camDistance,
+                    profileWorldState.player.position.y + camHeight + Math.sin(profileWorldState.pitch) * 3.2,
+                    profileWorldState.player.position.z - Math.cos(profileWorldState.yaw) * camDistance
+                );
+                profileWorldCamera.lookAt(
+                    profileWorldState.player.position.x + Math.sin(profileWorldState.yaw) * 5.5,
+                    profileWorldState.player.position.y + 2.2 + Math.sin(profileWorldState.pitch) * 2,
+                    profileWorldState.player.position.z + Math.cos(profileWorldState.yaw) * 5.5
+                );
+                profileWorldScene.children.forEach(c => {
+                    if (c.userData && c.userData.cloudDrift) {
+                        c.position.x += c.userData.cloudDrift;
+                        if (c.position.x > 100) c.position.x = -100;
+                    }
+                    if (c.userData && c.userData.spin) c.rotation.y += c.userData.spin;
+                });
+                let nearest = null;
+                profileWorldPortalMeshes.forEach((p, i) => {
+                    p.rotation.z += 0.01 + i * 0.002;
+                    if (p.userData.pulse) p.userData.pulse.scale.setScalar(1 + (Math.sin(Date.now() * 0.005 + i) * 0.12));
+                    const d = p.position.distanceTo(profileWorldState.player.position);
+                    if (!nearest || d < nearest.dist) nearest = { dist: d, portal: p };
+                });
+                if (nearest && nearest.dist < 8) {
+                    joinLabel.style.display = 'block';
+                    joinLabel.innerText = `Portal ahead: ${nearest.portal.userData.gameTitle || 'Game'}${nearest.dist < 2 ? ' • Joining...' : ''}`;
+                } else {
+                    joinLabel.style.display = 'none';
+                    joinLabel.innerText = '';
+                }
+                profileWorldRenderer.render(profileWorldScene, profileWorldCamera);
+            };
+            animate();
+            profileWorldResizeHandler = () => {
+                if (!profileWorldRenderer || !profileWorldCamera) return;
+                profileWorldCamera.aspect = window.innerWidth / window.innerHeight;
+                profileWorldCamera.updateProjectionMatrix();
+                profileWorldRenderer.setSize(window.innerWidth, window.innerHeight);
+            };
+            window.addEventListener('resize', profileWorldResizeHandler);
         };
 
         const toggleFollow = async () => {
@@ -5984,6 +6440,28 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
             } catch (e) {}
         };
         window.configurePinnedGameProfile = configurePinnedGameProfile;
+        const configureProfileWorld = async () => {
+            try {
+                const data = await apiCall('/profile-world/me');
+                const gameChoices = (data.ownedGames || []).map(g => `${g.id} — ${g.title}`).join('\n') || 'No owned games.';
+                const assetChoices = (data.ownedAssets || []).map(a => `${a.id} — ${a.name}`).join('\n') || 'No owned toolbox assets.';
+                showModal('Profile Worlds Setup', `Enter up to 3 game IDs (comma separated):\n${gameChoices}`, 'Next', (gameInput) => {
+                    showModal('Toolbox Showcase', `Enter up to 4 toolbox item IDs (comma separated):\n${assetChoices}`, 'Next', (assetInput) => {
+                        showModal('Greeting Popup (Optional)', 'Set greeting text shown to visitors (max 300 chars).', 'Save', async (greetingText) => {
+                            try {
+                                await apiCall('/profile-world/config', 'POST', {
+                                    gameIds: String(gameInput || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 3),
+                                    assetIds: String(assetInput || '').split(',').map(s => s.trim()).filter(Boolean).slice(0, 4),
+                                    greeting: String(greetingText || '').slice(0, 300)
+                                });
+                                showModal('Saved', 'Profile World configuration updated.');
+                            } catch (e) {}
+                        }, true, true);
+                    }, true, true);
+                }, true, true);
+            } catch (e) {}
+        };
+        window.configureProfileWorld = configureProfileWorld;
 
         const updateProfileTextStyle = async (changes = {}) => {
             try {
@@ -6039,7 +6517,7 @@ document.getElementById('prof-userid').innerText = currentProfileData.userIdNum 
                             <label style="font-size:12px;">Text Color</label>
                             <input type="color" class="form-control" value="${(profileStore.textStyle && profileStore.textStyle.color) || '#2c3e50'}" onchange="updateProfileTextStyle({ color: this.value })">
                         </div>` : '';
-                    card.innerHTML = `<h3>${c.name}</h3><p style="font-size:12px;">${c.description || ''}</p><button class="btn btn-sm ${isEq ? 'btn-danger' : 'btn-success'}" onclick="equipProfileCosmetic('${c.id}', ${isEq})">${isEq ? 'Unequip' : 'Equip'}</button>${c.id === 'cosmetic_pinned_game_feature' && isEq ? `<div style=\"margin-top:8px;\"><button class=\"btn btn-sm btn-info\" onclick=\"configurePinnedGameProfile()\">Configure Pinned Game</button></div>` : ''}${fontSelect}${colorPicker}`;
+                    card.innerHTML = `<h3>${c.name}</h3><p style="font-size:12px;">${c.description || ''}</p><button class="btn btn-sm ${isEq ? 'btn-danger' : 'btn-success'}" onclick="equipProfileCosmetic('${c.id}', ${isEq})">${isEq ? 'Unequip' : 'Equip'}</button>${c.id === 'cosmetic_pinned_game_feature' && isEq ? `<div style=\"margin-top:8px;\"><button class=\"btn btn-sm btn-info\" onclick=\"configurePinnedGameProfile()\">Configure Pinned Game</button></div>` : ''}${c.id === 'cosmetic_profile_worlds' && isEq ? `<div style=\"margin-top:8px;\"><button class=\"btn btn-sm btn-info\" onclick=\"configureProfileWorld()\">Configure Profile World</button></div>` : ''}${fontSelect}${colorPicker}`;
                     grid.appendChild(card);
                 });
             } catch (e) {
@@ -12644,6 +13122,17 @@ const groupAsAircraft = () => {
         let adminChatLogsInterval = null;
         let adminChatLogsLastTs = 0;
         let adminChatLogsCache = [];
+        const SPECIAL_USER_ROLES = {
+            austin: { label: 'Owner', message: 'Owner of Playsculpt' },
+            nick: { label: 'Platform Director', message: 'Platform Director of Playsculpt: Co - Founder' }
+        };
+        const getSpecialRoleTag = (username = '') => SPECIAL_USER_ROLES[String(username || '').trim().toLowerCase()] || null;
+        const openRoleTagModal = (username = '') => {
+            const tag = getSpecialRoleTag(username);
+            if (!tag) return;
+            showModal(tag.label, tag.message);
+        };
+        window.openRoleTagModal = openRoleTagModal;
 
         const loadChat = async () => {
             try {
@@ -12656,9 +13145,12 @@ const groupAsAircraft = () => {
                 box.innerHTML = msgs.length === 0 ? '<p style="color:#777; text-align:center;">No messages yet. Be the first to say hi!</p>' : '';
                 msgs.forEach(m => {
                     const timeStr = new Date(m.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                    const tag = getSpecialRoleTag(m.authorName);
+                    const tagHtml = tag ? `<span class="profile-role-tag" style="margin-left:6px; font-size:10px; padding:2px 8px;" onclick="event.stopPropagation(); openRoleTagModal('${m.authorName}')">${tag.label}</span>` : '';
                     box.innerHTML += `<div>
                         <span style="color:#95a5a6; font-size:11px;">[${timeStr}]</span>
                         <strong style="color:#3498db; cursor:pointer;" onclick="loadProfile('${m.authorName}'); navigate('profile');">${m.authorName}:</strong>
+                        ${tagHtml}
                         <span style="font-size:14px; color:#333; word-break: break-word;">${m.text}</span>
                     </div>`;
                 });
@@ -12686,6 +13178,328 @@ const groupAsAircraft = () => {
             input.disabled = false;
             input.focus();
         };
+
+        // --- PLAYSCULPT LIVE ---
+        const LIVE_RULES_TEXT = `Playsculpt Live accounts are secondary creator accounts used only for streaming and live interaction features. Each user may only create one Playsculpt Live account, and it must be connected to their main Playsculpt account. Creating multiple Live accounts to avoid restrictions, bans, or limits is not allowed.
+
+All content streamed on Playsculpt Live must follow the main Playsculpt platform rules. This includes no harassment, no hate speech, no sexual content, no scams, and no copyrighted content that you do not own or have permission to use. Live content must remain appropriate at all times.
+
+Streamers are responsible for everything that happens in their live session. This includes viewer interactions, in-game actions, chat messages, and any triggered events. Allowing viewers to cause rule-breaking behavior through interaction systems is still considered the streamer’s responsibility.
+
+Live chat must follow all community guidelines. Spamming, harassment, threats, or inappropriate messages are not allowed. Streamers are expected to manage their chat and remove harmful behavior when needed.
+
+Using viewer interaction systems to exploit the economy is not allowed. This includes misleading users into spending currency, creating unfair systems that force spending, or faking engagement to gain rewards.
+
+Impersonation is not allowed. Your Playsculpt Live account must clearly represent you and cannot pretend to be another creator, staff member, or official Playsculpt account.
+
+Spam streaming is not allowed. This includes starting multiple streams to gain visibility, streaming misleading or inactive content, or using bots to inflate viewers, likes, or interactions.
+
+Exploiting bugs or systems within Playsculpt Live is not allowed. This includes abusing interaction features, rewards, or any part of the system to gain an unfair advantage.
+
+Streams must clearly represent what viewers will experience. Misleading titles, fake events, or bait content designed to trick users into joining are not allowed.
+
+Playsculpt reserves the right to suspend or remove Playsculpt Live accounts that break these rules. Severe violations may also affect your main Playsculpt account.
+
+Your Playsculpt Live account is directly tied to your main account, and all actions taken through it will impact your reputation and standing on the platform.`;
+        let liveState = {
+            account: null,
+            activeStreams: [],
+            streamId: null,
+            startedAt: 0,
+            localStream: null,
+            broadcasterPoll: null,
+            listPoll: null,
+            timerPoll: null,
+            viewerPoll: null,
+            watchMetaPoll: null,
+            watchChatPoll: null,
+            viewerPc: null,
+            viewerStreamId: null,
+            seenTipIds: {},
+            pendingViewerCandidates: [],
+            broadcasterPeers: {},
+            isLive: false
+        };
+        const toggleStreamerChatPanel = () => {
+            const panel = document.getElementById('live-streamer-chat-panel');
+            if (!panel || !liveState.isLive) return;
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        };
+        window.toggleStreamerChatPanel = toggleStreamerChatPanel;
+        const openLiveCreateModal = () => { document.getElementById('live-create-modal').style.display = 'flex'; };
+        const closeLiveCreateModal = () => { document.getElementById('live-create-modal').style.display = 'none'; };
+        const openLiveRulesModal = () => {
+            document.getElementById('live-rules-text').innerText = LIVE_RULES_TEXT;
+            document.getElementById('live-rules-modal').style.display = 'flex';
+        };
+        const closeLiveRulesModal = () => { document.getElementById('live-rules-modal').style.display = 'none'; };
+        const openGoLiveModal = () => {
+            document.getElementById('live-go-live-copy').innerText = `Playsculpt livestreams do not include voice recording, it is solely sharing your screen (users will only be able to see playsculpt.net content, not other tabs) as you stream. Click "Go live" to start the stream automatically, and it will redirect you to your Playsculpt dashboard. Have fun!`;
+            document.getElementById('live-go-live-modal').style.display = 'flex';
+        };
+        const closeGoLiveModal = () => { document.getElementById('live-go-live-modal').style.display = 'none'; };
+        window.openLiveCreateModal = openLiveCreateModal; window.closeLiveCreateModal = closeLiveCreateModal;
+        window.openLiveRulesModal = openLiveRulesModal; window.closeLiveRulesModal = closeLiveRulesModal;
+        window.openGoLiveModal = openGoLiveModal; window.closeGoLiveModal = closeGoLiveModal;
+        const createLiveAccount = async () => {
+            const username = String(document.getElementById('live-create-username').value || '').trim();
+            const agreed = !!document.getElementById('live-create-rules-check').checked;
+            try {
+                await apiCall('/live/account', 'POST', { username, agreed });
+                closeLiveCreateModal();
+                loadPlaysculptLive();
+            } catch (e) {}
+        };
+        window.createLiveAccount = createLiveAccount;
+        const loadPlaysculptLive = async () => {
+            try {
+                const [status, streams] = await Promise.all([apiCall('/live/status', 'GET'), apiCall('/live/streams', 'GET')]);
+                liveState.account = status.account || null;
+                liveState.activeStreams = streams.streams || [];
+                const gate = document.getElementById('live-account-gate');
+                const dash = document.getElementById('live-dashboard');
+                gate.style.display = liveState.account ? 'none' : 'block';
+                dash.style.display = liveState.account ? 'block' : 'none';
+                document.getElementById('live-total-likes').innerText = status.stats ? (status.stats.likesTotal || 0) : 0;
+                document.getElementById('live-total-views').innerText = status.stats ? (status.stats.viewsTotal || 0) : 0;
+                document.getElementById('live-total-tips').innerText = status.stats ? (status.stats.tipsTotal || 0) : 0;
+                document.getElementById('live-total-earnings').innerText = status.stats ? (status.stats.earningsCoins || 0) : 0;
+                const grid = document.getElementById('live-streams-grid');
+                grid.innerHTML = (liveState.activeStreams || []).length ? '' : '<p>No one is live right now.</p>';
+                (liveState.activeStreams || []).forEach(s => {
+                    const c = document.createElement('div');
+                    c.className = 'game-card';
+                    c.innerHTML = `<h3>${s.liveUsername}</h3><p>Viewers: ${s.viewerCount || 0}</p><p>Likes: ${s.likes || 0}</p><button class="btn btn-success btn-sm" onclick="watchLiveStream('${s.id}')">Watch</button>`;
+                    grid.appendChild(c);
+                });
+            } catch (e) {}
+        };
+        window.loadPlaysculptLive = loadPlaysculptLive;
+        const updateLiveIndicator = () => {
+            const ind = document.getElementById('live-stream-indicator');
+            if (!ind) return;
+            if (!liveState.isLive || !liveState.startedAt) { ind.style.display = 'none'; return; }
+            ind.style.display = 'inline-flex';
+            const secs = Math.floor((Date.now() - liveState.startedAt) / 1000);
+            const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+            const ss = String(secs % 60).padStart(2, '0');
+            document.getElementById('live-stream-elapsed').innerText = `LIVE ${mm}:${ss}`;
+        };
+        const applyLiveTipsToUI = (tips = []) => {
+            tips.forEach(t => {
+                if (liveState.seenTipIds[t.id]) return;
+                liveState.seenTipIds[t.id] = true;
+                showModal('Live Tip!', `${t.fromUsername} tipped ${t.amount} SC${t.message ? `\n\n"${t.message}"` : ''}`);
+            });
+        };
+        const refreshStreamerChatPanel = async () => {
+            if (!liveState.isLive || !liveState.streamId) return;
+            try {
+                const [meta, chat] = await Promise.all([
+                    apiCall(`/live/stream/${liveState.streamId}`, 'GET'),
+                    apiCall(`/live/stream/${liveState.streamId}/chat`, 'GET')
+                ]);
+                const list = document.getElementById('live-streamer-chat-list');
+                if (list) list.innerHTML = (chat.messages || []).map(m => `<div><strong>${m.authorName}:</strong> ${m.text}</div>`).join('') || '<div style="color:#9ca3af;">No chat yet.</div>';
+                if (meta && meta.recentTips) applyLiveTipsToUI(meta.recentTips);
+                if (document.getElementById('view-live').classList.contains('active')) loadPlaysculptLive();
+            } catch (e) {}
+        };
+        const startBroadcasterSignalLoop = () => {
+            if (liveState.broadcasterPoll) clearInterval(liveState.broadcasterPoll);
+            liveState.broadcasterPoll = setInterval(async () => {
+                if (!liveState.isLive || !liveState.streamId || !liveState.localStream) return;
+                try {
+                    const inbox = await apiCall(`/live/stream/${liveState.streamId}/signal/pull?role=broadcaster`, 'GET');
+                    for (const msg of (inbox.messages || [])) {
+                        const viewerId = msg.viewerId;
+                        let pc = liveState.broadcasterPeers[viewerId];
+                        if (!pc) {
+                            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                            liveState.localStream.getTracks().forEach(t => pc.addTrack(t, liveState.localStream));
+                            pc.onicecandidate = (ev) => {
+                                if (ev.candidate) apiCall(`/live/stream/${liveState.streamId}/signal`, 'POST', { role: 'broadcaster', viewerId, type: 'candidate', candidate: ev.candidate }).catch(() => {});
+                            };
+                            liveState.broadcasterPeers[viewerId] = pc;
+                        }
+                        if (msg.type === 'offer') {
+                            await pc.setRemoteDescription(new RTCSessionDescription(msg.offer));
+                            const ans = await pc.createAnswer();
+                            await pc.setLocalDescription(ans);
+                            await apiCall(`/live/stream/${liveState.streamId}/signal`, 'POST', { role: 'broadcaster', viewerId, type: 'answer', answer: ans });
+                        } else if (msg.type === 'candidate' && msg.candidate) {
+                            try { await pc.addIceCandidate(new RTCIceCandidate(msg.candidate)); } catch (_) {}
+                        }
+                    }
+                } catch (e) {}
+            }, 900);
+        };
+        const startLiveStream = async () => {
+            try {
+                const media = await navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        frameRate: 20,
+                        width: 1280,
+                        height: 720,
+                        displaySurface: 'browser',
+                        preferCurrentTab: true,
+                        selfBrowserSurface: 'include',
+                        surfaceSwitching: 'exclude',
+                        monitorTypeSurfaces: 'exclude'
+                    },
+                    audio: false
+                });
+                const vt = media.getVideoTracks()[0];
+                const settings = vt ? vt.getSettings() : {};
+                if (!vt || (settings.displaySurface && settings.displaySurface !== 'browser')) {
+                    media.getTracks().forEach(t => t.stop());
+                    return showModal('Go Live', 'Please share only this Playsculpt browser tab.');
+                }
+                const res = await apiCall('/live/go-live', 'POST', {});
+                liveState.localStream = media;
+                liveState.streamId = res.streamId;
+                liveState.startedAt = res.startedAt || Date.now();
+                liveState.isLive = true;
+                closeGoLiveModal();
+                navigate('dashboard');
+                if (liveState.timerPoll) clearInterval(liveState.timerPoll);
+                liveState.timerPoll = setInterval(() => { updateLiveIndicator(); refreshStreamerChatPanel(); }, 1000);
+                updateLiveIndicator();
+                refreshStreamerChatPanel();
+                startBroadcasterSignalLoop();
+                media.getVideoTracks().forEach(t => t.onended = () => stopLiveStream());
+            } catch (e) {
+                showModal('Go Live', 'Live start failed. Make sure screen/tab share permission is granted.');
+            }
+        };
+        window.startLiveStream = startLiveStream;
+        const stopLiveStream = async () => {
+            try { if (liveState.streamId) await apiCall('/live/stop', 'POST', {}); } catch (_) {}
+            if (liveState.localStream) liveState.localStream.getTracks().forEach(t => t.stop());
+            Object.values(liveState.broadcasterPeers || {}).forEach(pc => { try { pc.close(); } catch (_) {} });
+            liveState.broadcasterPeers = {};
+            liveState.localStream = null;
+            liveState.streamId = null;
+            liveState.isLive = false;
+            liveState.startedAt = 0;
+            if (liveState.broadcasterPoll) clearInterval(liveState.broadcasterPoll);
+            liveState.broadcasterPoll = null;
+            if (liveState.timerPoll) clearInterval(liveState.timerPoll);
+            liveState.timerPoll = null;
+            updateLiveIndicator();
+            const panel = document.getElementById('live-streamer-chat-panel');
+            if (panel) panel.style.display = 'none';
+            if (document.getElementById('view-live') && document.getElementById('view-live').classList.contains('active')) loadPlaysculptLive();
+        };
+        window.stopLiveStream = stopLiveStream;
+        const watchLiveStream = async (streamId) => {
+            try {
+                await closeLiveWatch();
+                const card = document.getElementById('live-watch-card');
+                card.style.display = 'block';
+                liveState.viewerStreamId = streamId;
+                const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+                liveState.viewerPc = pc;
+                liveState.pendingViewerCandidates = [];
+                pc.ontrack = (ev) => {
+                    const v = document.getElementById('live-watch-video');
+                    if (v && ev.streams && ev.streams[0]) v.srcObject = ev.streams[0];
+                };
+                pc.onicecandidate = (ev) => {
+                    if (ev.candidate) apiCall(`/live/stream/${streamId}/signal`, 'POST', { role: 'viewer', type: 'candidate', candidate: ev.candidate }).catch(() => {});
+                };
+                pc.addTransceiver('video', { direction: 'recvonly' });
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                await apiCall(`/live/stream/${streamId}/watch`, 'POST', {});
+                await apiCall(`/live/stream/${streamId}/signal`, 'POST', { role: 'viewer', type: 'offer', offer });
+                liveState.viewerPoll = setInterval(async () => {
+                    if (!liveState.viewerStreamId || !liveState.viewerPc) return;
+                    try {
+                        const inbox = await apiCall(`/live/stream/${streamId}/signal/pull?role=viewer`, 'GET');
+                        for (const m of (inbox.messages || [])) {
+                            if (m.type === 'answer' && m.answer && !liveState.viewerPc.currentRemoteDescription) {
+                                await liveState.viewerPc.setRemoteDescription(new RTCSessionDescription(m.answer));
+                                const pending = [...(liveState.pendingViewerCandidates || [])];
+                                liveState.pendingViewerCandidates = [];
+                                for (const c of pending) {
+                                    try { await liveState.viewerPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+                                }
+                            } else if (m.type === 'candidate' && m.candidate) {
+                                if (liveState.viewerPc.currentRemoteDescription) {
+                                    try { await liveState.viewerPc.addIceCandidate(new RTCIceCandidate(m.candidate)); } catch (_) {}
+                                } else {
+                                    liveState.pendingViewerCandidates.push(m.candidate);
+                                }
+                            }
+                        }
+                    } catch (e) {}
+                }, 900);
+                liveState.watchMetaPoll = setInterval(async () => {
+                    try {
+                        const meta = await apiCall(`/live/stream/${streamId}`, 'GET');
+                        document.getElementById('live-watch-title').innerText = meta.liveUsername || '';
+                        document.getElementById('live-watch-viewers').innerText = meta.viewerCount || 0;
+                        document.getElementById('live-watch-likes').innerText = meta.likes || 0;
+                        if (meta.recentTips) applyLiveTipsToUI(meta.recentTips);
+                    } catch (e) {}
+                }, 1400);
+                liveState.watchChatPoll = setInterval(fetchLiveStreamChat, 1200);
+                fetchLiveStreamChat();
+            } catch (e) { showModal('Live', 'Unable to watch stream.'); }
+        };
+        window.watchLiveStream = watchLiveStream;
+        const closeLiveWatch = async () => {
+            if (liveState.viewerPoll) clearInterval(liveState.viewerPoll);
+            if (liveState.watchMetaPoll) clearInterval(liveState.watchMetaPoll);
+            if (liveState.watchChatPoll) clearInterval(liveState.watchChatPoll);
+            liveState.viewerPoll = liveState.watchMetaPoll = liveState.watchChatPoll = null;
+            if (liveState.viewerPc) { try { liveState.viewerPc.close(); } catch (_) {} }
+            liveState.viewerPc = null;
+            const old = liveState.viewerStreamId;
+            liveState.viewerStreamId = null;
+            if (old) { try { await apiCall(`/live/stream/${old}/watch`, 'POST', { leave: true }); } catch (_) {} }
+            const card = document.getElementById('live-watch-card');
+            if (card) card.style.display = 'none';
+            const vid = document.getElementById('live-watch-video');
+            if (vid) vid.srcObject = null;
+        };
+        window.closeLiveWatch = closeLiveWatch;
+        const fetchLiveStreamChat = async () => {
+            if (!liveState.viewerStreamId) return;
+            try {
+                const res = await apiCall(`/live/stream/${liveState.viewerStreamId}/chat`, 'GET');
+                const box = document.getElementById('live-watch-chat');
+                if (!box) return;
+                box.innerHTML = (res.messages || []).map(m => `<div><strong>${m.authorName}:</strong> ${m.text}</div>`).join('') || '<div style="color:#6b7280;">No messages yet.</div>';
+            } catch (e) {}
+        };
+        const sendLiveStreamChat = async () => {
+            const input = document.getElementById('live-watch-chat-input');
+            if (!input || !liveState.viewerStreamId) return;
+            const text = String(input.value || '').trim();
+            if (!text) return;
+            try { await apiCall(`/live/stream/${liveState.viewerStreamId}/chat`, 'POST', { text }); input.value = ''; fetchLiveStreamChat(); } catch (e) {}
+        };
+        window.sendLiveStreamChat = sendLiveStreamChat;
+        const likeCurrentLiveStream = async () => {
+            if (!liveState.viewerStreamId) return;
+            try { await apiCall(`/live/stream/${liveState.viewerStreamId}/like`, 'POST', {}); } catch (e) {}
+        };
+        window.likeCurrentLiveStream = likeCurrentLiveStream;
+        const tipCurrentLiveStream = async () => {
+            if (!liveState.viewerStreamId) return;
+            const amount = parseInt((document.getElementById('live-tip-amount').value || '0'), 10);
+            const message = String(document.getElementById('live-tip-message').value || '').slice(0, 150);
+            if (!Number.isFinite(amount) || amount <= 0) return showModal('Tip Streamer', 'Enter a valid tip amount.');
+            try {
+                await apiCall(`/live/stream/${liveState.viewerStreamId}/tip`, 'POST', { amount, message });
+                document.getElementById('live-tip-amount').value = '';
+                document.getElementById('live-tip-message').value = '';
+                showModal('Tip Sent', `You tipped ${amount} SC.`);
+            } catch (e) {}
+        };
+        window.tipCurrentLiveStream = tipCurrentLiveStream;
         const renderAdminChatLogs = (payload = {}) => {
             const listEl = document.getElementById('chatlogs-list');
             const statusEl = document.getElementById('chatlogs-status');
