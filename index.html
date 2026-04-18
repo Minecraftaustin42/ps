@@ -9378,45 +9378,212 @@ const promptClearEditor = () => {
             const textureFiles = Array.from(texInput?.files || []);
             await handleOBJImport({ objFile, mtlFile, textureFiles });
         };
+        const maybeGunzipBytesInBrowser = async (bytes) => {
+            if (!(bytes && bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b)) return bytes;
+            if (typeof DecompressionStream === 'undefined') {
+                throw new Error('This browser cannot decompress gzip schematics locally.');
+            }
+            const ds = new DecompressionStream('gzip');
+            const decompressed = new Response(new Blob([bytes]).stream().pipeThrough(ds));
+            return new Uint8Array(await decompressed.arrayBuffer());
+        };
+        const parseNbtClient = (bytes) => {
+            let o = 0;
+            const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            const TAG = { END:0, BYTE:1, SHORT:2, INT:3, LONG:4, FLOAT:5, DOUBLE:6, BYTE_ARRAY:7, STRING:8, LIST:9, COMPOUND:10, INT_ARRAY:11, LONG_ARRAY:12 };
+            const u8 = () => dv.getUint8(o++);
+            const i8 = () => dv.getInt8(o++);
+            const i16 = () => { const v = dv.getInt16(o, false); o += 2; return v; };
+            const u16 = () => { const v = dv.getUint16(o, false); o += 2; return v; };
+            const i32 = () => { const v = dv.getInt32(o, false); o += 4; return v; };
+            const i64 = () => { const hi = BigInt(dv.getInt32(o, false)); const lo = BigInt(dv.getUint32(o + 4, false)); o += 8; return (hi << 32n) | lo; };
+            const f32 = () => { const v = dv.getFloat32(o, false); o += 4; return v; };
+            const f64 = () => { const v = dv.getFloat64(o, false); o += 8; return v; };
+            const str = () => { const len = u16(); const out = new TextDecoder().decode(bytes.slice(o, o + len)); o += len; return out; };
+            const payload = (t) => {
+                switch (t) {
+                    case TAG.BYTE: return i8();
+                    case TAG.SHORT: return i16();
+                    case TAG.INT: return i32();
+                    case TAG.LONG: return i64();
+                    case TAG.FLOAT: return f32();
+                    case TAG.DOUBLE: return f64();
+                    case TAG.BYTE_ARRAY: { const len = i32(); const arr = bytes.slice(o, o + len); o += len; return arr; }
+                    case TAG.STRING: return str();
+                    case TAG.LIST: { const listType = u8(); const len = i32(); const arr = []; for (let i = 0; i < len; i++) arr.push(payload(listType)); return arr; }
+                    case TAG.COMPOUND: {
+                        const out = {};
+                        while (true) {
+                            const nt = u8();
+                            if (nt === TAG.END) break;
+                            const name = str();
+                            out[name] = payload(nt);
+                        }
+                        return out;
+                    }
+                    case TAG.INT_ARRAY: { const len = i32(); const arr = []; for (let i = 0; i < len; i++) arr.push(i32()); return arr; }
+                    case TAG.LONG_ARRAY: { const len = i32(); const arr = []; for (let i = 0; i < len; i++) arr.push(i64()); return arr; }
+                    default: throw new Error(`Unsupported NBT tag: ${t}`);
+                }
+            };
+            const rootType = u8();
+            if (rootType !== TAG.COMPOUND) throw new Error('Invalid NBT root type.');
+            str(); // root name ignored
+            return payload(rootType);
+        };
+        const buildObjFromSchemClient = (rootObj) => {
+            const root = rootObj?.Schematic || rootObj || {};
+            const toNum = (v, d = 0) => (typeof v === 'bigint' ? Number(v) : (Number.isFinite(Number(v)) ? Number(v) : d));
+            let width = toNum(root.Width ?? root.width, 0);
+            let height = toNum(root.Height ?? root.height, 0);
+            let length = toNum(root.Length ?? root.length, 0);
+            let blockTotal = Math.max(0, width * height * length);
+            let blockIds = [];
+            let blockNameAt = null;
+            const varints = (arr, maxCount) => {
+                const vals = [];
+                for (let i = 0; i < arr.length && vals.length < maxCount;) {
+                    let num = 0, shift = 0, loops = 0, b = 0;
+                    do {
+                        b = arr[i++];
+                        num |= (b & 0x7f) << shift;
+                        shift += 7;
+                        loops++;
+                        if (loops > 5) throw new Error('Malformed varint block stream.');
+                    } while (b & 0x80);
+                    vals.push(num >>> 0);
+                }
+                return vals;
+            };
+            const applyPaletteData = (pal, data, total) => {
+                if (!pal || typeof pal !== 'object' || !data) return false;
+                const inv = {};
+                Object.keys(pal).forEach(k => { inv[toNum(pal[k], 0)] = k; });
+                blockIds = (data instanceof Uint8Array) ? varints(data, total) : (Array.isArray(data) ? data.map(v => toNum(v, 0)).slice(0, total) : []);
+                blockNameAt = (idx) => String(inv[idx] || 'minecraft:air');
+                return blockIds.length > 0;
+            };
+            if (!applyPaletteData(root.Palette, root.BlockData, blockTotal) && applyPaletteData(root?.Blocks?.Palette, root?.Blocks?.Data || root?.Blocks?.BlockData, blockTotal)) {
+            } else if (root.Blocks instanceof Uint8Array || Array.isArray(root.Blocks)) {
+                const base = root.Blocks instanceof Uint8Array ? Array.from(root.Blocks) : root.Blocks.map(v => toNum(v, 0));
+                const add = (root.AddBlocks instanceof Uint8Array || Array.isArray(root.AddBlocks))
+                    ? (root.AddBlocks instanceof Uint8Array ? Array.from(root.AddBlocks) : root.AddBlocks.map(v => toNum(v, 0)))
+                    : null;
+                blockIds = new Array(Math.min(base.length, blockTotal)).fill(0).map((_, i) => {
+                    const low = base[i] & 0xff;
+                    if (!add || i >= add.length * 2) return low;
+                    const n = add[Math.floor(i / 2)] & 0xff;
+                    const hi = (i % 2 === 0) ? (n & 0x0f) : ((n >> 4) & 0x0f);
+                    return low | (hi << 8);
+                });
+                blockNameAt = (idx) => idx === 0 ? 'minecraft:air' : `legacy:block_${idx}`;
+            } else if (root.Regions && typeof root.Regions === 'object' && Object.keys(root.Regions).length > 0) {
+                const reg = root.Regions[Object.keys(root.Regions)[0]] || {};
+                width = Math.abs(toNum(reg?.Size?.x, 0));
+                height = Math.abs(toNum(reg?.Size?.y, 0));
+                length = Math.abs(toNum(reg?.Size?.z, 0));
+                blockTotal = Math.max(0, width * height * length);
+                const palette = {};
+                const pl = reg.BlockStatePalette || [];
+                if (Array.isArray(pl)) {
+                    pl.forEach((ent, i) => {
+                        if (typeof ent === 'string') palette[i] = ent;
+                        else if (ent && ent.Name) palette[i] = String(ent.Name);
+                    });
+                }
+                const longs = Array.isArray(reg.BlockStates) ? reg.BlockStates : [];
+                const bitsPer = Math.max(2, Math.ceil(Math.log2(Math.max(2, Object.keys(palette).length))));
+                const mask = (1n << BigInt(bitsPer)) - 1n;
+                blockIds = new Array(blockTotal).fill(0);
+                for (let i = 0; i < blockTotal; i++) {
+                    const bitIdx = BigInt(i * bitsPer);
+                    const li = Number(bitIdx / 64n);
+                    const off = Number(bitIdx % 64n);
+                    const lo = BigInt.asUintN(64, BigInt(longs[li] || 0n));
+                    if (off + bitsPer <= 64) blockIds[i] = Number((lo >> BigInt(off)) & mask);
+                    else {
+                        const hi = BigInt.asUintN(64, BigInt(longs[li + 1] || 0n));
+                        const lowPart = lo >> BigInt(off);
+                        const hb = BigInt(off + bitsPer - 64);
+                        const hiPart = (hi & ((1n << hb) - 1n)) << BigInt(64 - off);
+                        blockIds[i] = Number((lowPart | hiPart) & mask);
+                    }
+                }
+                blockNameAt = (idx) => String(palette[idx] || 'minecraft:air');
+            }
+            if (!width || !height || !length) throw new Error('Missing schematic dimensions.');
+            if (!blockIds.length) throw new Error('Unsupported schematic block storage format.');
+            if (blockIds.length < blockTotal) blockIds = blockIds.concat(new Array(blockTotal - blockIds.length).fill(0));
+            if (!blockNameAt) blockNameAt = (idx) => idx === 0 ? 'minecraft:air' : `block_${idx}`;
+            const toIndex = (x, y, z) => y * width * length + z * width + x;
+            const solid = (x, y, z) => {
+                if (x < 0 || y < 0 || z < 0 || x >= width || y >= height || z >= length) return false;
+                const n = blockNameAt(blockIds[toIndex(x, y, z)]);
+                return !n.endsWith(':air') && !n.includes('air[');
+            };
+            const maxBlocks = 18000;
+            const lines = ['# Generated from .schem in browser'];
+            let vb = 1, count = 0;
+            for (let y = 0; y < height; y++) for (let z = 0; z < length; z++) for (let x = 0; x < width; x++) {
+                const name = blockNameAt(blockIds[toIndex(x, y, z)]);
+                if (name.endsWith(':air') || name.includes('air[')) continue;
+                const exposed = !solid(x+1,y,z)||!solid(x-1,y,z)||!solid(x,y+1,z)||!solid(x,y-1,z)||!solid(x,y,z+1)||!solid(x,y,z-1);
+                if (!exposed) continue;
+                count++; if (count > maxBlocks) break;
+                lines.push(`o b_${x}_${y}_${z}`);
+                lines.push(`v ${x} ${y} ${z}`); lines.push(`v ${x+1} ${y} ${z}`); lines.push(`v ${x+1} ${y+1} ${z}`); lines.push(`v ${x} ${y+1} ${z}`);
+                lines.push(`v ${x} ${y} ${z+1}`); lines.push(`v ${x+1} ${y} ${z+1}`); lines.push(`v ${x+1} ${y+1} ${z+1}`); lines.push(`v ${x} ${y+1} ${z+1}`);
+                if (!solid(x,y,z-1)) lines.push(`f ${vb} ${vb+1} ${vb+2} ${vb+3}`);
+                if (!solid(x,y,z+1)) lines.push(`f ${vb+5} ${vb+4} ${vb+7} ${vb+6}`);
+                if (!solid(x-1,y,z)) lines.push(`f ${vb+4} ${vb} ${vb+3} ${vb+7}`);
+                if (!solid(x+1,y,z)) lines.push(`f ${vb+1} ${vb+5} ${vb+6} ${vb+2}`);
+                if (!solid(x,y+1,z)) lines.push(`f ${vb+3} ${vb+2} ${vb+6} ${vb+7}`);
+                if (!solid(x,y-1,z)) lines.push(`f ${vb+4} ${vb+5} ${vb+1} ${vb}`);
+                vb += 8;
+            }
+            return { objText: lines.join('\n'), blocksIncluded: Math.min(count, maxBlocks), truncated: count > maxBlocks };
+        };
+        const convertSchemInBrowser = async (file) => {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const raw = await maybeGunzipBytesInBrowser(bytes);
+            const parsed = parseNbtClient(raw);
+            return buildObjFromSchemClient(parsed);
+        };
         const handleSchemImportFromModal = async () => {
             const schemInput = document.getElementById('obj-import-schem');
             const schemFile = (schemInput?.files || [])[0];
             if (!schemFile) return showModal('Import Failed', 'Please choose a .schem file first.');
             try {
-                const MAX_SCHEM_UPLOAD_MB = 24;
-                if (schemFile.size > MAX_SCHEM_UPLOAD_MB * 1024 * 1024) {
-                    return showModal('Schematic Too Large', `This .schem is ${Math.ceil(schemFile.size / (1024 * 1024))}MB. The web converter currently supports up to ${MAX_SCHEM_UPLOAD_MB}MB to avoid gateway/proxy failures. Try exporting a smaller section.`);
-                }
                 showModal('Converting...', 'Uploading and converting schematic. Please wait.');
-                const token = localStorage.getItem('ps_token');
-                const controller = new AbortController();
-                const timeout = setTimeout(() => controller.abort(), 45000);
-                const res = await fetch(API_BASE + '/tools/schem-to-obj', {
-                    method: 'POST',
-                    headers: {
-                        ...(token ? { Authorization: token } : {}),
-                        'Content-Type': 'application/octet-stream'
-                    },
-                    body: schemFile,
-                    signal: controller.signal
-                });
-                clearTimeout(timeout);
-                const raw = await res.text();
                 let converted = null;
-                try {
-                    converted = raw ? JSON.parse(raw) : {};
-                } catch (_) {
-                    converted = null;
-                }
-                if (!res.ok) {
-                    const looksLikeHtml = /^\s*</.test(raw || '');
-                    const proxyish = [413, 502, 503, 504, 524].includes(res.status);
-                    const msg = converted?.error || (looksLikeHtml
-                        ? (proxyish
-                            ? `Upload/conversion failed at the gateway (HTTP ${res.status}). Try a smaller .schem export.`
-                            : `Server returned an HTML error page (HTTP ${res.status}). Please retry.`)
-                        : (raw ? raw.slice(0, 180) : `HTTP ${res.status}`));
-                    throw new Error(msg);
+                const shouldUseBrowserPath = schemFile.size > 16 * 1024 * 1024;
+                if (shouldUseBrowserPath) {
+                    converted = await convertSchemInBrowser(schemFile);
+                } else {
+                    const token = localStorage.getItem('ps_token');
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 45000);
+                    const res = await fetch(API_BASE + '/tools/schem-to-obj', {
+                        method: 'POST',
+                        headers: {
+                            ...(token ? { Authorization: token } : {}),
+                            'Content-Type': 'application/octet-stream'
+                        },
+                        body: schemFile,
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeout);
+                    const raw = await res.text();
+                    try {
+                        converted = raw ? JSON.parse(raw) : {};
+                    } catch (_) {
+                        converted = null;
+                    }
+                    if (!res.ok) {
+                        const proxyish = [413, 502, 503, 504, 524].includes(res.status);
+                        if (proxyish) converted = await convertSchemInBrowser(schemFile);
+                        else throw new Error((converted?.error || raw || `HTTP ${res.status}`).slice(0, 220));
+                    }
                 }
                 if (!converted || !converted.objText) throw new Error('Server did not return converted OBJ data.');
                 const objName = (schemFile.name || 'import').replace(/\.schem$/i, '') + '.obj';
@@ -9427,7 +9594,21 @@ const promptClearEditor = () => {
                 }
             } catch (e) {
                 const isAbort = e?.name === 'AbortError';
-                showModal('Conversion Failed', isAbort ? 'Schematic conversion timed out. Try a smaller .schem export.' : (e.message || 'Could not convert .schem file.'));
+                if (isAbort) {
+                    try {
+                        showModal('Converting...', 'Server timed out. Falling back to in-browser conversion...');
+                        const converted = await convertSchemInBrowser(schemFile);
+                        const objName = (schemFile.name || 'import').replace(/\.schem$/i, '') + '.obj';
+                        const objFile = new File([converted.objText || ''], objName, { type: 'text/plain' });
+                        await handleOBJImport({ objFile, mtlFile: null, textureFiles: [] });
+                        if (converted.truncated) showModal('Import Note', `Schematic imported with a block cap (${converted.blocksIncluded} blocks) for performance.`);
+                        return;
+                    } catch (fallbackErr) {
+                        showModal('Conversion Failed', fallbackErr?.message || 'In-browser conversion fallback failed.');
+                        return;
+                    }
+                }
+                showModal('Conversion Failed', e.message || 'Could not convert .schem file.');
             }
         };
         window.triggerOBJImport = triggerOBJImport;
