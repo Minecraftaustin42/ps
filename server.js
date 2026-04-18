@@ -354,22 +354,47 @@ const buildObjFromSchematic = (buffer) => {
     const length = Number(schem.Length || schem.length || 0);
     if (!width || !height || !length) throw new Error('Missing Width/Height/Length in schematic.');
     const blockTotal = width * height * length;
-    const palette = schem.Palette || {};
-    const blockDataRaw = schem.BlockData;
-    if (!palette || typeof palette !== 'object') throw new Error('Missing Palette.');
-    if (!blockDataRaw) throw new Error('Missing BlockData.');
+    let blockIds = [];
+    let blockNameAt = null;
 
-    const inversePalette = {};
-    Object.keys(palette).forEach(name => { inversePalette[Number(palette[name])] = name; });
-    const blockIds = Buffer.isBuffer(blockDataRaw)
-        ? decodeVarIntStream(blockDataRaw, blockTotal)
-        : (Array.isArray(blockDataRaw) ? blockDataRaw.map(v => Number(v) || 0).slice(0, blockTotal) : []);
-    if (!blockIds.length) throw new Error('No block data could be decoded from schematic.');
+    const palette = schem.Palette || null;
+    const blockDataRaw = schem.BlockData;
+    if (palette && typeof palette === 'object' && blockDataRaw) {
+        const inversePalette = {};
+        Object.keys(palette).forEach(name => { inversePalette[Number(palette[name])] = name; });
+        blockIds = Buffer.isBuffer(blockDataRaw)
+            ? decodeVarIntStream(blockDataRaw, blockTotal)
+            : (Array.isArray(blockDataRaw) ? blockDataRaw.map(v => Number(v) || 0).slice(0, blockTotal) : []);
+        blockNameAt = (idx) => String(inversePalette[idx] || 'minecraft:air');
+    } else if (Buffer.isBuffer(schem.Blocks) || Array.isArray(schem.Blocks)) {
+        // Legacy MCEdit style format support.
+        const blocksBase = Buffer.isBuffer(schem.Blocks) ? Array.from(schem.Blocks.values()) : schem.Blocks.map(v => Number(v) || 0);
+        const add = (Buffer.isBuffer(schem.AddBlocks) || Array.isArray(schem.AddBlocks))
+            ? (Buffer.isBuffer(schem.AddBlocks) ? Array.from(schem.AddBlocks.values()) : schem.AddBlocks.map(v => Number(v) || 0))
+            : null;
+        blockIds = new Array(Math.min(blockTotal, blocksBase.length)).fill(0).map((_, i) => {
+            const base = blocksBase[i] & 0xFF;
+            if (!add || i >= add.length * 2) return base;
+            const nibbleByte = add[Math.floor(i / 2)] & 0xFF;
+            const hi = (i % 2 === 0) ? (nibbleByte & 0x0F) : ((nibbleByte >> 4) & 0x0F);
+            return base | (hi << 8);
+        });
+        blockNameAt = (idx) => idx === 0 ? 'minecraft:air' : `legacy:block_${idx}`;
+    }
+    if (!blockIds.length) throw new Error('Missing or unsupported block data format (expected Palette+BlockData or Blocks array).');
+    if (blockIds.length < blockTotal) {
+        const fixed = new Array(blockTotal).fill(0);
+        for (let i = 0; i < Math.min(blockIds.length, blockTotal); i++) fixed[i] = blockIds[i];
+        blockIds = fixed;
+    } else if (blockIds.length > blockTotal) {
+        blockIds = blockIds.slice(0, blockTotal);
+    }
+    if (!blockNameAt) blockNameAt = (idx) => idx === 0 ? 'minecraft:air' : `block_${idx}`;
 
     const toIndex = (x, y, z) => y * width * length + z * width + x;
     const isSolid = (x, y, z) => {
         if (x < 0 || y < 0 || z < 0 || x >= width || y >= height || z >= length) return false;
-        const name = String(inversePalette[blockIds[toIndex(x, y, z)]] || 'minecraft:air');
+        const name = blockNameAt(blockIds[toIndex(x, y, z)]);
         return !name.endsWith(':air') && !name.includes('air[');
     };
 
@@ -381,7 +406,7 @@ const buildObjFromSchematic = (buffer) => {
         for (let z = 0; z < length; z++) {
             for (let x = 0; x < width; x++) {
                 const idx = toIndex(x, y, z);
-                const name = String(inversePalette[blockIds[idx]] || 'minecraft:air');
+                const name = blockNameAt(blockIds[idx]);
                 if (name.endsWith(':air') || name.includes('air[')) continue;
                 const exposed =
                     !isSolid(x + 1, y, z) || !isSolid(x - 1, y, z) ||
