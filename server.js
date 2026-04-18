@@ -241,6 +241,180 @@ const sanitizeNumber = (value, fallback, min, max) => {
     if (!Number.isFinite(num)) return fallback;
     return Math.max(min, Math.min(max, num));
 };
+const isSculptCityAccount = (user) => String(user?.username || '').toLowerCase() === 'sculpt city';
+
+const NBT_TAG = {
+    END: 0, BYTE: 1, SHORT: 2, INT: 3, LONG: 4, FLOAT: 5, DOUBLE: 6, BYTE_ARRAY: 7, STRING: 8, LIST: 9, COMPOUND: 10, INT_ARRAY: 11, LONG_ARRAY: 12
+};
+const readNBT = (buffer) => {
+    let o = 0;
+    const readU8 = () => buffer.readUInt8(o++);
+    const readI8 = () => buffer.readInt8(o++);
+    const readI16 = () => { const v = buffer.readInt16BE(o); o += 2; return v; };
+    const readU16 = () => { const v = buffer.readUInt16BE(o); o += 2; return v; };
+    const readI32 = () => { const v = buffer.readInt32BE(o); o += 4; return v; };
+    const readI64 = () => {
+        const hi = buffer.readInt32BE(o);
+        const lo = buffer.readUInt32BE(o + 4);
+        o += 8;
+        return Number(BigInt(hi) << 32n | BigInt(lo));
+    };
+    const readF32 = () => { const v = buffer.readFloatBE(o); o += 4; return v; };
+    const readF64 = () => { const v = buffer.readDoubleBE(o); o += 8; return v; };
+    const readStr = () => {
+        const len = readU16();
+        const v = buffer.toString('utf8', o, o + len);
+        o += len;
+        return v;
+    };
+    const readPayload = (tagType) => {
+        switch (tagType) {
+            case NBT_TAG.BYTE: return readI8();
+            case NBT_TAG.SHORT: return readI16();
+            case NBT_TAG.INT: return readI32();
+            case NBT_TAG.LONG: return readI64();
+            case NBT_TAG.FLOAT: return readF32();
+            case NBT_TAG.DOUBLE: return readF64();
+            case NBT_TAG.BYTE_ARRAY: {
+                const len = readI32();
+                const arr = Buffer.alloc(Math.max(0, len));
+                buffer.copy(arr, 0, o, o + len);
+                o += len;
+                return arr;
+            }
+            case NBT_TAG.STRING: return readStr();
+            case NBT_TAG.LIST: {
+                const listType = readU8();
+                const len = readI32();
+                const arr = [];
+                for (let i = 0; i < len; i++) arr.push(readPayload(listType));
+                return arr;
+            }
+            case NBT_TAG.COMPOUND: {
+                const out = {};
+                while (true) {
+                    const t = readU8();
+                    if (t === NBT_TAG.END) break;
+                    const name = readStr();
+                    out[name] = readPayload(t);
+                }
+                return out;
+            }
+            case NBT_TAG.INT_ARRAY: {
+                const len = readI32();
+                const arr = new Array(len);
+                for (let i = 0; i < len; i++) arr[i] = readI32();
+                return arr;
+            }
+            case NBT_TAG.LONG_ARRAY: {
+                const len = readI32();
+                const arr = new Array(len);
+                for (let i = 0; i < len; i++) arr[i] = readI64();
+                return arr;
+            }
+            default:
+                throw new Error(`Unsupported NBT tag type: ${tagType}`);
+        }
+    };
+
+    const rootType = readU8();
+    if (rootType !== NBT_TAG.COMPOUND) throw new Error('Invalid NBT root type.');
+    const rootName = readStr();
+    const rootValue = readPayload(rootType);
+    return { rootName, value: rootValue };
+};
+
+const decodeVarIntStream = (buf, maxCount) => {
+    const values = [];
+    let offset = 0;
+    while (offset < buf.length && values.length < maxCount) {
+        let num = 0;
+        let shift = 0;
+        let b;
+        let loops = 0;
+        do {
+            if (offset >= buf.length) throw new Error('Malformed varint stream.');
+            b = buf[offset++];
+            num |= (b & 0x7F) << shift;
+            shift += 7;
+            loops++;
+            if (loops > 5) throw new Error('VarInt too long.');
+        } while (b & 0x80);
+        values.push(num >>> 0);
+    }
+    return values;
+};
+
+const buildObjFromSchematic = (buffer) => {
+    const raw = (buffer[0] === 0x1f && buffer[1] === 0x8b) ? require('zlib').gunzipSync(buffer) : buffer;
+    const parsed = readNBT(raw).value || {};
+    const schem = parsed.Schematic || parsed;
+    const width = Number(schem.Width || schem.width || 0);
+    const height = Number(schem.Height || schem.height || 0);
+    const length = Number(schem.Length || schem.length || 0);
+    if (!width || !height || !length) throw new Error('Missing Width/Height/Length in schematic.');
+    const blockTotal = width * height * length;
+    const palette = schem.Palette || {};
+    const blockDataRaw = schem.BlockData;
+    if (!palette || typeof palette !== 'object') throw new Error('Missing Palette.');
+    if (!blockDataRaw) throw new Error('Missing BlockData.');
+
+    const inversePalette = {};
+    Object.keys(palette).forEach(name => { inversePalette[Number(palette[name])] = name; });
+    const blockIds = Buffer.isBuffer(blockDataRaw)
+        ? decodeVarIntStream(blockDataRaw, blockTotal)
+        : (Array.isArray(blockDataRaw) ? blockDataRaw.map(v => Number(v) || 0).slice(0, blockTotal) : []);
+    if (!blockIds.length) throw new Error('No block data could be decoded from schematic.');
+
+    const toIndex = (x, y, z) => y * width * length + z * width + x;
+    const isSolid = (x, y, z) => {
+        if (x < 0 || y < 0 || z < 0 || x >= width || y >= height || z >= length) return false;
+        const name = String(inversePalette[blockIds[toIndex(x, y, z)]] || 'minecraft:air');
+        return !name.endsWith(':air') && !name.includes('air[');
+    };
+
+    const lines = ['# Generated from .schem by Playsculpt', 'mtllib schem.mtl'];
+    let vertexBase = 1;
+    let blocksIncluded = 0;
+    const maxBlocks = 12000;
+    for (let y = 0; y < height; y++) {
+        for (let z = 0; z < length; z++) {
+            for (let x = 0; x < width; x++) {
+                const idx = toIndex(x, y, z);
+                const name = String(inversePalette[blockIds[idx]] || 'minecraft:air');
+                if (name.endsWith(':air') || name.includes('air[')) continue;
+                const exposed =
+                    !isSolid(x + 1, y, z) || !isSolid(x - 1, y, z) ||
+                    !isSolid(x, y + 1, z) || !isSolid(x, y - 1, z) ||
+                    !isSolid(x, y, z + 1) || !isSolid(x, y, z - 1);
+                if (!exposed) continue;
+                blocksIncluded++;
+                if (blocksIncluded > maxBlocks) break;
+                lines.push(`o b_${x}_${y}_${z}`);
+                lines.push(`v ${x} ${y} ${z}`);
+                lines.push(`v ${x + 1} ${y} ${z}`);
+                lines.push(`v ${x + 1} ${y + 1} ${z}`);
+                lines.push(`v ${x} ${y + 1} ${z}`);
+                lines.push(`v ${x} ${y} ${z + 1}`);
+                lines.push(`v ${x + 1} ${y} ${z + 1}`);
+                lines.push(`v ${x + 1} ${y + 1} ${z + 1}`);
+                lines.push(`v ${x} ${y + 1} ${z + 1}`);
+                lines.push(`usemtl ${name.replace(/[^a-zA-Z0-9_\-:.]/g, '_')}`);
+                if (!isSolid(x, y, z - 1)) lines.push(`f ${vertexBase} ${vertexBase + 1} ${vertexBase + 2} ${vertexBase + 3}`);
+                if (!isSolid(x, y, z + 1)) lines.push(`f ${vertexBase + 5} ${vertexBase + 4} ${vertexBase + 7} ${vertexBase + 6}`);
+                if (!isSolid(x - 1, y, z)) lines.push(`f ${vertexBase + 4} ${vertexBase} ${vertexBase + 3} ${vertexBase + 7}`);
+                if (!isSolid(x + 1, y, z)) lines.push(`f ${vertexBase + 1} ${vertexBase + 5} ${vertexBase + 6} ${vertexBase + 2}`);
+                if (!isSolid(x, y + 1, z)) lines.push(`f ${vertexBase + 3} ${vertexBase + 2} ${vertexBase + 6} ${vertexBase + 7}`);
+                if (!isSolid(x, y - 1, z)) lines.push(`f ${vertexBase + 4} ${vertexBase + 5} ${vertexBase + 1} ${vertexBase}`);
+                vertexBase += 8;
+            }
+            if (blocksIncluded > maxBlocks) break;
+        }
+        if (blocksIncluded > maxBlocks) break;
+    }
+    if (!blocksIncluded) throw new Error('Schematic had no solid blocks to import.');
+    return { objText: lines.join('\n'), blocksIncluded: Math.min(blocksIncluded, maxBlocks), truncated: blocksIncluded > maxBlocks };
+};
 
 const sanitizeGameData = (gameData) => {
     const MAX_WORLD_OBJECTS = 50000;
@@ -3238,6 +3412,18 @@ app.get('/api/sounds/:id', (req, res) => {
     res.json({ data: sound.data });
 });
 
+app.post('/api/tools/schem-to-obj', requireAuth, (req, res) => {
+    try {
+        const b64 = String(req.body?.schemBase64 || '');
+        if (!b64) return res.status(400).json({ error: 'Missing schemBase64.' });
+        const inputBuffer = Buffer.from(b64, 'base64');
+        const converted = buildObjFromSchematic(inputBuffer);
+        res.json(converted);
+    } catch (e) {
+        res.status(400).json({ error: `Schematic conversion failed: ${e.message}` });
+    }
+});
+
 
 
 app.get('/api/games/most-liked', (req, res) => {
@@ -3648,7 +3834,30 @@ app.get('/api/city/info', requireAuth, (req, res) => {
         if (!user.cityData.vehicles) user.cityData.vehicles = ['sedan_1'];
         if (typeof user.cityData.tutorialComplete === 'undefined') user.cityData.tutorialComplete = false;
     }
-    res.json({ cityData: user.cityData, plots: db.cityPlots || [] });
+    res.json({
+        cityData: user.cityData,
+        plots: db.cityPlots || [],
+        sculptCityWorld: db.systemState?.sculptCityWorld || null
+    });
+});
+
+app.get('/api/city/world', requireAuth, (req, res) => {
+    res.json({ sculptCityWorld: db.systemState?.sculptCityWorld || null });
+});
+
+app.post('/api/city/world/publish', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!isSculptCityAccount(user)) return res.status(403).json({ error: 'Only the Sculpt City account can publish this world.' });
+    const safeGameData = sanitizeGameData(req.body?.gameData || {});
+    if (!safeGameData?.spawn) return res.status(400).json({ error: 'Spawn is required for Sculpt City world publishing.' });
+    if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
+    db.systemState.sculptCityWorld = {
+        gameData: safeGameData,
+        updatedAt: Date.now(),
+        updatedBy: user.username
+    };
+    saveDB();
+    res.json({ success: true, sculptCityWorld: db.systemState.sculptCityWorld });
 });
 
 app.post('/api/city/claim', requireAuth, (req, res) => {
