@@ -241,6 +241,7 @@ const sanitizeNumber = (value, fallback, min, max) => {
     if (!Number.isFinite(num)) return fallback;
     return Math.max(min, Math.min(max, num));
 };
+const isSculptCityAccount = (user) => String(user?.username || '').toLowerCase() === 'sculpt city';
 
 const sanitizeGameData = (gameData) => {
     const MAX_WORLD_OBJECTS = 50000;
@@ -3648,7 +3649,30 @@ app.get('/api/city/info', requireAuth, (req, res) => {
         if (!user.cityData.vehicles) user.cityData.vehicles = ['sedan_1'];
         if (typeof user.cityData.tutorialComplete === 'undefined') user.cityData.tutorialComplete = false;
     }
-    res.json({ cityData: user.cityData, plots: db.cityPlots || [] });
+    res.json({
+        cityData: user.cityData,
+        plots: db.cityPlots || [],
+        sculptCityWorld: db.systemState?.sculptCityWorld || null
+    });
+});
+
+app.get('/api/city/world', requireAuth, (req, res) => {
+    res.json({ sculptCityWorld: db.systemState?.sculptCityWorld || null });
+});
+
+app.post('/api/city/world/publish', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!isSculptCityAccount(user)) return res.status(403).json({ error: 'Only the Sculpt City account can publish this world.' });
+    const safeGameData = sanitizeGameData(req.body?.gameData || {});
+    if (!safeGameData?.spawn) return res.status(400).json({ error: 'Spawn is required for Sculpt City world publishing.' });
+    if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
+    db.systemState.sculptCityWorld = {
+        gameData: safeGameData,
+        updatedAt: Date.now(),
+        updatedBy: user.username
+    };
+    saveDB();
+    res.json({ success: true, sculptCityWorld: db.systemState.sculptCityWorld });
 });
 
 app.post('/api/city/claim', requireAuth, (req, res) => {
