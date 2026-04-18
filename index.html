@@ -530,9 +530,7 @@
             </div>
 
             <div id="city-step-2" style="display:none; margin-top: 20px; display:flex; gap:10px; flex-direction:column;">
-                <button class="btn" style="background:#2ecc71; border-bottom-color:#27ae60;" onclick="citySelectNeighborhood('Greenridge')"> <strong>Greenridge</strong><br><span style="font-size:12px; font-weight:normal;">Peaceful, trees, suburban</span></button>
-                <button class="btn" style="background:#e67e22; border-bottom-color:#d35400;" onclick="citySelectNeighborhood('Sandfall')"> <strong>Sandfall</strong><br><span style="font-size:12px; font-weight:normal;">Dry, desert neighborhood</span></button>
-                <button class="btn" style="background:#7f8c8d; border-bottom-color:#2c3e50;" onclick="citySelectNeighborhood('Industrial District')"> <strong>Industrial District</strong><br><span style="font-size:12px; font-weight:normal;">Factories, roads, heavy industry</span></button>
+                <button class="btn btn-success" style="width:100%; font-size:18px;" onclick="cityEnterMainWorld()">Enter Sculpt City</button>
             </div>
             <div id="city-returning-step" style="display:none; margin-top: 20px;">
                 <input id="city-district-search" class="form-control" placeholder="Search districts..." style="margin-bottom:10px;" oninput="renderDistrictButtons(this.value)">
@@ -1783,6 +1781,10 @@
                     </select>
                     <input type="text" id="editor-title" class="form-control" placeholder="Game Title..." style="width: 150px; margin: 0;">
                    <button class="btn btn-success" id="editor-save-btn" onclick="saveGame()">Publish Game</button>
+                    <div id="sculpt-city-studio-controls" style="display:none; gap:5px; align-items:center;">
+                        <button class="btn btn-info" id="sculpt-city-load-btn" onclick="loadSculptCityStudioBuild()">Load Sculpt City Build</button>
+                        <button class="btn btn-success" id="sculpt-city-publish-btn" onclick="publishToSculptCity()">Publish to Sculpt City</button>
+                    </div>
 
 <button class="btn btn-sm btn-warning" style="margin-left: 10px;" onclick="downloadPsworld()">Save .psworld</button>
 <button class="btn btn-sm btn-warning" onclick="document.getElementById('psworld-upload').click()">Load .psworld</button>
@@ -2442,15 +2444,19 @@
     <div class="modal-box" style="text-align:left; max-width:520px; width:100%;">
         <h2 style="margin-top:0;">Import OBJ Model</h2>
         <p style="font-size:12px; color:#666; margin-top:-6px;">Choose OBJ + MTL + textures from the same export folder. Textures will auto-attach from MTL references.</p>
+        <p style="font-size:12px; color:#666;">You can also upload a Minecraft <code>.schem</code> file and convert it to OBJ automatically, then import it as Playsculpt parts.</p>
         <label style="font-size:12px; font-weight:700;">OBJ File</label>
         <input type="file" id="obj-import-obj" class="form-control mb-10" accept=".obj,text/plain,model/obj">
         <label style="font-size:12px; font-weight:700;">MTL File (Optional)</label>
         <input type="file" id="obj-import-mtl" class="form-control mb-10" accept=".mtl,text/plain">
         <label style="font-size:12px; font-weight:700;">Texture Files (Optional, multiple)</label>
         <input type="file" id="obj-import-textures" class="form-control mb-10" accept=".png,.jpg,.jpeg,.bmp,.tga,image/*" multiple>
+        <label style="font-size:12px; font-weight:700;">Minecraft Schematic (.schem)</label>
+        <input type="file" id="obj-import-schem" class="form-control mb-10" accept=".schem,application/octet-stream">
         <div class="flex-center" style="justify-content:flex-end;">
             <button class="btn btn-danger" onclick="closeOBJImportModal()">Cancel</button>
             <button class="btn btn-success" onclick="handleOBJImportFromModal()">Import</button>
+            <button class="btn btn-info" onclick="handleSchemImportFromModal()">Convert .schem → Import</button>
         </div>
     </div>
 </div>
@@ -3382,6 +3388,7 @@ checkDailyReward(); // <-- ADDED HERE
             if (modChatLink) modChatLink.style.display = canSeeChatLogs ? 'inline-block' : 'none';
             if (ecoAdminLink) ecoAdminLink.style.display = canUseEconomyAdmin ? 'inline-block' : 'none';
             if (funlabAdmin) funlabAdmin.style.display = canSeeChatLogs ? 'block' : 'none';
+            updateSculptCityStudioControls();
         };
 
         const showRestartBanner = (message, endsAt) => {
@@ -3650,6 +3657,7 @@ else if (viewId === 'groups') {
                 const adminPanel = document.getElementById('admin-delete-panel');
                 if (adminPanel) adminPanel.style.display = (currentUser && String(currentUser.username || '').toLowerCase() === 'admin') ? 'block' : 'none';
            } else if (viewId === 'create') {
+                updateSculptCityStudioControls();
                 if (!currentEditGameId) {
                     setTimeout(() => { initEditor(); window.dispatchEvent(new Event('resize')); populateGroupPublishDropdown(); promptStudioAutosaveRecovery(); }, 50);
                     document.getElementById('editor-save-btn').innerText = "Publish Game";
@@ -9370,9 +9378,253 @@ const promptClearEditor = () => {
             const textureFiles = Array.from(texInput?.files || []);
             await handleOBJImport({ objFile, mtlFile, textureFiles });
         };
+        const maybeGunzipBytesInBrowser = async (bytes) => {
+            if (!(bytes && bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b)) return bytes;
+            if (typeof DecompressionStream === 'undefined') {
+                throw new Error('This browser cannot decompress gzip schematics locally.');
+            }
+            const ds = new DecompressionStream('gzip');
+            const decompressed = new Response(new Blob([bytes]).stream().pipeThrough(ds));
+            return new Uint8Array(await decompressed.arrayBuffer());
+        };
+        const parseNbtClient = (bytes) => {
+            let o = 0;
+            const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+            const TAG = { END:0, BYTE:1, SHORT:2, INT:3, LONG:4, FLOAT:5, DOUBLE:6, BYTE_ARRAY:7, STRING:8, LIST:9, COMPOUND:10, INT_ARRAY:11, LONG_ARRAY:12 };
+            const u8 = () => dv.getUint8(o++);
+            const i8 = () => dv.getInt8(o++);
+            const i16 = () => { const v = dv.getInt16(o, false); o += 2; return v; };
+            const u16 = () => { const v = dv.getUint16(o, false); o += 2; return v; };
+            const i32 = () => { const v = dv.getInt32(o, false); o += 4; return v; };
+            const i64 = () => { const hi = BigInt(dv.getInt32(o, false)); const lo = BigInt(dv.getUint32(o + 4, false)); o += 8; return (hi << 32n) | lo; };
+            const f32 = () => { const v = dv.getFloat32(o, false); o += 4; return v; };
+            const f64 = () => { const v = dv.getFloat64(o, false); o += 8; return v; };
+            const str = () => { const len = u16(); const out = new TextDecoder().decode(bytes.slice(o, o + len)); o += len; return out; };
+            const payload = (t) => {
+                switch (t) {
+                    case TAG.BYTE: return i8();
+                    case TAG.SHORT: return i16();
+                    case TAG.INT: return i32();
+                    case TAG.LONG: return i64();
+                    case TAG.FLOAT: return f32();
+                    case TAG.DOUBLE: return f64();
+                    case TAG.BYTE_ARRAY: { const len = i32(); const arr = bytes.slice(o, o + len); o += len; return arr; }
+                    case TAG.STRING: return str();
+                    case TAG.LIST: { const listType = u8(); const len = i32(); const arr = []; for (let i = 0; i < len; i++) arr.push(payload(listType)); return arr; }
+                    case TAG.COMPOUND: {
+                        const out = {};
+                        while (true) {
+                            const nt = u8();
+                            if (nt === TAG.END) break;
+                            const name = str();
+                            out[name] = payload(nt);
+                        }
+                        return out;
+                    }
+                    case TAG.INT_ARRAY: { const len = i32(); const arr = []; for (let i = 0; i < len; i++) arr.push(i32()); return arr; }
+                    case TAG.LONG_ARRAY: { const len = i32(); const arr = []; for (let i = 0; i < len; i++) arr.push(i64()); return arr; }
+                    default: throw new Error(`Unsupported NBT tag: ${t}`);
+                }
+            };
+            const rootType = u8();
+            if (rootType !== TAG.COMPOUND) throw new Error('Invalid NBT root type.');
+            str(); // root name ignored
+            return payload(rootType);
+        };
+        const buildObjFromSchemClient = (rootObj) => {
+            const root = rootObj?.Schematic || rootObj || {};
+            const toNum = (v, d = 0) => (typeof v === 'bigint' ? Number(v) : (Number.isFinite(Number(v)) ? Number(v) : d));
+            const DIM_LIMIT = 2048;
+            const VOLUME_LIMIT = 5_000_000;
+            const normDim = (v) => Math.max(0, Math.min(DIM_LIMIT, Math.floor(Math.abs(toNum(v, 0)))));
+            const safeVolume = (w, h, l) => {
+                const vol = w * h * l;
+                if (!Number.isFinite(vol) || vol < 0 || vol > VOLUME_LIMIT) return -1;
+                return vol;
+            };
+            let width = normDim(root.Width ?? root.width);
+            let height = normDim(root.Height ?? root.height);
+            let length = normDim(root.Length ?? root.length);
+            let blockTotal = safeVolume(width, height, length);
+            if (blockTotal < 0) throw new Error(`Schematic is too large for browser conversion (max ${VOLUME_LIMIT.toLocaleString()} blocks).`);
+            let blockIds = [];
+            let blockNameAt = null;
+            const varints = (arr, maxCount) => {
+                const vals = [];
+                for (let i = 0; i < arr.length && vals.length < maxCount;) {
+                    let num = 0, shift = 0, loops = 0, b = 0;
+                    do {
+                        b = arr[i++];
+                        num |= (b & 0x7f) << shift;
+                        shift += 7;
+                        loops++;
+                        if (loops > 5) throw new Error('Malformed varint block stream.');
+                    } while (b & 0x80);
+                    vals.push(num >>> 0);
+                }
+                return vals;
+            };
+            const applyPaletteData = (pal, data, total) => {
+                if (!pal || typeof pal !== 'object' || !data) return false;
+                const inv = {};
+                Object.keys(pal).forEach(k => { inv[toNum(pal[k], 0)] = k; });
+                blockIds = (data instanceof Uint8Array) ? varints(data, total) : (Array.isArray(data) ? data.map(v => toNum(v, 0)).slice(0, total) : []);
+                blockNameAt = (idx) => String(inv[idx] || 'minecraft:air');
+                return blockIds.length > 0;
+            };
+            if (!applyPaletteData(root.Palette, root.BlockData, blockTotal) && applyPaletteData(root?.Blocks?.Palette, root?.Blocks?.Data || root?.Blocks?.BlockData, blockTotal)) {
+            } else if (root.Blocks instanceof Uint8Array || Array.isArray(root.Blocks)) {
+                const base = root.Blocks instanceof Uint8Array ? Array.from(root.Blocks) : root.Blocks.map(v => toNum(v, 0));
+                const add = (root.AddBlocks instanceof Uint8Array || Array.isArray(root.AddBlocks))
+                    ? (root.AddBlocks instanceof Uint8Array ? Array.from(root.AddBlocks) : root.AddBlocks.map(v => toNum(v, 0)))
+                    : null;
+                blockIds = new Array(Math.min(base.length, blockTotal)).fill(0).map((_, i) => {
+                    const low = base[i] & 0xff;
+                    if (!add || i >= add.length * 2) return low;
+                    const n = add[Math.floor(i / 2)] & 0xff;
+                    const hi = (i % 2 === 0) ? (n & 0x0f) : ((n >> 4) & 0x0f);
+                    return low | (hi << 8);
+                });
+                blockNameAt = (idx) => idx === 0 ? 'minecraft:air' : `legacy:block_${idx}`;
+            } else if (root.Regions && typeof root.Regions === 'object' && Object.keys(root.Regions).length > 0) {
+                const reg = root.Regions[Object.keys(root.Regions)[0]] || {};
+                width = normDim(reg?.Size?.x);
+                height = normDim(reg?.Size?.y);
+                length = normDim(reg?.Size?.z);
+                blockTotal = safeVolume(width, height, length);
+                const palette = {};
+                const pl = reg.BlockStatePalette || [];
+                if (Array.isArray(pl)) {
+                    pl.forEach((ent, i) => {
+                        if (typeof ent === 'string') palette[i] = ent;
+                        else if (ent && ent.Name) palette[i] = String(ent.Name);
+                    });
+                }
+                const longs = Array.isArray(reg.BlockStates) ? reg.BlockStates : [];
+                const bitsPer = Math.max(2, Math.ceil(Math.log2(Math.max(2, Object.keys(palette).length))));
+                const mask = (1n << BigInt(bitsPer)) - 1n;
+                blockIds = new Array(blockTotal).fill(0);
+                for (let i = 0; i < blockTotal; i++) {
+                    const bitIdx = BigInt(i * bitsPer);
+                    const li = Number(bitIdx / 64n);
+                    const off = Number(bitIdx % 64n);
+                    const lo = BigInt.asUintN(64, BigInt(longs[li] || 0n));
+                    if (off + bitsPer <= 64) blockIds[i] = Number((lo >> BigInt(off)) & mask);
+                    else {
+                        const hi = BigInt.asUintN(64, BigInt(longs[li + 1] || 0n));
+                        const lowPart = lo >> BigInt(off);
+                        const hb = BigInt(off + bitsPer - 64);
+                        const hiPart = (hi & ((1n << hb) - 1n)) << BigInt(64 - off);
+                        blockIds[i] = Number((lowPart | hiPart) & mask);
+                    }
+                }
+                blockNameAt = (idx) => String(palette[idx] || 'minecraft:air');
+            }
+            if (!width || !height || !length) throw new Error('Missing schematic dimensions.');
+            if (blockTotal < 0) throw new Error(`Schematic is too large for browser conversion (max ${VOLUME_LIMIT.toLocaleString()} blocks).`);
+            if (!blockIds.length) throw new Error('Unsupported schematic block storage format.');
+            if (blockIds.length < blockTotal) blockIds = blockIds.concat(new Array(blockTotal - blockIds.length).fill(0));
+            if (!blockNameAt) blockNameAt = (idx) => idx === 0 ? 'minecraft:air' : `block_${idx}`;
+            const toIndex = (x, y, z) => y * width * length + z * width + x;
+            const solid = (x, y, z) => {
+                if (x < 0 || y < 0 || z < 0 || x >= width || y >= height || z >= length) return false;
+                const n = blockNameAt(blockIds[toIndex(x, y, z)]);
+                return !n.endsWith(':air') && !n.includes('air[');
+            };
+            const maxBlocks = 18000;
+            const lines = ['# Generated from .schem in browser'];
+            let vb = 1, count = 0;
+            for (let y = 0; y < height; y++) for (let z = 0; z < length; z++) for (let x = 0; x < width; x++) {
+                const name = blockNameAt(blockIds[toIndex(x, y, z)]);
+                if (name.endsWith(':air') || name.includes('air[')) continue;
+                const exposed = !solid(x+1,y,z)||!solid(x-1,y,z)||!solid(x,y+1,z)||!solid(x,y-1,z)||!solid(x,y,z+1)||!solid(x,y,z-1);
+                if (!exposed) continue;
+                count++; if (count > maxBlocks) break;
+                lines.push(`o b_${x}_${y}_${z}`);
+                lines.push(`v ${x} ${y} ${z}`); lines.push(`v ${x+1} ${y} ${z}`); lines.push(`v ${x+1} ${y+1} ${z}`); lines.push(`v ${x} ${y+1} ${z}`);
+                lines.push(`v ${x} ${y} ${z+1}`); lines.push(`v ${x+1} ${y} ${z+1}`); lines.push(`v ${x+1} ${y+1} ${z+1}`); lines.push(`v ${x} ${y+1} ${z+1}`);
+                if (!solid(x,y,z-1)) lines.push(`f ${vb} ${vb+1} ${vb+2} ${vb+3}`);
+                if (!solid(x,y,z+1)) lines.push(`f ${vb+5} ${vb+4} ${vb+7} ${vb+6}`);
+                if (!solid(x-1,y,z)) lines.push(`f ${vb+4} ${vb} ${vb+3} ${vb+7}`);
+                if (!solid(x+1,y,z)) lines.push(`f ${vb+1} ${vb+5} ${vb+6} ${vb+2}`);
+                if (!solid(x,y+1,z)) lines.push(`f ${vb+3} ${vb+2} ${vb+6} ${vb+7}`);
+                if (!solid(x,y-1,z)) lines.push(`f ${vb+4} ${vb+5} ${vb+1} ${vb}`);
+                vb += 8;
+            }
+            return { objText: lines.join('\n'), blocksIncluded: Math.min(count, maxBlocks), truncated: count > maxBlocks };
+        };
+        const convertSchemInBrowser = async (file) => {
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const raw = await maybeGunzipBytesInBrowser(bytes);
+            const parsed = parseNbtClient(raw);
+            return buildObjFromSchemClient(parsed);
+        };
+        const handleSchemImportFromModal = async () => {
+            const schemInput = document.getElementById('obj-import-schem');
+            const schemFile = (schemInput?.files || [])[0];
+            if (!schemFile) return showModal('Import Failed', 'Please choose a .schem file first.');
+            try {
+                showModal('Converting...', 'Uploading and converting schematic. Please wait.');
+                let converted = null;
+                const shouldUseBrowserPath = schemFile.size > 16 * 1024 * 1024;
+                if (shouldUseBrowserPath) {
+                    converted = await convertSchemInBrowser(schemFile);
+                } else {
+                    const token = localStorage.getItem('ps_token');
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 45000);
+                    const res = await fetch(API_BASE + '/tools/schem-to-obj', {
+                        method: 'POST',
+                        headers: {
+                            ...(token ? { Authorization: token } : {}),
+                            'Content-Type': 'application/octet-stream'
+                        },
+                        body: schemFile,
+                        signal: controller.signal
+                    });
+                    clearTimeout(timeout);
+                    const raw = await res.text();
+                    try {
+                        converted = raw ? JSON.parse(raw) : {};
+                    } catch (_) {
+                        converted = null;
+                    }
+                    if (!res.ok) {
+                        const proxyish = [413, 502, 503, 504, 524].includes(res.status);
+                        if (proxyish) converted = await convertSchemInBrowser(schemFile);
+                        else throw new Error((converted?.error || raw || `HTTP ${res.status}`).slice(0, 220));
+                    }
+                }
+                if (!converted || !converted.objText) throw new Error('Server did not return converted OBJ data.');
+                const objName = (schemFile.name || 'import').replace(/\.schem$/i, '') + '.obj';
+                const objFile = new File([converted.objText || ''], objName, { type: 'text/plain' });
+                await handleOBJImport({ objFile, mtlFile: null, textureFiles: [] });
+                if (converted.truncated) {
+                    showModal('Import Note', `Schematic imported with a block cap (${converted.blocksIncluded} blocks) for performance.`);
+                }
+            } catch (e) {
+                const isAbort = e?.name === 'AbortError';
+                if (isAbort) {
+                    try {
+                        showModal('Converting...', 'Server timed out. Falling back to in-browser conversion...');
+                        const converted = await convertSchemInBrowser(schemFile);
+                        const objName = (schemFile.name || 'import').replace(/\.schem$/i, '') + '.obj';
+                        const objFile = new File([converted.objText || ''], objName, { type: 'text/plain' });
+                        await handleOBJImport({ objFile, mtlFile: null, textureFiles: [] });
+                        if (converted.truncated) showModal('Import Note', `Schematic imported with a block cap (${converted.blocksIncluded} blocks) for performance.`);
+                        return;
+                    } catch (fallbackErr) {
+                        showModal('Conversion Failed', fallbackErr?.message || 'In-browser conversion fallback failed.');
+                        return;
+                    }
+                }
+                showModal('Conversion Failed', e.message || 'Could not convert .schem file.');
+            }
+        };
         window.triggerOBJImport = triggerOBJImport;
         window.handleOBJImport = handleOBJImport;
         window.handleOBJImportFromModal = handleOBJImportFromModal;
+        window.handleSchemImportFromModal = handleSchemImportFromModal;
         window.closeOBJImportModal = closeOBJImportModal;
 
 
@@ -9579,6 +9831,39 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
 
 
         // Network / Saving Logic
+        const isSculptCityStudioAccount = () => !!currentUser && String(currentUser.username || '').toLowerCase() === 'sculpt city';
+        const updateSculptCityStudioControls = () => {
+            const shell = document.getElementById('sculpt-city-studio-controls');
+            if (!shell) return;
+            shell.style.display = isSculptCityStudioAccount() ? 'flex' : 'none';
+        };
+        const loadSculptCityStudioBuild = async () => {
+            if (!isSculptCityStudioAccount()) return;
+            try {
+                const res = await apiCall('/city/world', 'GET');
+                const worldData = res?.sculptCityWorld?.gameData;
+                if (!worldData) return showModal('No World Yet', 'No Sculpt City build has been published yet.');
+                edData = migrateLevelDataTo3D(worldData);
+                document.getElementById('editor-title').value = 'Sculpt City';
+                currentEditGameId = null;
+                historyStack = []; historyIndex = -1;
+                buildEditorScene();
+                renderExplorer();
+                recordEdit(true);
+                showModal('Loaded', 'Sculpt City world has been loaded into Studio.');
+            } catch (e) {}
+        };
+        const publishToSculptCity = async () => {
+            if (!isSculptCityStudioAccount()) return showModal('Denied', 'Only the Sculpt City account can use this.');
+            if (!edData.spawn) return showModal('Incomplete Game', 'Please place a Spawn point for players.');
+            try {
+                await apiCall('/city/world/publish', 'POST', { gameData: edData });
+                showModal('Published!', 'Sculpt City world was updated. Future publishes overwrite the previous world.');
+            } catch (e) {}
+        };
+        window.loadSculptCityStudioBuild = loadSculptCityStudioBuild;
+        window.publishToSculptCity = publishToSculptCity;
+
        const saveGame = async () => {
             const title = document.getElementById('editor-title').value.trim();
             const genre = document.getElementById('editor-genre').value;
@@ -11380,9 +11665,6 @@ const updateChatBubbles = () => {
                 window.smartRuntime.lastInteractAt = now;
                 playerObj.shieldUntil = now + Math.max(2000, (smart.power || 8) * 1000);
                 showModal('Shield Activated', `Shield active for ${Math.round((playerObj.shieldUntil - now)/1000)}s.`);
-            } else if (smart.kind === 'factoryDoor' && interactPressed && now - (window.smartRuntime.lastInteractAt || 0) > 800) {
-                window.smartRuntime.lastInteractAt = now;
-                startManufacturerJob(smart.power || 1);
             }
 
             if (mesh.userData.sculptEngine && interactPressed) {
@@ -12552,19 +12834,8 @@ const groupAsAircraft = () => {
         let chosenNeighborhood = null;
         let activeCityDistrict = null;
         const cityDistricts = [
-            { name: 'Greenridge', desc: 'Peaceful, trees, suburban', color: '#2ecc71' },
-            { name: 'Sandfall', desc: 'Dry, desert neighborhood', color: '#e67e22' },
-            { name: 'Industrial District', desc: 'Factories, jobs, busy roads', color: '#7f8c8d' }
+            { name: 'Sculpt City', desc: 'Official live city world', color: '#6c5ce7' }
         ];
-        const manufacturerJobState = {
-            active: false,
-            startTime: 0,
-            products: 0,
-            packaged: 0,
-            step: 'collect',
-            stepStartedAt: 0,
-            activeMs: 0
-        };
 
    const finishCityWelcome = async () => {
             document.getElementById('city-intro-overlay').style.display = 'none';
@@ -12582,31 +12853,15 @@ const groupAsAircraft = () => {
             document.getElementById('city-loading-screen').style.display = 'flex';
             try {
                 cityGlobalData = await apiCall('/city/info');
-                if (cityGlobalData.cityData) {
-                    if (cityGlobalData.cityData.tutorialComplete) {
-                        document.getElementById('city-loading-screen').style.display = 'none';
-                        document.getElementById('city-intro-overlay').style.display = 'flex';
-                        document.getElementById('city-dialogue-text').innerText = "Welcome back to Sculpt City! Choose a sculpt city district to teleport to below!";
-                        document.getElementById('city-step-1').style.display = 'none';
-                        document.getElementById('city-step-2').style.display = 'none';
-                        document.getElementById('city-step-3').style.display = 'none';
-                        document.getElementById('city-step-4').style.display = 'none';
-                        document.getElementById('city-step-5').style.display = 'none';
-                        document.getElementById('city-returning-step').style.display = 'block';
-                        document.getElementById('city-district-search').value = '';
-                        renderDistrictButtons('');
-                    } else {
-                        startCityGame(cityGlobalData.cityData.neighborhood);
-                    }
-                } else {
-                    document.getElementById('city-loading-screen').style.display = 'none';
-                    document.getElementById('city-intro-overlay').style.display = 'flex';
-                    document.getElementById('city-dialogue-text').innerText = "Hey there, new citizen! Welcome to Sculpt City. I am Sculptrix, your tour guide! Let's start out by claiming some land and picking a neighborhood, shall we?";
-                    document.getElementById('city-step-1').style.display = 'block';
-                    document.getElementById('city-step-2').style.display = 'none';
-                    document.getElementById('city-step-3').style.display = 'none';
-                    document.getElementById('city-returning-step').style.display = 'none';
-                }
+                document.getElementById('city-loading-screen').style.display = 'none';
+                document.getElementById('city-intro-overlay').style.display = 'flex';
+                document.getElementById('city-dialogue-text').innerText = "Welcome to Sculpt City! Jump into the official live world.";
+                document.getElementById('city-step-1').style.display = 'none';
+                document.getElementById('city-step-2').style.display = 'flex';
+                document.getElementById('city-step-3').style.display = 'none';
+                document.getElementById('city-step-4').style.display = 'none';
+                document.getElementById('city-step-5').style.display = 'none';
+                document.getElementById('city-returning-step').style.display = 'none';
             } catch(e) {
                 console.error("Sculpt City Load Error:", e);
                 document.getElementById('city-loading-screen').style.display = 'none';
@@ -12637,11 +12892,11 @@ const groupAsAircraft = () => {
             setTimeout(() => startCityGame(districtName), 150);
         };
         window.renderDistrictButtons = renderDistrictButtons;
+        const cityEnterMainWorld = () => cityTeleportToDistrict('Sculpt City');
+        window.cityEnterMainWorld = cityEnterMainWorld;
 
 
         const cityShowNeighborhoods = () => {
-            document.getElementById('city-dialogue-text').innerText = "Pick a neighborhood to start in: (You can have multiple houses and live in multiple neighborhoods as you progress!)";
-            document.getElementById('city-step-1').style.display = 'none';
             document.getElementById('city-step-2').style.display = 'flex';
             document.getElementById('city-returning-step').style.display = 'none';
         };
@@ -12807,36 +13062,7 @@ const groupAsAircraft = () => {
         };
 
 
-        const citySelectNeighborhood = (hood) => {
-            chosenNeighborhood = hood;
-            document.getElementById('city-dialogue-text').innerText = "Great choice! Now, let's pick some land!";
-            document.getElementById('city-step-2').style.display = 'none';
-            document.getElementById('city-step-3').style.display = 'block';
-
-            const container = document.getElementById('city-plot-container');
-            container.innerHTML = '';
-
-            const plotColor = hood === 'Greenridge' ? '#2ecc71' : '#f39c12';
-
-            // Generate a 7x7 grid of plots (from -3 to +3 coordinates)
-            for (let z = -3; z <= 3; z++) {
-                for (let x = -3; x <= 3; x++) {
-                    const isTaken = cityGlobalData.plots.find(p => p.neighborhood === hood && p.plotX === x && p.plotZ === z);
-                    const cell = document.createElement('div');
-                    cell.className = 'city-plot-cell ' + (isTaken ? 'taken' : '');
-                    if (!isTaken) cell.style.backgroundColor = plotColor;
-
-                    cell.onclick = () => {
-                        if (isTaken) return;
-                        document.querySelectorAll('.city-plot-cell').forEach(c => c.classList.remove('selected'));
-                        cell.classList.add('selected');
-                        selectedCityPlot = { x, z };
-                        document.getElementById('btn-claim-plot').disabled = false;
-                    };
-                    container.appendChild(cell);
-                }
-            }
-        };
+        const citySelectNeighborhood = () => cityEnterMainWorld();
 
 
         // --- City 3D Map Generator ---
@@ -12855,128 +13081,28 @@ const groupAsAircraft = () => {
 
         // --- City 3D Map Generator ---
       // --- City 3D Map Generator ---
-        const generateStarterHouse = (plotX, plotZ, theme, username) => {
-            const objs = [];
-            const bx = plotX * 50; const bz = plotZ * 50;
-            const wallColor = theme === 'Greenridge' ? '#c9cfd4' : '#b56a5d';
-            const roofColor = theme === 'Greenridge' ? '#c0392b' : '#d35400';
-
-            // House Foundation (SLATE) & Walls (PLASTIC)
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx, y:0.5, z:bz}, rotation:{x:0,y:0,z:0}, scale:{x:20, y:1, z:20}, color: '#7f8c8d', material: 'Slate' });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx-9.5, y:6, z:bz}, rotation:{x:0,y:0,z:0}, scale:{x:1, y:10, z:20}, color: wallColor, material: 'Brick' });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+9.5, y:6, z:bz}, rotation:{x:0,y:0,z:0}, scale:{x:1, y:10, z:20}, color: wallColor, material: 'Brick' });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx, y:6, z:bz-9.5}, rotation:{x:0,y:0,z:0}, scale:{x:18, y:10, z:1}, color: wallColor, material: 'Brick' });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx-6, y:6, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:10, z:1}, color: wallColor, material: 'Brick' });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+6, y:6, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:10, z:1}, color: wallColor, material: 'Brick' });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx, y:9.5, z:bz+9.5}, rotation:{x:0,y:0,z:0}, scale:{x:6, y:3, z:1}, color: wallColor, material: 'Concrete' });
-            objs.push({ id: crypto.randomUUID(), type: 'wedge', position: {x:bx, y:13.5, z:bz}, rotation:{x:0,y:Math.PI/2,z:0}, scale:{x:22, y:5, z:22}, color: roofColor });
-
-            // Yard Decor (Tree with WOOD trunk and GRASS leaves)
-            objs.push({ id: crypto.randomUUID(), type: 'cylinder', position: {x:bx-15, y:4, z:bz+15}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:8, z:2}, color: '#8B4513', material: 'Wood' });
-            objs.push({ id: crypto.randomUUID(), type: 'sphere', position: {x:bx-15, y:9, z:bz+15}, rotation:{x:0,y:0,z:0}, scale:{x:8, y:8, z:8}, color: '#2ecc71', material: 'Grass' });
-
-            //   INWARD DRIVEWAY (SLATE)
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx+13, y:0.05, z:bz+7.5}, rotation:{x:0,y:0,z:0}, scale:{x:10, y:0.1, z:25}, color: '#6f777f', material: 'Concrete' });
-
-            //   MAILBOX MODEL (WOOD Post)
-            objs.push({ id: crypto.randomUUID(), type: 'cylinder', position: {x:bx-12, y:1, z:bz+19}, rotation:{x:0,y:0,z:0}, scale:{x:0.3, y:2, z:0.3}, color: '#8B4513', material: 'Wood' });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx-12, y:2.2, z:bz+19}, rotation:{x:0,y:0,z:0}, scale:{x:1.2, y:0.8, z:1.5}, color: '#95a5a6', mailboxOwner: username });
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:bx-11.3, y:2.4, z:bz+19}, rotation:{x:0,y:0,z:0}, scale:{x:0.1, y:0.6, z:0.4}, color: '#e74c3c' });
-
-            return objs;
-        };
-        const generateIndustrialDistrict = () => {
-            const objs = [];
-            objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:0, y:-2.1, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:3200, y:4, z:3200}, color: '#2f3740', material: 'Slate' });
-
-            const blockSize = 220;
-            for (let gx = -3; gx <= 3; gx++) {
-                for (let gz = -3; gz <= 3; gz++) {
-                    const cx = gx * blockSize;
-                    const cz = gz * blockSize;
-                    const roadEW = gz % 2 === 0;
-                    const roadNS = gx % 2 === 0;
-
-                    if (roadEW || roadNS) {
-                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-1.95, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:200, y:3.8, z:200}, color: '#2f343a', material: 'Asphalt' });
-                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-0.05, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:18, y:0.1, z:2}, color: '#f1c40f', material: 'Neon', noCollide: true });
-                    } else {
-                        objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:-1.95, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:200, y:3.8, z:200}, color: '#9fa8b1', material: 'Concrete' });
-                    }
-                }
-            }
-
-            const factoryPlotCenters = [
-                [-220, -220], [220, -220],
-                [-220, 220], [220, 220],
-                [0, -440], [0, 440]
-            ];
-
-            const addFactoryVariant = (cx, cz, variant, idx) => {
-                const variantConfigs = [
-                    { wall: '#8f99a3', roof: '#4f5862', accent: '#616c77' },
-                    { wall: '#9ba6b1', roof: '#404954', accent: '#5d6873' },
-                    { wall: '#808b96', roof: '#505965', accent: '#66727f' }
-                ];
-                const cfg = variantConfigs[variant];
-
-                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:7.5, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:64, y:15, z:52}, color: cfg.wall, material: 'Concrete' });
-                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:16.4, z:cz}, rotation:{x:0,y:0,z:0}, scale:{x:68, y:1.4, z:56}, color: cfg.roof, material: 'Slate' });
-
-                const chimneyX = variant === 1 ? 22 : -22;
-                objs.push({ id: crypto.randomUUID(), type: 'cylinder', position: {x:cx + chimneyX, y:19, z:cz - 14}, rotation:{x:0,y:0,z:0}, scale:{x:2.8, y:18, z:2.8}, color: '#5d6772', material: 'Metal' });
-                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx + (chimneyX * 0.5), y:12, z:cz - 24}, rotation:{x:0,y:0,z:0}, scale:{x:12, y:10, z:3}, color: cfg.accent, material: 'Metal' });
-
-                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:3.3, z:cz + 26}, rotation:{x:0,y:0,z:0}, scale:{x:9, y:6.6, z:0.7}, color: '#273746', material: 'Metal', smart: { kind: 'factoryDoor', title: `Factory ${idx + 1} Entrance`, power: idx + 1, range: 8, team: 'all', advanced: false } });
-                objs.push({ id: crypto.randomUUID(), type: 'block', position: {x:cx, y:1, z:cz + 38}, rotation:{x:0,y:0,z:0}, scale:{x:20, y:0.2, z:12}, color: '#9aa4ae', material: 'Concrete' });
-            };
-
-            factoryPlotCenters.forEach((p, idx) => addFactoryVariant(p[0], p[1], idx % 3, idx));
-            return objs;
-        };
-
         const startCityGame = (neighborhood, isFirstTime = false) => {
             isCityMode = true;
-            activeCityDistrict = neighborhood;
-            const isIndustrial = neighborhood === 'Industrial District';
-            const isGrass = neighborhood === 'Greenridge';
-            let cityObjects = isIndustrial ? generateIndustrialDistrict() : [];
-
-            if (!isIndustrial) {
-                const groundColor = isGrass ? '#55aa55' : '#f1c40f';
-                cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:0, y:-2.1, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2000, y:4, z:2000}, color: '#34495e', material: 'Slate' });
-                for (let x = -5; x <= 5; x++) {
-                    for (let z = -5; z <= 5; z++) {
-                        cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:x*50, y:-2, z:z*50}, rotation:{x:0,y:0,z:0}, scale:{x:40, y:4, z:40}, color: groundColor, material: isGrass ? 'Grass' : 'Sand' });
-                    }
-                }
-                for (let i = -5; i <= 5; i++) {
-                    for (let j = -10; j <= 10; j++) {
-                        cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:i*50 + 25, y:-0.05, z:j*25}, rotation:{x:0,y:0,z:0}, scale:{x:0.5, y:0.1, z:8}, color: '#f1c40f', material: 'Neon', noCollide: true });
-                        cityObjects.push({ id: crypto.randomUUID(), type: 'block', position: {x:j*25, y:-0.05, z:i*50 + 25}, rotation:{x:0,y:0,z:0}, scale:{x:8, y:0.1, z:0.5}, color: '#f1c40f', material: 'Neon', noCollide: true });
-                    }
-                }
-                const relevantPlots = cityGlobalData.plots.filter(p => p.neighborhood === neighborhood);
-                relevantPlots.forEach(p => {
-                    const houseBlocks = generateStarterHouse(p.plotX, p.plotZ, neighborhood, p.username || currentUser.username);
-                    cityObjects = cityObjects.concat(houseBlocks);
-                });
-            }
+            activeCityDistrict = 'Sculpt City';
+            const published = cityGlobalData?.sculptCityWorld?.gameData ? migrateLevelDataTo3D(cityGlobalData.sculptCityWorld.gameData) : null;
+            const cityObjects = (published?.objects && published.objects.length)
+                ? JSON.parse(JSON.stringify(published.objects))
+                : [{ id: crypto.randomUUID(), type: 'block', position: {x:0, y:-2.1, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:1800, y:4, z:1800}, color: '#34495e', material: 'Slate' }];
 
             activeLevel = {
-                settings: {
+                settings: published?.settings || {
                     gravity: 0.08,
-                    skyColor: isIndustrial ? '#71808f' : (isGrass ? '#5b88a5' : '#a37b45'),
-                    brightness: isIndustrial ? 0.62 : 0.68,
-                    sunIntensity: isIndustrial ? 1.0 : 1.28,
-                    fogDistance: isIndustrial ? 1100 : 1450,
+                    skyColor: '#5b88a5',
+                    brightness: 0.68,
+                    sunIntensity: 1.28,
+                    fogDistance: 1450,
                     graphicsQuality: 'high',
-                    exposure: isIndustrial ? 0.95 : 1.05
+                    exposure: 1.05
                 },
-                spawn: isIndustrial ? { x: 0, y: 2, z: 380 } : { x: cityGlobalData.cityData.plotX * 50, y: 2, z: (cityGlobalData.cityData.plotZ * 50) + 15 },
+                spawn: published?.spawn || { x: 0, y: 2, z: 0, scale: { x: 4, y: 1, z: 4 } },
                 objects: cityObjects
             };
-            document.getElementById('play-title').innerText = `${neighborhood} (Sculpt City)`;
+            document.getElementById('play-title').innerText = `Sculpt City`;
             document.getElementById('play-author').innerText = "Playsculpt Official";
             document.getElementById('play-likes').parentElement.style.display = 'none';
             document.getElementById('btn-save-game').style.display = 'none';
@@ -13009,9 +13135,6 @@ const groupAsAircraft = () => {
 
         const exitSculptCity = () => {
             isCityMode = false;
-            manufacturerJobState.active = false;
-            const panel = document.getElementById('manufacturer-job-ui');
-            if (panel) panel.remove();
             stopGameLoop();
 
             document.getElementById('play-likes').parentElement.style.display = 'flex';
@@ -13041,84 +13164,6 @@ const groupAsAircraft = () => {
         const openCityHelp = () => {
             document.getElementById('city-help-modal').style.display = 'flex';
         };
-
-        const startManufacturerJob = (factoryId = 1) => {
-            manufacturerJobState.active = true;
-            manufacturerJobState.startTime = Date.now();
-            manufacturerJobState.products = 0;
-            manufacturerJobState.packaged = 0;
-            manufacturerJobState.step = 'collect';
-            manufacturerJobState.stepStartedAt = Date.now();
-            manufacturerJobState.activeMs = 0;
-
-            const panel = document.createElement('div');
-            panel.id = 'manufacturer-job-ui';
-            panel.style.cssText = 'position:absolute;top:20px;left:20px;z-index:65;background:rgba(255,255,255,0.95);border:2px solid #2c3e50;border-radius:8px;padding:12px;min-width:260px;';
-            panel.innerHTML = `
-                <h4 style="margin:0 0 8px 0;color:#2c3e50;">Manufacturer Shift</h4>
-                <p id="manufacturer-step" style="margin:0 0 8px 0;font-weight:700;color:#34495e;">Step 1: Build Product</p>
-                <button class="btn btn-success btn-sm" id="manufacturer-action-btn" style="width:100%;margin-bottom:8px;">Build Product</button>
-                <div style="font-size:12px;color:#555;margin-bottom:8px;">Products Completed: <span id="manufacturer-products">0</span></div>
-                <button class="btn btn-danger btn-sm" style="width:100%;" onclick="endManufacturerShift()">End Shift / Leave</button>
-            `;
-            document.querySelector('#play-container-3d').appendChild(panel);
-
-            document.getElementById('manufacturer-action-btn').onclick = () => {
-                if (!manufacturerJobState.active) return;
-                const now = Date.now();
-                if (now - manufacturerJobState.stepStartedAt > 25000) return showModal('Shift Paused', 'You were inactive too long. Stay active to earn Sculpt Coins.');
-                manufacturerJobState.activeMs += Math.min(6000, now - manufacturerJobState.stepStartedAt);
-                if (manufacturerJobState.step === 'collect') {
-                    manufacturerJobState.step = 'package';
-                    manufacturerJobState.stepStartedAt = now;
-                    document.getElementById('manufacturer-step').innerText = 'Step 2: Package Product';
-                    document.getElementById('manufacturer-action-btn').innerText = 'Package Product';
-                } else {
-                    manufacturerJobState.step = 'collect';
-                    manufacturerJobState.stepStartedAt = now;
-                    manufacturerJobState.products += 1;
-                    manufacturerJobState.packaged += 1;
-                    document.getElementById('manufacturer-step').innerText = 'Step 1: Build Product';
-                    document.getElementById('manufacturer-action-btn').innerText = 'Build Product';
-                    document.getElementById('manufacturer-products').innerText = manufacturerJobState.products;
-                }
-            };
-
-            activeLevel.spawn = { x: 0, y: 2, z: 0, scale: { x: 4, y: 1, z: 4 } };
-            activeLevel.objects = [
-                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:-0.5, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:1, z:48}, color:'#a9b4bf', material:'Concrete' },
-                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:3, z:-23}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:7, z:2}, color:'#6c7784', material:'Metal' },
-                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:3, z:23}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:7, z:2}, color:'#6c7784', material:'Metal' },
-                { id: crypto.randomUUID(), type: 'block', position: {x:-23, y:3, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:7, z:48}, color:'#6c7784', material:'Metal' },
-                { id: crypto.randomUUID(), type: 'block', position: {x:23, y:3, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:7, z:48}, color:'#6c7784', material:'Metal' },
-                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:6.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:48, y:1, z:48}, color:'#4e5966', material:'Slate' },
-                { id: crypto.randomUUID(), type: 'block', position: {x:0, y:1.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:26, y:1.1, z:4}, color:'#2d3436', material:'Metal' },
-                { id: crypto.randomUUID(), type: 'block', position: {x:-10, y:2.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:1.2, z:4}, color:'#95a5a6', material:'Metal' },
-                { id: crypto.randomUUID(), type: 'block', position: {x:10, y:2.2, z:0}, rotation:{x:0,y:0,z:0}, scale:{x:2, y:1.2, z:4}, color:'#95a5a6', material:'Metal' }
-            ];
-            buildPlayScene();
-            playerObj.x = 0; playerObj.y = 2; playerObj.z = 8;
-            showModal('Manufacturer Shift Started', `Factory ${factoryId}: complete the 2-step process to earn +5 Sculpt Coins per product.`);
-        };
-
-        const endManufacturerShift = async () => {
-            if (!manufacturerJobState.active) return;
-            manufacturerJobState.active = false;
-            const panel = document.getElementById('manufacturer-job-ui');
-            if (panel) panel.remove();
-            const activeEnough = manufacturerJobState.activeMs >= manufacturerJobState.products * 1200;
-            const earned = activeEnough ? (manufacturerJobState.products * 5) : 0;
-            if (earned > 0) {
-                try {
-                    const res = await apiCall('/city/sync', 'POST', { coinsToAdd: earned });
-                    if (currentUser) currentUser.coins = res.coins;
-                    updateNav();
-                } catch (e) {}
-            }
-            startCityGame('Industrial District');
-            showModal('Shift Ended', `You manufactured ${manufacturerJobState.products} products and earned ${earned} Sculpt Coins this shift.`);
-        };
-        window.endManufacturerShift = endManufacturerShift;
 
 
 // ==========================================
