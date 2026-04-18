@@ -9434,10 +9434,19 @@ const promptClearEditor = () => {
         const buildObjFromSchemClient = (rootObj) => {
             const root = rootObj?.Schematic || rootObj || {};
             const toNum = (v, d = 0) => (typeof v === 'bigint' ? Number(v) : (Number.isFinite(Number(v)) ? Number(v) : d));
-            let width = toNum(root.Width ?? root.width, 0);
-            let height = toNum(root.Height ?? root.height, 0);
-            let length = toNum(root.Length ?? root.length, 0);
-            let blockTotal = Math.max(0, width * height * length);
+            const DIM_LIMIT = 2048;
+            const VOLUME_LIMIT = 5_000_000;
+            const normDim = (v) => Math.max(0, Math.min(DIM_LIMIT, Math.floor(Math.abs(toNum(v, 0)))));
+            const safeVolume = (w, h, l) => {
+                const vol = w * h * l;
+                if (!Number.isFinite(vol) || vol < 0 || vol > VOLUME_LIMIT) return -1;
+                return vol;
+            };
+            let width = normDim(root.Width ?? root.width);
+            let height = normDim(root.Height ?? root.height);
+            let length = normDim(root.Length ?? root.length);
+            let blockTotal = safeVolume(width, height, length);
+            if (blockTotal < 0) throw new Error(`Schematic is too large for browser conversion (max ${VOLUME_LIMIT.toLocaleString()} blocks).`);
             let blockIds = [];
             let blockNameAt = null;
             const varints = (arr, maxCount) => {
@@ -9479,10 +9488,10 @@ const promptClearEditor = () => {
                 blockNameAt = (idx) => idx === 0 ? 'minecraft:air' : `legacy:block_${idx}`;
             } else if (root.Regions && typeof root.Regions === 'object' && Object.keys(root.Regions).length > 0) {
                 const reg = root.Regions[Object.keys(root.Regions)[0]] || {};
-                width = Math.abs(toNum(reg?.Size?.x, 0));
-                height = Math.abs(toNum(reg?.Size?.y, 0));
-                length = Math.abs(toNum(reg?.Size?.z, 0));
-                blockTotal = Math.max(0, width * height * length);
+                width = normDim(reg?.Size?.x);
+                height = normDim(reg?.Size?.y);
+                length = normDim(reg?.Size?.z);
+                blockTotal = safeVolume(width, height, length);
                 const palette = {};
                 const pl = reg.BlockStatePalette || [];
                 if (Array.isArray(pl)) {
@@ -9512,6 +9521,7 @@ const promptClearEditor = () => {
                 blockNameAt = (idx) => String(palette[idx] || 'minecraft:air');
             }
             if (!width || !height || !length) throw new Error('Missing schematic dimensions.');
+            if (blockTotal < 0) throw new Error(`Schematic is too large for browser conversion (max ${VOLUME_LIMIT.toLocaleString()} blocks).`);
             if (!blockIds.length) throw new Error('Unsupported schematic block storage format.');
             if (blockIds.length < blockTotal) blockIds = blockIds.concat(new Array(blockTotal - blockIds.length).fill(0));
             if (!blockNameAt) blockNameAt = (idx) => idx === 0 ? 'minecraft:air' : `block_${idx}`;
