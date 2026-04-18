@@ -754,7 +754,15 @@
     </div>
     <div id="live-stream-indicator" class="live-stream-indicator">
         <span id="live-stream-elapsed">LIVE 00:00</span>
+        <button class="btn btn-info btn-sm" onclick="toggleStreamerChatPanel()">Chat</button>
         <button class="btn btn-danger btn-sm" onclick="stopLiveStream()">Stop</button>
+    </div>
+    <div id="live-streamer-chat-panel" style="display:none; position:fixed; top:44px; right:8px; z-index:120001; width:300px; max-width:calc(100vw - 16px); background:rgba(12,18,34,0.92); color:#fff; border:1px solid rgba(255,255,255,0.2); border-radius:8px; padding:8px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:12px; margin-bottom:6px;">
+            <strong>Live Stream Chat</strong>
+            <button class="btn btn-danger btn-sm" onclick="toggleStreamerChatPanel()">Hide</button>
+        </div>
+        <div id="live-streamer-chat-list" style="max-height:180px; overflow-y:auto; font-size:12px;"></div>
     </div>
     <div id="system-restart-banner" style="display:none; position:fixed; inset:0; background:rgba(8,12,24,0.75); z-index:999998; align-items:center; justify-content:center; padding:20px;">
         <div style="max-width:760px; width:100%; background:#fff; border-radius:12px; padding:18px; box-shadow:0 16px 34px rgba(0,0,0,0.38);">
@@ -1542,6 +1550,8 @@
                         <button class="btn btn-danger" onclick="openGoLiveModal()">Go Live</button>
                         <div class="nav-chip">Total Likes: <span id="live-total-likes">0</span></div>
                         <div class="nav-chip">Total Views: <span id="live-total-views">0</span></div>
+                        <div class="nav-chip">Tips: <span id="live-total-tips">0</span></div>
+                        <div class="nav-chip">Earnings: <span id="live-total-earnings">0</span> SC</div>
                     </div>
                 </div>
             </div>
@@ -1564,6 +1574,11 @@
                     <div style="display:flex; gap:8px; margin-top:8px;">
                         <input id="live-watch-chat-input" class="form-control" maxlength="180" placeholder="Chat in stream...">
                         <button class="btn btn-info btn-sm" onclick="sendLiveStreamChat()">Send</button>
+                    </div>
+                    <div style="display:flex; gap:8px; margin-top:8px;">
+                        <input id="live-tip-amount" type="number" min="1" step="1" class="form-control" placeholder="Tip amount (SC)">
+                        <input id="live-tip-message" maxlength="150" class="form-control" placeholder="Tip message (150 max)">
+                        <button class="btn btn-warning btn-sm" onclick="tipCurrentLiveStream()">Tip</button>
                     </div>
                 </div>
             </div>
@@ -13200,9 +13215,17 @@ Your Playsculpt Live account is directly tied to your main account, and all acti
             watchChatPoll: null,
             viewerPc: null,
             viewerStreamId: null,
+            seenTipIds: {},
+            pendingViewerCandidates: [],
             broadcasterPeers: {},
             isLive: false
         };
+        const toggleStreamerChatPanel = () => {
+            const panel = document.getElementById('live-streamer-chat-panel');
+            if (!panel || !liveState.isLive) return;
+            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+        };
+        window.toggleStreamerChatPanel = toggleStreamerChatPanel;
         const openLiveCreateModal = () => { document.getElementById('live-create-modal').style.display = 'flex'; };
         const closeLiveCreateModal = () => { document.getElementById('live-create-modal').style.display = 'none'; };
         const openLiveRulesModal = () => {
@@ -13239,6 +13262,8 @@ Your Playsculpt Live account is directly tied to your main account, and all acti
                 dash.style.display = liveState.account ? 'block' : 'none';
                 document.getElementById('live-total-likes').innerText = status.stats ? (status.stats.likesTotal || 0) : 0;
                 document.getElementById('live-total-views').innerText = status.stats ? (status.stats.viewsTotal || 0) : 0;
+                document.getElementById('live-total-tips').innerText = status.stats ? (status.stats.tipsTotal || 0) : 0;
+                document.getElementById('live-total-earnings').innerText = status.stats ? (status.stats.earningsCoins || 0) : 0;
                 const grid = document.getElementById('live-streams-grid');
                 grid.innerHTML = (liveState.activeStreams || []).length ? '' : '<p>No one is live right now.</p>';
                 (liveState.activeStreams || []).forEach(s => {
@@ -13259,6 +13284,26 @@ Your Playsculpt Live account is directly tied to your main account, and all acti
             const mm = String(Math.floor(secs / 60)).padStart(2, '0');
             const ss = String(secs % 60).padStart(2, '0');
             document.getElementById('live-stream-elapsed').innerText = `LIVE ${mm}:${ss}`;
+        };
+        const applyLiveTipsToUI = (tips = []) => {
+            tips.forEach(t => {
+                if (liveState.seenTipIds[t.id]) return;
+                liveState.seenTipIds[t.id] = true;
+                showModal('Live Tip!', `${t.fromUsername} tipped ${t.amount} SC${t.message ? `\n\n"${t.message}"` : ''}`);
+            });
+        };
+        const refreshStreamerChatPanel = async () => {
+            if (!liveState.isLive || !liveState.streamId) return;
+            try {
+                const [meta, chat] = await Promise.all([
+                    apiCall(`/live/stream/${liveState.streamId}`, 'GET'),
+                    apiCall(`/live/stream/${liveState.streamId}/chat`, 'GET')
+                ]);
+                const list = document.getElementById('live-streamer-chat-list');
+                if (list) list.innerHTML = (chat.messages || []).map(m => `<div><strong>${m.authorName}:</strong> ${m.text}</div>`).join('') || '<div style="color:#9ca3af;">No chat yet.</div>';
+                if (meta && meta.recentTips) applyLiveTipsToUI(meta.recentTips);
+                if (document.getElementById('view-live').classList.contains('active')) loadPlaysculptLive();
+            } catch (e) {}
         };
         const startBroadcasterSignalLoop = () => {
             if (liveState.broadcasterPoll) clearInterval(liveState.broadcasterPoll);
@@ -13291,7 +13336,25 @@ Your Playsculpt Live account is directly tied to your main account, and all acti
         };
         const startLiveStream = async () => {
             try {
-                const media = await navigator.mediaDevices.getDisplayMedia({ video: { frameRate: 20, width: 1280, height: 720, displaySurface: 'browser' }, audio: false });
+                const media = await navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        frameRate: 20,
+                        width: 1280,
+                        height: 720,
+                        displaySurface: 'browser',
+                        preferCurrentTab: true,
+                        selfBrowserSurface: 'include',
+                        surfaceSwitching: 'exclude',
+                        monitorTypeSurfaces: 'exclude'
+                    },
+                    audio: false
+                });
+                const vt = media.getVideoTracks()[0];
+                const settings = vt ? vt.getSettings() : {};
+                if (!vt || (settings.displaySurface && settings.displaySurface !== 'browser')) {
+                    media.getTracks().forEach(t => t.stop());
+                    return showModal('Go Live', 'Please share only this Playsculpt browser tab.');
+                }
                 const res = await apiCall('/live/go-live', 'POST', {});
                 liveState.localStream = media;
                 liveState.streamId = res.streamId;
@@ -13300,8 +13363,9 @@ Your Playsculpt Live account is directly tied to your main account, and all acti
                 closeGoLiveModal();
                 navigate('dashboard');
                 if (liveState.timerPoll) clearInterval(liveState.timerPoll);
-                liveState.timerPoll = setInterval(updateLiveIndicator, 1000);
+                liveState.timerPoll = setInterval(() => { updateLiveIndicator(); refreshStreamerChatPanel(); }, 1000);
                 updateLiveIndicator();
+                refreshStreamerChatPanel();
                 startBroadcasterSignalLoop();
                 media.getVideoTracks().forEach(t => t.onended = () => stopLiveStream());
             } catch (e) {
@@ -13323,6 +13387,8 @@ Your Playsculpt Live account is directly tied to your main account, and all acti
             if (liveState.timerPoll) clearInterval(liveState.timerPoll);
             liveState.timerPoll = null;
             updateLiveIndicator();
+            const panel = document.getElementById('live-streamer-chat-panel');
+            if (panel) panel.style.display = 'none';
             if (document.getElementById('view-live') && document.getElementById('view-live').classList.contains('active')) loadPlaysculptLive();
         };
         window.stopLiveStream = stopLiveStream;
@@ -13334,6 +13400,7 @@ Your Playsculpt Live account is directly tied to your main account, and all acti
                 liveState.viewerStreamId = streamId;
                 const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
                 liveState.viewerPc = pc;
+                liveState.pendingViewerCandidates = [];
                 pc.ontrack = (ev) => {
                     const v = document.getElementById('live-watch-video');
                     if (v && ev.streams && ev.streams[0]) v.srcObject = ev.streams[0];
@@ -13353,8 +13420,17 @@ Your Playsculpt Live account is directly tied to your main account, and all acti
                         for (const m of (inbox.messages || [])) {
                             if (m.type === 'answer' && m.answer && !liveState.viewerPc.currentRemoteDescription) {
                                 await liveState.viewerPc.setRemoteDescription(new RTCSessionDescription(m.answer));
+                                const pending = [...(liveState.pendingViewerCandidates || [])];
+                                liveState.pendingViewerCandidates = [];
+                                for (const c of pending) {
+                                    try { await liveState.viewerPc.addIceCandidate(new RTCIceCandidate(c)); } catch (_) {}
+                                }
                             } else if (m.type === 'candidate' && m.candidate) {
-                                try { await liveState.viewerPc.addIceCandidate(new RTCIceCandidate(m.candidate)); } catch (_) {}
+                                if (liveState.viewerPc.currentRemoteDescription) {
+                                    try { await liveState.viewerPc.addIceCandidate(new RTCIceCandidate(m.candidate)); } catch (_) {}
+                                } else {
+                                    liveState.pendingViewerCandidates.push(m.candidate);
+                                }
                             }
                         }
                     } catch (e) {}
@@ -13365,6 +13441,7 @@ Your Playsculpt Live account is directly tied to your main account, and all acti
                         document.getElementById('live-watch-title').innerText = meta.liveUsername || '';
                         document.getElementById('live-watch-viewers').innerText = meta.viewerCount || 0;
                         document.getElementById('live-watch-likes').innerText = meta.likes || 0;
+                        if (meta.recentTips) applyLiveTipsToUI(meta.recentTips);
                     } catch (e) {}
                 }, 1400);
                 liveState.watchChatPoll = setInterval(fetchLiveStreamChat, 1200);
@@ -13410,6 +13487,19 @@ Your Playsculpt Live account is directly tied to your main account, and all acti
             try { await apiCall(`/live/stream/${liveState.viewerStreamId}/like`, 'POST', {}); } catch (e) {}
         };
         window.likeCurrentLiveStream = likeCurrentLiveStream;
+        const tipCurrentLiveStream = async () => {
+            if (!liveState.viewerStreamId) return;
+            const amount = parseInt((document.getElementById('live-tip-amount').value || '0'), 10);
+            const message = String(document.getElementById('live-tip-message').value || '').slice(0, 150);
+            if (!Number.isFinite(amount) || amount <= 0) return showModal('Tip Streamer', 'Enter a valid tip amount.');
+            try {
+                await apiCall(`/live/stream/${liveState.viewerStreamId}/tip`, 'POST', { amount, message });
+                document.getElementById('live-tip-amount').value = '';
+                document.getElementById('live-tip-message').value = '';
+                showModal('Tip Sent', `You tipped ${amount} SC.`);
+            } catch (e) {}
+        };
+        window.tipCurrentLiveStream = tipCurrentLiveStream;
         const renderAdminChatLogs = (payload = {}) => {
             const listEl = document.getElementById('chatlogs-list');
             const statusEl = document.getElementById('chatlogs-status');

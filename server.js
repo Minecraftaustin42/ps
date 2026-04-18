@@ -3936,7 +3936,7 @@ const cleanupLiveViewers = () => {
 const getLiveAccountByUserId = (userId) => (db.live?.accounts || []).find(a => a.userId === userId) || null;
 const getLiveStats = (userId) => {
     if (!db.live.channelStats) db.live.channelStats = {};
-    if (!db.live.channelStats[userId]) db.live.channelStats[userId] = { likesTotal: 0, viewsTotal: 0 };
+    if (!db.live.channelStats[userId]) db.live.channelStats[userId] = { likesTotal: 0, viewsTotal: 0, tipsTotal: 0, earningsCoins: 0 };
     return db.live.channelStats[userId];
 };
 
@@ -3961,7 +3961,7 @@ app.post('/api/live/account', requireAuth, (req, res) => {
     if ((db.live.accounts || []).some(a => String(a.username || '').toLowerCase() === username.toLowerCase())) return res.status(400).json({ error: 'Live username already taken.' });
     const acc = { id: crypto.randomUUID(), userId: user.id, mainUsername: user.username, username, createdAt: Date.now() };
     db.live.accounts.push(acc);
-    if (!db.live.channelStats[user.id]) db.live.channelStats[user.id] = { likesTotal: 0, viewsTotal: 0 };
+    if (!db.live.channelStats[user.id]) db.live.channelStats[user.id] = { likesTotal: 0, viewsTotal: 0, tipsTotal: 0, earningsCoins: 0 };
     saveDB();
     res.json({ success: true, account: acc });
 });
@@ -3993,6 +3993,7 @@ app.post('/api/live/go-live', requireAuth, (req, res) => {
         likes: [],
         likedBy: {},
         chat: [],
+        tips: [],
         active: true,
         activeViewers: {},
         viewedUsers: {},
@@ -4021,6 +4022,7 @@ app.post('/api/live/stream/:id/watch', requireAuth, (req, res) => {
         stream.viewedUsers[req.userId] = true;
         const stats = getLiveStats(stream.ownerId);
         stats.viewsTotal += 1;
+        stats.earningsCoins += 1;
         saveDB();
     }
     res.json({ success: true, viewerCount: Object.keys(stream.activeViewers || {}).length });
@@ -4030,7 +4032,13 @@ app.get('/api/live/stream/:id', requireAuth, (req, res) => {
     cleanupLiveViewers();
     const stream = liveStreams[req.params.id];
     if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
-    res.json({ id: stream.id, liveUsername: stream.liveUsername, likes: (stream.likes || []).length, viewerCount: Object.keys(stream.activeViewers || {}).length });
+    res.json({
+        id: stream.id,
+        liveUsername: stream.liveUsername,
+        likes: (stream.likes || []).length,
+        viewerCount: Object.keys(stream.activeViewers || {}).length,
+        recentTips: (stream.tips || []).slice(-8)
+    });
 });
 
 app.get('/api/live/stream/:id/chat', requireAuth, (req, res) => {
@@ -4058,9 +4066,33 @@ app.post('/api/live/stream/:id/like', requireAuth, (req, res) => {
         stream.likes.push(req.userId);
         const stats = getLiveStats(stream.ownerId);
         stats.likesTotal += 1;
+        stats.earningsCoins += 2;
         saveDB();
     }
     res.json({ success: true, likes: stream.likes.length });
+});
+
+app.post('/api/live/stream/:id/tip', requireAuth, (req, res) => {
+    const stream = liveStreams[req.params.id];
+    if (!stream || !stream.active) return res.status(404).json({ error: 'Stream not found.' });
+    const viewer = db.users.find(u => u.id === req.userId);
+    const owner = db.users.find(u => u.id === stream.ownerId);
+    if (!viewer || !owner) return res.status(404).json({ error: 'User not found.' });
+    const amount = Math.max(1, parseInt(req.body.amount, 10) || 0);
+    const message = String(req.body.message || '').slice(0, 150);
+    if (amount <= 0) return res.status(400).json({ error: 'Invalid tip amount.' });
+    if (viewer.coins < amount) return res.status(400).json({ error: 'Insufficient Sculpt Coins.' });
+    viewer.coins -= amount;
+    owner.coins = (owner.coins || 0) + amount;
+    const tip = { id: crypto.randomUUID(), fromUserId: viewer.id, fromUsername: viewer.username, amount, message, timestamp: Date.now() };
+    if (!Array.isArray(stream.tips)) stream.tips = [];
+    stream.tips.push(tip);
+    if (stream.tips.length > 100) stream.tips.shift();
+    const stats = getLiveStats(owner.id);
+    stats.tipsTotal += amount;
+    stats.earningsCoins += amount;
+    saveDB();
+    res.json({ success: true, tip });
 });
 
 app.post('/api/live/stream/:id/signal', requireAuth, (req, res) => {
