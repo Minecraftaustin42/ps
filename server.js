@@ -1160,6 +1160,22 @@ app.post('/api/moderate/reports/:id', requireAuth, requireModerator, requireModP
                 awardBadge(reporter.id, 'Guardian');
             }
         }
+        if (report.category === 'live_channel_logo' && report.targetId) {
+            const acc = (db.live?.accounts || []).find(a => a.id === report.targetId);
+            if (acc && acc.pendingLogo) {
+                acc.logo = acc.pendingLogo;
+                acc.pendingLogo = '';
+                acc.logoStatus = 'approved';
+            }
+        }
+    } else if (action === 'deny') {
+        if (report.category === 'live_channel_logo' && report.targetId) {
+            const acc = (db.live?.accounts || []).find(a => a.id === report.targetId);
+            if (acc) {
+                acc.pendingLogo = '';
+                acc.logoStatus = 'rejected';
+            }
+        }
     }
 
     saveDB();
@@ -3959,7 +3975,7 @@ app.post('/api/live/account', requireAuth, (req, res) => {
     if (!LIVE_USERNAME_RE.test(username)) return res.status(400).json({ error: 'Username must be 1-20 chars using letters, numbers, underscores, periods.' });
     if (getLiveAccountByUserId(user.id)) return res.status(400).json({ error: 'You already have a Playsculpt Live account.' });
     if ((db.live.accounts || []).some(a => String(a.username || '').toLowerCase() === username.toLowerCase())) return res.status(400).json({ error: 'Live username already taken.' });
-    const acc = { id: crypto.randomUUID(), userId: user.id, mainUsername: user.username, username, createdAt: Date.now() };
+    const acc = { id: crypto.randomUUID(), userId: user.id, mainUsername: user.username, username, createdAt: Date.now(), description: '', subscribers: [], logo: '', logoStatus: 'none', pendingLogo: '' };
     db.live.accounts.push(acc);
     if (!db.live.channelStats[user.id]) db.live.channelStats[user.id] = { likesTotal: 0, viewsTotal: 0, tipsTotal: 0, earningsCoins: 0 };
     saveDB();
@@ -3997,6 +4013,8 @@ app.post('/api/live/go-live', requireAuth, (req, res) => {
         active: true,
         activeViewers: {},
         viewedUsers: {},
+        watchMs: 0,
+        watchCoinUnits: 0,
         signal: { forBroadcaster: [], forViewer: {} }
     };
     res.json({ success: true, streamId, startedAt: liveStreams[streamId].startedAt });
@@ -4006,6 +4024,9 @@ app.post('/api/live/stop', requireAuth, (req, res) => {
     const stream = Object.values(liveStreams).find(s => s.ownerId === req.userId && s.active);
     if (!stream) return res.json({ success: true });
     stream.active = false;
+    const account = getLiveAccountByUserId(req.userId);
+    if (account) account.lastLiveAt = Date.now();
+    saveDB();
     res.json({ success: true });
 });
 
@@ -4017,7 +4038,23 @@ app.post('/api/live/stream/:id/watch', requireAuth, (req, res) => {
         delete stream.activeViewers[req.userId];
         return res.json({ success: true });
     }
-    stream.activeViewers[req.userId] = Date.now();
+    const now = Date.now();
+    const prev = stream.activeViewers[req.userId] || 0;
+    stream.activeViewers[req.userId] = now;
+    if (prev > 0) {
+        const delta = Math.max(0, Math.min(20000, now - prev));
+        stream.watchMs = (stream.watchMs || 0) + delta;
+        const units = Math.floor((stream.watchMs || 0) / 45000);
+        if (units > (stream.watchCoinUnits || 0)) {
+            const add = units - (stream.watchCoinUnits || 0);
+            stream.watchCoinUnits = units;
+            const owner = db.users.find(u => u.id === stream.ownerId);
+            if (owner) owner.coins = (owner.coins || 0) + add;
+            const stats = getLiveStats(stream.ownerId);
+            stats.earningsCoins += add;
+            saveDB();
+        }
+    }
     if (!stream.viewedUsers[req.userId]) {
         stream.viewedUsers[req.userId] = true;
         const stats = getLiveStats(stream.ownerId);
@@ -4035,6 +4072,7 @@ app.get('/api/live/stream/:id', requireAuth, (req, res) => {
     res.json({
         id: stream.id,
         liveUsername: stream.liveUsername,
+        ownerUsername: db.users.find(u => u.id === stream.ownerId)?.username || '',
         likes: (stream.likes || []).length,
         viewerCount: Object.keys(stream.activeViewers || {}).length,
         recentTips: (stream.tips || []).slice(-8)
@@ -4093,6 +4131,70 @@ app.post('/api/live/stream/:id/tip', requireAuth, (req, res) => {
     stats.earningsCoins += amount;
     saveDB();
     res.json({ success: true, tip });
+});
+
+app.post('/api/live/channel/description', requireAuth, (req, res) => {
+    const acc = getLiveAccountByUserId(req.userId);
+    if (!acc) return res.status(404).json({ error: 'Live channel not found.' });
+    acc.description = String(req.body.description || '').slice(0, 2000);
+    saveDB();
+    res.json({ success: true, description: acc.description });
+});
+
+app.post('/api/live/channel/logo', requireAuth, (req, res) => {
+    const acc = getLiveAccountByUserId(req.userId);
+    if (!acc) return res.status(404).json({ error: 'Live channel not found.' });
+    const image = String(req.body.image || '').slice(0, 3000000);
+    if (!image.startsWith('data:image/')) return res.status(400).json({ error: 'Logo must be an image.' });
+    acc.pendingLogo = image;
+    acc.logoStatus = 'pending';
+    if (!Array.isArray(db.reports)) db.reports = [];
+    db.reports.unshift({
+        id: crypto.randomUUID(),
+        reporterId: req.userId,
+        reporterName: db.users.find(u => u.id === req.userId)?.username || req.userId,
+        category: 'live_channel_logo',
+        categoryLabel: 'Playsculpt Live Channel Logos',
+        targetType: 'live_channel_logo',
+        targetId: acc.id,
+        targetName: acc.username,
+        text: 'Please review this Playsculpt Live channel logo.',
+        evidence: image.slice(0, 1000),
+        status: 'pending',
+        createdAt: Date.now()
+    });
+    saveDB();
+    res.json({ success: true, message: 'Logo submitted for manual moderation approval.' });
+});
+
+app.get('/api/live/channel/:username', requireAuth, (req, res) => {
+    const uname = String(req.params.username || '').toLowerCase();
+    const acc = (db.live.accounts || []).find(a => String(a.username || '').toLowerCase() === uname || String(a.mainUsername || '').toLowerCase() === uname);
+    if (!acc) return res.status(404).json({ error: 'Channel not found.' });
+    const isSub = (acc.subscribers || []).includes(req.userId);
+    res.json({
+        username: acc.username,
+        mainUsername: acc.mainUsername,
+        description: acc.description || '',
+        subscribersCount: (acc.subscribers || []).length,
+        isSubscribed: isSub,
+        lastLiveAt: acc.lastLiveAt || 0,
+        logo: acc.logo || '',
+        logoStatus: acc.logoStatus || 'none'
+    });
+});
+
+app.post('/api/live/channel/:username/subscribe', requireAuth, (req, res) => {
+    const uname = String(req.params.username || '').toLowerCase();
+    const acc = (db.live.accounts || []).find(a => String(a.username || '').toLowerCase() === uname || String(a.mainUsername || '').toLowerCase() === uname);
+    if (!acc) return res.status(404).json({ error: 'Channel not found.' });
+    if (!Array.isArray(acc.subscribers)) acc.subscribers = [];
+    const idx = acc.subscribers.indexOf(req.userId);
+    let subscribed = false;
+    if (idx >= 0) acc.subscribers.splice(idx, 1);
+    else { acc.subscribers.push(req.userId); subscribed = true; }
+    saveDB();
+    res.json({ success: true, subscribed, subscribersCount: acc.subscribers.length });
 });
 
 app.post('/api/live/stream/:id/signal', requireAuth, (req, res) => {
