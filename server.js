@@ -254,10 +254,10 @@ const readNBT = (buffer) => {
     const readU16 = () => { const v = buffer.readUInt16BE(o); o += 2; return v; };
     const readI32 = () => { const v = buffer.readInt32BE(o); o += 4; return v; };
     const readI64 = () => {
-        const hi = buffer.readInt32BE(o);
-        const lo = buffer.readUInt32BE(o + 4);
+        const hi = BigInt(buffer.readInt32BE(o));
+        const lo = BigInt(buffer.readUInt32BE(o + 4));
         o += 8;
-        return Number(BigInt(hi) << 32n | BigInt(lo));
+        return (hi << 32n) | lo;
     };
     const readF32 = () => { const v = buffer.readFloatBE(o); o += 4; return v; };
     const readF64 = () => { const v = buffer.readDoubleBE(o); o += 8; return v; };
@@ -349,23 +349,53 @@ const buildObjFromSchematic = (buffer) => {
     const raw = (buffer[0] === 0x1f && buffer[1] === 0x8b) ? require('zlib').gunzipSync(buffer) : buffer;
     const parsed = readNBT(raw).value || {};
     const schem = parsed.Schematic || parsed;
-    const width = Number(schem.Width || schem.width || 0);
-    const height = Number(schem.Height || schem.height || 0);
-    const length = Number(schem.Length || schem.length || 0);
-    if (!width || !height || !length) throw new Error('Missing Width/Height/Length in schematic.');
-    const blockTotal = width * height * length;
+    const toNum = (v, fallback = 0) => {
+        if (typeof v === 'bigint') return Number(v);
+        const n = Number(v);
+        return Number.isFinite(n) ? n : fallback;
+    };
+    let width = toNum(schem.Width ?? schem.width, 0);
+    let height = toNum(schem.Height ?? schem.height, 0);
+    let length = toNum(schem.Length ?? schem.length, 0);
     let blockIds = [];
     let blockNameAt = null;
+    const decodeVarIntOrArray = (data, total) => Buffer.isBuffer(data)
+        ? decodeVarIntStream(data, total)
+        : (Array.isArray(data) ? data.map(v => toNum(v, 0)).slice(0, total) : []);
+    const decodePackedStates = (longs, count, bitsPerBlock) => {
+        const out = new Array(count).fill(0);
+        const mask = (1n << BigInt(bitsPerBlock)) - 1n;
+        for (let i = 0; i < count; i++) {
+            const bitIndex = BigInt(i * bitsPerBlock);
+            const longIdx = Number(bitIndex / 64n);
+            const bitOffset = Number(bitIndex % 64n);
+            const lo = BigInt.asUintN(64, BigInt(longs[longIdx] || 0n));
+            if (bitOffset + bitsPerBlock <= 64) {
+                out[i] = Number((lo >> BigInt(bitOffset)) & mask);
+            } else {
+                const hi = BigInt.asUintN(64, BigInt(longs[longIdx + 1] || 0n));
+                const lowPart = lo >> BigInt(bitOffset);
+                const highBits = BigInt(bitOffset + bitsPerBlock - 64);
+                const highPart = (hi & ((1n << highBits) - 1n)) << BigInt(64 - bitOffset);
+                out[i] = Number((lowPart | highPart) & mask);
+            }
+        }
+        return out;
+    };
+    const applyPaletteBlockDataFormat = (paletteObj, blockData, total) => {
+        if (!paletteObj || typeof paletteObj !== 'object' || !blockData) return false;
+        const inversePalette = {};
+        Object.keys(paletteObj).forEach(name => { inversePalette[toNum(paletteObj[name], 0)] = name; });
+        blockIds = decodeVarIntOrArray(blockData, total);
+        blockNameAt = (idx) => String(inversePalette[idx] || 'minecraft:air');
+        return blockIds.length > 0;
+    };
 
     const palette = schem.Palette || null;
     const blockDataRaw = schem.BlockData;
-    if (palette && typeof palette === 'object' && blockDataRaw) {
-        const inversePalette = {};
-        Object.keys(palette).forEach(name => { inversePalette[Number(palette[name])] = name; });
-        blockIds = Buffer.isBuffer(blockDataRaw)
-            ? decodeVarIntStream(blockDataRaw, blockTotal)
-            : (Array.isArray(blockDataRaw) ? blockDataRaw.map(v => Number(v) || 0).slice(0, blockTotal) : []);
-        blockNameAt = (idx) => String(inversePalette[idx] || 'minecraft:air');
+    let blockTotal = Math.max(0, width * height * length);
+    if (!applyPaletteBlockDataFormat(palette, blockDataRaw, blockTotal) && applyPaletteBlockDataFormat(schem?.Blocks?.Palette, schem?.Blocks?.Data || schem?.Blocks?.BlockData, blockTotal)) {
+        // Nested Blocks compound format.
     } else if (Buffer.isBuffer(schem.Blocks) || Array.isArray(schem.Blocks)) {
         // Legacy MCEdit style format support.
         const blocksBase = Buffer.isBuffer(schem.Blocks) ? Array.from(schem.Blocks.values()) : schem.Blocks.map(v => Number(v) || 0);
@@ -380,8 +410,33 @@ const buildObjFromSchematic = (buffer) => {
             return base | (hi << 8);
         });
         blockNameAt = (idx) => idx === 0 ? 'minecraft:air' : `legacy:block_${idx}`;
+    } else if (schem.Regions && typeof schem.Regions === 'object' && Object.keys(schem.Regions).length > 0) {
+        // Litematic-like region storage fallback.
+        const firstRegion = schem.Regions[Object.keys(schem.Regions)[0]] || {};
+        const sx = toNum(firstRegion?.Size?.x, 0);
+        const sy = toNum(firstRegion?.Size?.y, 0);
+        const sz = toNum(firstRegion?.Size?.z, 0);
+        width = Math.abs(sx); height = Math.abs(sy); length = Math.abs(sz);
+        blockTotal = Math.max(0, width * height * length);
+        const paletteList = firstRegion.BlockStatePalette || [];
+        const statePalette = {};
+        if (Array.isArray(paletteList)) {
+            paletteList.forEach((entry, i) => {
+                if (typeof entry === 'string') statePalette[i] = entry;
+                else if (entry && typeof entry === 'object' && entry.Name) statePalette[i] = String(entry.Name);
+            });
+        } else if (firstRegion.Palette && typeof firstRegion.Palette === 'object') {
+            Object.keys(firstRegion.Palette).forEach(name => { statePalette[toNum(firstRegion.Palette[name], 0)] = name; });
+        }
+        const longs = Array.isArray(firstRegion.BlockStates) ? firstRegion.BlockStates : [];
+        const bitsPerBlock = Math.max(2, Math.ceil(Math.log2(Math.max(2, Object.keys(statePalette).length))));
+        if (longs.length && blockTotal > 0) {
+            blockIds = decodePackedStates(longs, blockTotal, bitsPerBlock);
+            blockNameAt = (idx) => String(statePalette[idx] || 'minecraft:air');
+        }
     }
-    if (!blockIds.length) throw new Error('Missing or unsupported block data format (expected Palette+BlockData or Blocks array).');
+    if (!width || !height || !length) throw new Error('Missing Width/Height/Length in schematic.');
+    if (!blockIds.length) throw new Error('Missing or unsupported block data format (expected Palette+BlockData, nested Blocks data, Blocks array, or Regions BlockStates).');
     if (blockIds.length < blockTotal) {
         const fixed = new Array(blockTotal).fill(0);
         for (let i = 0; i < Math.min(blockIds.length, blockTotal); i++) fixed[i] = blockIds[i];
