@@ -241,6 +241,260 @@ const sanitizeNumber = (value, fallback, min, max) => {
     if (!Number.isFinite(num)) return fallback;
     return Math.max(min, Math.min(max, num));
 };
+const isSculptCityAccount = (user) => String(user?.username || '').toLowerCase() === 'sculpt city';
+
+const NBT_TAG = {
+    END: 0, BYTE: 1, SHORT: 2, INT: 3, LONG: 4, FLOAT: 5, DOUBLE: 6, BYTE_ARRAY: 7, STRING: 8, LIST: 9, COMPOUND: 10, INT_ARRAY: 11, LONG_ARRAY: 12
+};
+const readNBT = (buffer) => {
+    let o = 0;
+    const readU8 = () => buffer.readUInt8(o++);
+    const readI8 = () => buffer.readInt8(o++);
+    const readI16 = () => { const v = buffer.readInt16BE(o); o += 2; return v; };
+    const readU16 = () => { const v = buffer.readUInt16BE(o); o += 2; return v; };
+    const readI32 = () => { const v = buffer.readInt32BE(o); o += 4; return v; };
+    const readI64 = () => {
+        const hi = BigInt(buffer.readInt32BE(o));
+        const lo = BigInt(buffer.readUInt32BE(o + 4));
+        o += 8;
+        return (hi << 32n) | lo;
+    };
+    const readF32 = () => { const v = buffer.readFloatBE(o); o += 4; return v; };
+    const readF64 = () => { const v = buffer.readDoubleBE(o); o += 8; return v; };
+    const readStr = () => {
+        const len = readU16();
+        const v = buffer.toString('utf8', o, o + len);
+        o += len;
+        return v;
+    };
+    const readPayload = (tagType) => {
+        switch (tagType) {
+            case NBT_TAG.BYTE: return readI8();
+            case NBT_TAG.SHORT: return readI16();
+            case NBT_TAG.INT: return readI32();
+            case NBT_TAG.LONG: return readI64();
+            case NBT_TAG.FLOAT: return readF32();
+            case NBT_TAG.DOUBLE: return readF64();
+            case NBT_TAG.BYTE_ARRAY: {
+                const len = readI32();
+                const arr = Buffer.alloc(Math.max(0, len));
+                buffer.copy(arr, 0, o, o + len);
+                o += len;
+                return arr;
+            }
+            case NBT_TAG.STRING: return readStr();
+            case NBT_TAG.LIST: {
+                const listType = readU8();
+                const len = readI32();
+                const arr = [];
+                for (let i = 0; i < len; i++) arr.push(readPayload(listType));
+                return arr;
+            }
+            case NBT_TAG.COMPOUND: {
+                const out = {};
+                while (true) {
+                    const t = readU8();
+                    if (t === NBT_TAG.END) break;
+                    const name = readStr();
+                    out[name] = readPayload(t);
+                }
+                return out;
+            }
+            case NBT_TAG.INT_ARRAY: {
+                const len = readI32();
+                const arr = new Array(len);
+                for (let i = 0; i < len; i++) arr[i] = readI32();
+                return arr;
+            }
+            case NBT_TAG.LONG_ARRAY: {
+                const len = readI32();
+                const arr = new Array(len);
+                for (let i = 0; i < len; i++) arr[i] = readI64();
+                return arr;
+            }
+            default:
+                throw new Error(`Unsupported NBT tag type: ${tagType}`);
+        }
+    };
+
+    const rootType = readU8();
+    if (rootType !== NBT_TAG.COMPOUND) throw new Error('Invalid NBT root type.');
+    const rootName = readStr();
+    const rootValue = readPayload(rootType);
+    return { rootName, value: rootValue };
+};
+
+const decodeVarIntStream = (buf, maxCount) => {
+    const values = [];
+    let offset = 0;
+    while (offset < buf.length && values.length < maxCount) {
+        let num = 0;
+        let shift = 0;
+        let b;
+        let loops = 0;
+        do {
+            if (offset >= buf.length) throw new Error('Malformed varint stream.');
+            b = buf[offset++];
+            num |= (b & 0x7F) << shift;
+            shift += 7;
+            loops++;
+            if (loops > 5) throw new Error('VarInt too long.');
+        } while (b & 0x80);
+        values.push(num >>> 0);
+    }
+    return values;
+};
+
+const buildObjFromSchematic = (buffer) => {
+    const raw = (buffer[0] === 0x1f && buffer[1] === 0x8b) ? require('zlib').gunzipSync(buffer) : buffer;
+    const parsed = readNBT(raw).value || {};
+    const schem = parsed.Schematic || parsed;
+    const toNum = (v, fallback = 0) => {
+        if (typeof v === 'bigint') return Number(v);
+        const n = Number(v);
+        return Number.isFinite(n) ? n : fallback;
+    };
+    let width = toNum(schem.Width ?? schem.width, 0);
+    let height = toNum(schem.Height ?? schem.height, 0);
+    let length = toNum(schem.Length ?? schem.length, 0);
+    let blockIds = [];
+    let blockNameAt = null;
+    const decodeVarIntOrArray = (data, total) => Buffer.isBuffer(data)
+        ? decodeVarIntStream(data, total)
+        : (Array.isArray(data) ? data.map(v => toNum(v, 0)).slice(0, total) : []);
+    const decodePackedStates = (longs, count, bitsPerBlock) => {
+        const out = new Array(count).fill(0);
+        const mask = (1n << BigInt(bitsPerBlock)) - 1n;
+        for (let i = 0; i < count; i++) {
+            const bitIndex = BigInt(i * bitsPerBlock);
+            const longIdx = Number(bitIndex / 64n);
+            const bitOffset = Number(bitIndex % 64n);
+            const lo = BigInt.asUintN(64, BigInt(longs[longIdx] || 0n));
+            if (bitOffset + bitsPerBlock <= 64) {
+                out[i] = Number((lo >> BigInt(bitOffset)) & mask);
+            } else {
+                const hi = BigInt.asUintN(64, BigInt(longs[longIdx + 1] || 0n));
+                const lowPart = lo >> BigInt(bitOffset);
+                const highBits = BigInt(bitOffset + bitsPerBlock - 64);
+                const highPart = (hi & ((1n << highBits) - 1n)) << BigInt(64 - bitOffset);
+                out[i] = Number((lowPart | highPart) & mask);
+            }
+        }
+        return out;
+    };
+    const applyPaletteBlockDataFormat = (paletteObj, blockData, total) => {
+        if (!paletteObj || typeof paletteObj !== 'object' || !blockData) return false;
+        const inversePalette = {};
+        Object.keys(paletteObj).forEach(name => { inversePalette[toNum(paletteObj[name], 0)] = name; });
+        blockIds = decodeVarIntOrArray(blockData, total);
+        blockNameAt = (idx) => String(inversePalette[idx] || 'minecraft:air');
+        return blockIds.length > 0;
+    };
+
+    const palette = schem.Palette || null;
+    const blockDataRaw = schem.BlockData;
+    let blockTotal = Math.max(0, width * height * length);
+    if (!applyPaletteBlockDataFormat(palette, blockDataRaw, blockTotal) && applyPaletteBlockDataFormat(schem?.Blocks?.Palette, schem?.Blocks?.Data || schem?.Blocks?.BlockData, blockTotal)) {
+        // Nested Blocks compound format.
+    } else if (Buffer.isBuffer(schem.Blocks) || Array.isArray(schem.Blocks)) {
+        // Legacy MCEdit style format support.
+        const blocksBase = Buffer.isBuffer(schem.Blocks) ? Array.from(schem.Blocks.values()) : schem.Blocks.map(v => Number(v) || 0);
+        const add = (Buffer.isBuffer(schem.AddBlocks) || Array.isArray(schem.AddBlocks))
+            ? (Buffer.isBuffer(schem.AddBlocks) ? Array.from(schem.AddBlocks.values()) : schem.AddBlocks.map(v => Number(v) || 0))
+            : null;
+        blockIds = new Array(Math.min(blockTotal, blocksBase.length)).fill(0).map((_, i) => {
+            const base = blocksBase[i] & 0xFF;
+            if (!add || i >= add.length * 2) return base;
+            const nibbleByte = add[Math.floor(i / 2)] & 0xFF;
+            const hi = (i % 2 === 0) ? (nibbleByte & 0x0F) : ((nibbleByte >> 4) & 0x0F);
+            return base | (hi << 8);
+        });
+        blockNameAt = (idx) => idx === 0 ? 'minecraft:air' : `legacy:block_${idx}`;
+    } else if (schem.Regions && typeof schem.Regions === 'object' && Object.keys(schem.Regions).length > 0) {
+        // Litematic-like region storage fallback.
+        const firstRegion = schem.Regions[Object.keys(schem.Regions)[0]] || {};
+        const sx = toNum(firstRegion?.Size?.x, 0);
+        const sy = toNum(firstRegion?.Size?.y, 0);
+        const sz = toNum(firstRegion?.Size?.z, 0);
+        width = Math.abs(sx); height = Math.abs(sy); length = Math.abs(sz);
+        blockTotal = Math.max(0, width * height * length);
+        const paletteList = firstRegion.BlockStatePalette || [];
+        const statePalette = {};
+        if (Array.isArray(paletteList)) {
+            paletteList.forEach((entry, i) => {
+                if (typeof entry === 'string') statePalette[i] = entry;
+                else if (entry && typeof entry === 'object' && entry.Name) statePalette[i] = String(entry.Name);
+            });
+        } else if (firstRegion.Palette && typeof firstRegion.Palette === 'object') {
+            Object.keys(firstRegion.Palette).forEach(name => { statePalette[toNum(firstRegion.Palette[name], 0)] = name; });
+        }
+        const longs = Array.isArray(firstRegion.BlockStates) ? firstRegion.BlockStates : [];
+        const bitsPerBlock = Math.max(2, Math.ceil(Math.log2(Math.max(2, Object.keys(statePalette).length))));
+        if (longs.length && blockTotal > 0) {
+            blockIds = decodePackedStates(longs, blockTotal, bitsPerBlock);
+            blockNameAt = (idx) => String(statePalette[idx] || 'minecraft:air');
+        }
+    }
+    if (!width || !height || !length) throw new Error('Missing Width/Height/Length in schematic.');
+    if (!blockIds.length) throw new Error('Missing or unsupported block data format (expected Palette+BlockData, nested Blocks data, Blocks array, or Regions BlockStates).');
+    if (blockIds.length < blockTotal) {
+        const fixed = new Array(blockTotal).fill(0);
+        for (let i = 0; i < Math.min(blockIds.length, blockTotal); i++) fixed[i] = blockIds[i];
+        blockIds = fixed;
+    } else if (blockIds.length > blockTotal) {
+        blockIds = blockIds.slice(0, blockTotal);
+    }
+    if (!blockNameAt) blockNameAt = (idx) => idx === 0 ? 'minecraft:air' : `block_${idx}`;
+
+    const toIndex = (x, y, z) => y * width * length + z * width + x;
+    const isSolid = (x, y, z) => {
+        if (x < 0 || y < 0 || z < 0 || x >= width || y >= height || z >= length) return false;
+        const name = blockNameAt(blockIds[toIndex(x, y, z)]);
+        return !name.endsWith(':air') && !name.includes('air[');
+    };
+
+    const lines = ['# Generated from .schem by Playsculpt', 'mtllib schem.mtl'];
+    let vertexBase = 1;
+    let blocksIncluded = 0;
+    const maxBlocks = 12000;
+    for (let y = 0; y < height; y++) {
+        for (let z = 0; z < length; z++) {
+            for (let x = 0; x < width; x++) {
+                const idx = toIndex(x, y, z);
+                const name = blockNameAt(blockIds[idx]);
+                if (name.endsWith(':air') || name.includes('air[')) continue;
+                const exposed =
+                    !isSolid(x + 1, y, z) || !isSolid(x - 1, y, z) ||
+                    !isSolid(x, y + 1, z) || !isSolid(x, y - 1, z) ||
+                    !isSolid(x, y, z + 1) || !isSolid(x, y, z - 1);
+                if (!exposed) continue;
+                blocksIncluded++;
+                if (blocksIncluded > maxBlocks) break;
+                lines.push(`o b_${x}_${y}_${z}`);
+                lines.push(`v ${x} ${y} ${z}`);
+                lines.push(`v ${x + 1} ${y} ${z}`);
+                lines.push(`v ${x + 1} ${y + 1} ${z}`);
+                lines.push(`v ${x} ${y + 1} ${z}`);
+                lines.push(`v ${x} ${y} ${z + 1}`);
+                lines.push(`v ${x + 1} ${y} ${z + 1}`);
+                lines.push(`v ${x + 1} ${y + 1} ${z + 1}`);
+                lines.push(`v ${x} ${y + 1} ${z + 1}`);
+                lines.push(`usemtl ${name.replace(/[^a-zA-Z0-9_\-:.]/g, '_')}`);
+                if (!isSolid(x, y, z - 1)) lines.push(`f ${vertexBase} ${vertexBase + 1} ${vertexBase + 2} ${vertexBase + 3}`);
+                if (!isSolid(x, y, z + 1)) lines.push(`f ${vertexBase + 5} ${vertexBase + 4} ${vertexBase + 7} ${vertexBase + 6}`);
+                if (!isSolid(x - 1, y, z)) lines.push(`f ${vertexBase + 4} ${vertexBase} ${vertexBase + 3} ${vertexBase + 7}`);
+                if (!isSolid(x + 1, y, z)) lines.push(`f ${vertexBase + 1} ${vertexBase + 5} ${vertexBase + 6} ${vertexBase + 2}`);
+                if (!isSolid(x, y + 1, z)) lines.push(`f ${vertexBase + 3} ${vertexBase + 2} ${vertexBase + 6} ${vertexBase + 7}`);
+                if (!isSolid(x, y - 1, z)) lines.push(`f ${vertexBase + 4} ${vertexBase + 5} ${vertexBase + 1} ${vertexBase}`);
+                vertexBase += 8;
+            }
+            if (blocksIncluded > maxBlocks) break;
+        }
+        if (blocksIncluded > maxBlocks) break;
+    }
+    if (!blocksIncluded) throw new Error('Schematic had no solid blocks to import.');
+    return { objText: lines.join('\n'), blocksIncluded: Math.min(blocksIncluded, maxBlocks), truncated: blocksIncluded > maxBlocks };
+};
 
 const sanitizeGameData = (gameData) => {
     const MAX_WORLD_OBJECTS = 50000;
@@ -3238,6 +3492,23 @@ app.get('/api/sounds/:id', (req, res) => {
     res.json({ data: sound.data });
 });
 
+app.post('/api/tools/schem-to-obj', requireAuth, express.raw({ type: 'application/octet-stream', limit: '100mb' }), (req, res) => {
+    try {
+        let inputBuffer = null;
+        if (Buffer.isBuffer(req.body) && req.body.length) {
+            inputBuffer = req.body;
+        } else {
+            const b64 = String(req.body?.schemBase64 || '');
+            if (b64) inputBuffer = Buffer.from(b64, 'base64');
+        }
+        if (!inputBuffer || !inputBuffer.length) return res.status(400).json({ error: 'Missing schematic payload (octet-stream body or schemBase64).' });
+        const converted = buildObjFromSchematic(inputBuffer);
+        res.json(converted);
+    } catch (e) {
+        res.status(400).json({ error: `Schematic conversion failed: ${e.message}` });
+    }
+});
+
 
 
 app.get('/api/games/most-liked', (req, res) => {
@@ -3648,7 +3919,30 @@ app.get('/api/city/info', requireAuth, (req, res) => {
         if (!user.cityData.vehicles) user.cityData.vehicles = ['sedan_1'];
         if (typeof user.cityData.tutorialComplete === 'undefined') user.cityData.tutorialComplete = false;
     }
-    res.json({ cityData: user.cityData, plots: db.cityPlots || [] });
+    res.json({
+        cityData: user.cityData,
+        plots: db.cityPlots || [],
+        sculptCityWorld: db.systemState?.sculptCityWorld || null
+    });
+});
+
+app.get('/api/city/world', requireAuth, (req, res) => {
+    res.json({ sculptCityWorld: db.systemState?.sculptCityWorld || null });
+});
+
+app.post('/api/city/world/publish', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!isSculptCityAccount(user)) return res.status(403).json({ error: 'Only the Sculpt City account can publish this world.' });
+    const safeGameData = sanitizeGameData(req.body?.gameData || {});
+    if (!safeGameData?.spawn) return res.status(400).json({ error: 'Spawn is required for Sculpt City world publishing.' });
+    if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
+    db.systemState.sculptCityWorld = {
+        gameData: safeGameData,
+        updatedAt: Date.now(),
+        updatedBy: user.username
+    };
+    saveDB();
+    res.json({ success: true, sculptCityWorld: db.systemState.sculptCityWorld });
 });
 
 app.post('/api/city/claim', requireAuth, (req, res) => {
