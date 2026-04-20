@@ -2860,7 +2860,7 @@ async function safeFetch(url, options = {}) {
        const getMaterialForType = (matType, colorHex) => {
             const c = new THREE.Color(colorHex || '#cccccc');
             const hsl = {}; c.getHSL(hsl);
-            c.setRGB(c.r, c.g, c.b); // keep exact block color; avoid lighting hue drift
+            c.setHSL(hsl.h, Math.min(0.88, Math.max(0.42, hsl.s * 1.08)), Math.max(0.4, Math.min(hsl.l + 0.03, 0.78)));
 
             if (matType === 'Neon') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#ffe066') });
             if (matType === 'Hologram') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#66e5ff'), transparent: true, opacity: 0.38, wireframe: true });
@@ -6113,7 +6113,7 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
             profileWorldRenderer.physicallyCorrectLights = false;
             overlay.appendChild(profileWorldRenderer.domElement);
             const hemi = new THREE.HemisphereLight(0xffffff, 0xc3c8d0, 0.72); profileWorldScene.add(hemi);
-            const sun = new THREE.DirectionalLight(0xffffff, 0.62); sun.position.set(40, 70, 20); sun.castShadow = true; sun.shadow.mapSize.set(512, 512); sun.shadow.radius = 1.4; sun.shadow.bias = -0.0012; profileWorldScene.add(sun);
+            const sun = new THREE.DirectionalLight(0xffffff, 0.38); sun.position.set(40, 70, 20); sun.castShadow = true; sun.shadow.mapSize.set(512, 512); sun.shadow.radius = 1.4; sun.shadow.bias = -0.0012; profileWorldScene.add(sun);
             const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(5, 24, 24), new THREE.MeshBasicMaterial({ color: 0xffeb7a }));
             sunMesh.position.set(90, 70, -120); profileWorldScene.add(sunMesh);
             const island = new THREE.Mesh(new THREE.CylinderGeometry(52, 66, 18, 44), new THREE.MeshPhongMaterial({ color: 0x4f6b2e, shininess: 16, specular: 0x7da95c }));
@@ -7656,11 +7656,11 @@ const DEFAULT_STEP_HEIGHT = 1.0;
 const NOSTALGIA_GRAPHICS_DEFAULTS = {
     gravity: 0.08,
     skyColor: '#9ad8ff',
-    brightness: 1.08,
-    sunIntensity: 0.56,
+    brightness: 0.9,
+    sunIntensity: 0.34,
     fogDistance: 860,
     graphicsQuality: 'performance',
-    exposure: 1.04,
+    exposure: 0.9,
     globalShadows: true
 };
 const NOSTALGIA_PROFILE_VERSION = 3;
@@ -8782,13 +8782,13 @@ document.addEventListener('keydown', (e) => {
                 const shadow = areGlobalShadowsEnabled(edData.settings);
                 edScene.background = new THREE.Color(edData.settings.skyColor);
                 edScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = edData.settings.brightness; });
-                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.45, edData.settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
+                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.2, edData.settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
                 const fogDistance = Math.max(320, edData.settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
                 edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.28, fogDistance);
                 if (edRenderer) {
                     const q = (edData.settings.graphicsQuality === 'ultra') ? 'ultra' : 'performance';
                     edRenderer.toneMapping = THREE.LinearToneMapping;
-                    edRenderer.toneMappingExposure = Math.max(0.95, Math.min(1.2, (edData.settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
+                    edRenderer.toneMappingExposure = Math.max(0.75, Math.min(1.05, (edData.settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
                     edRenderer.outputEncoding = THREE.sRGBEncoding;
                     edRenderer.physicallyCorrectLights = false;
                     edRenderer.shadowMap.enabled = shadow;
@@ -10536,7 +10536,7 @@ const toggleGameLike = async () => {
 const applyPlayGraphicsSettings = (settings = {}) => {
             if (!playScene || !playRenderer) return;
             const quality = settings.graphicsQuality === 'ultra' ? 'ultra' : 'performance';
-            const exposure = Math.max(0.95, Math.min(1.2, (settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
+            const exposure = Math.max(0.75, Math.min(1.05, (settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
             const fogDistance = Math.max(320, settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
 
             playScene.fog = new THREE.Fog(settings.skyColor || NOSTALGIA_GRAPHICS_DEFAULTS.skyColor, fogDistance * 0.28, fogDistance);
@@ -10548,14 +10548,14 @@ const applyPlayGraphicsSettings = (settings = {}) => {
             playRenderer.shadowMap.enabled = shadowsEnabled;
             playRenderer.shadowMap.type = THREE.BasicShadowMap;
             if (playDirectionalLight) {
-                playDirectionalLight.intensity = Math.max(0.45, settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
+                playDirectionalLight.intensity = Math.max(0.2, settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
                 playDirectionalLight.castShadow = shadowsEnabled;
                 playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 768 : 512, quality === 'ultra' ? 768 : 512);
                 playDirectionalLight.shadow.radius = 1.4;
                 playDirectionalLight.shadow.bias = -0.0012;
                 playDirectionalLight.shadow.normalBias = 0;
             }
-            if (playAmbientLight) playAmbientLight.intensity = Math.max(0.45, settings.brightness || NOSTALGIA_GRAPHICS_DEFAULTS.brightness);
+            if (playAmbientLight) playAmbientLight.intensity = Math.max(0.25, settings.brightness || NOSTALGIA_GRAPHICS_DEFAULTS.brightness);
         };
 
 const startGame = () => {
@@ -13197,11 +13197,11 @@ const groupAsAircraft = () => {
                 settings: published?.settings || {
                     gravity: 0.08,
                     skyColor: '#5b88a5',
-                    brightness: 0.68,
-                    sunIntensity: 1.28,
+                    brightness: 0.58,
+                    sunIntensity: 0.42,
                     fogDistance: 1450,
                     graphicsQuality: 'performance',
-                    exposure: 1.05
+                    exposure: 0.9
                 },
                 spawn: published?.spawn || { x: 0, y: 2, z: 0, scale: { x: 4, y: 1, z: 4 } },
                 objects: cityObjects
