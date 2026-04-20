@@ -338,11 +338,11 @@ const fetchRandomRobloxUsername = async () => {
 const createBotAccount = async () => {
     if (typeof db.lastUserIdNum !== 'number') db.lastUserIdNum = db.users.length;
     const base = await fetchRandomRobloxUsername();
-    let username = `${base}`;
+    let username = `${base}_PS`;
     let bump = 0;
     while (db.users.some(u => String(u.username || '').toLowerCase() === username.toLowerCase())) {
         bump++;
-        username = `${base}${bump}`;
+        username = `${base}_PS${bump}`;
     }
     const { salt, hash } = hashPassword(BOT_PASSWORD);
     const bot = {
@@ -351,10 +351,11 @@ const createBotAccount = async () => {
         followers: [], friends: [], friendRequests: [],
         color: '#e67e22', recentlyPlayed: [], badges: [], messages: [],
         reportCrates: [], accurateReports: 0,
-        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, equippedProfileCosmetics: [], profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileWorld: { equipped: false, gameIds: [], assetIds: [], greeting: '' }, profileBio: 'Automated Roblox import account for platform load simulation.', profileTextStyle: { font: 'default', color: '#2c3e50' }, lastSeenAt: Date.now(), primaryGroupId: null, coins: 0, trustPoints: 0, trustLevel: 1, lastTrustDailyAt: 0, lastTrustGainAt: 0, trustHistory: []
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, equippedProfileCosmetics: [], profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileWorld: { equipped: false, gameIds: [], assetIds: [], greeting: '' }, profileBio: 'Automated Roblox import bot account for platform load simulation.', profileTextStyle: { font: 'default', color: '#2c3e50' }, lastSeenAt: Date.now(), primaryGroupId: null, coins: 0, trustPoints: 0, trustLevel: 1, lastTrustDailyAt: 0, lastTrustGainAt: 0, trustHistory: [],
+        isBot: true, botSource: 'roblox'
     };
     db.users.push(bot);
-    markLastSignup(bot.username, 'user');
+    markLastSignup(bot.username, 'bot');
     return bot.id;
 };
 const clearBotPresence = () => {
@@ -1036,15 +1037,6 @@ const deleteUserAccountCompletely = (user) => {
             group.ownerId = group.members[0].userId;
         }
     });
-};
-const purgeUsersWithPSInName = () => {
-    const targets = (db.users || []).filter(u => /ps/i.test(String(u.username || '')));
-    if (!targets.length) return 0;
-    targets.forEach(u => deleteUserAccountCompletely(u));
-    const wave = botWaveState();
-    wave.botIds = (wave.botIds || []).filter(id => (db.users || []).some(u => u.id === id));
-    saveDB();
-    return targets.length;
 };
 
 
@@ -5048,7 +5040,5 @@ setInterval(() => {
 }, 5000);
 httpServer = app.listen(PORT, () => {
     console.log(`Playsculpt server running on http://localhost:${PORT}`);
-    const removed = purgeUsersWithPSInName();
-    if (removed > 0) console.log(`Purged ${removed} account(s) with 'PS' in username.`);
     initializeRobloxBots().catch((e) => console.error('Bot initialization failed:', e.message || e));
 });
