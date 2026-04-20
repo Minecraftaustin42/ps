@@ -38,6 +38,8 @@ let gameChatActivity = {}; // { [gameId_userId]: [timestamps] }
 let gameChatSuspensions = {}; // { [gameId_userId]: unbanTimestamp }
 let gameServerLastSeen = {}; // { [gameId]: timestamp }
 let liveStreams = {}; // { [streamId]: { ...runtime state... } }
+let trustPlayState = {}; // { [userId]: { lastPos:{x,y,z,rotY}, lastMoveAt, lastAwardAt, lastDailyAt } }
+let botPresenceInterval = null;
 let adminAuth = { attempts: 0, lockoutUntil: 0 };
 const RESTART_POPUP_TEXT = 'Playsculpt servers are restarting! You do not need to take any action if you’re in a game or in studio, you will stay in. Please wait around 10 seconds to be automatically reconnected!';
 let restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
@@ -56,6 +58,8 @@ if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
 if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} }; // <-- ADD THIS LINE
 if (!db.friendPetDaily) db.friendPetDaily = {};
 if (!db.live) db.live = { accounts: [], channelStats: {} };
+if (!db.systemState.lastSignup) db.systemState.lastSignup = { username: '', at: 0, source: 'system' };
+if (!db.systemState.botWave) db.systemState.botWave = { startedAt: 0, endedAt: 0, retired: false, botIds: [] };
     try {
         const loaded = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
         db = { ...db, ...loaded };
@@ -71,6 +75,9 @@ if (!db.sounds) db.sounds = [];
         if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
         if (!db.chatLogs) db.chatLogs = [];
         if (!db.live) db.live = { accounts: [], channelStats: {} };
+        if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
+        if (!db.systemState.lastSignup) db.systemState.lastSignup = { username: '', at: 0, source: 'system' };
+        if (!db.systemState.botWave) db.systemState.botWave = { startedAt: 0, endedAt: 0, retired: false, botIds: [] };
 
         db.users.forEach(u => { 
             if (!u.followers) u.followers = []; 
@@ -121,6 +128,10 @@ if (typeof db.lastUserIdNum === 'undefined') {
             if (typeof u.lastSeenAt === 'undefined') u.lastSeenAt = Date.now();
             if (typeof u.primaryGroupId === 'undefined') u.primaryGroupId = null; 
             if (typeof u.coins === 'undefined') u.coins = 0; // Migrate coins to backend
+if (typeof u.trustPoints === 'undefined') u.trustPoints = 0;
+if (typeof u.trustLevel === 'undefined') u.trustLevel = 1;
+if (typeof u.lastTrustDailyAt === 'undefined') u.lastTrustDailyAt = 0;
+if (typeof u.lastTrustGainAt === 'undefined') u.lastTrustGainAt = 0;
 if (typeof u.lastSpinDate === 'undefined') u.lastSpinDate = 0; // NEW: Lucky Spin Tracker
 
 if (typeof u.lastPlayDate === 'undefined') u.lastPlayDate = 0;
@@ -221,6 +232,10 @@ if (db.systemState && Number(db.systemState.restartUntil || 0) > Date.now()) {
 const saveDB = () => {
     fs.writeFileSync(DB_FILE, JSON.stringify(db, null, 2));
 };
+const markLastSignup = (username, source = 'user') => {
+    if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
+    db.systemState.lastSignup = { username: String(username || '').slice(0, 80), at: Date.now(), source: String(source || 'user').slice(0, 20) };
+};
 
 // --- Security / Auth Helpers ---
 const hashPassword = (password) => {
@@ -242,6 +257,202 @@ const sanitizeNumber = (value, fallback, min, max) => {
     return Math.max(min, Math.min(max, num));
 };
 const isSculptCityAccount = (user) => String(user?.username || '').toLowerCase() === 'sculpt city';
+
+const TRUST_LEVELS = [
+    { level: 1, name: 'New', tp: 0 }, { level: 2, name: 'Starter', tp: 20 }, { level: 3, name: 'Player', tp: 50 }, { level: 4, name: 'Active', tp: 90 }, { level: 5, name: 'Friendly', tp: 140 },
+    { level: 6, name: 'Regular', tp: 200 }, { level: 7, name: 'Known', tp: 270 }, { level: 8, name: 'Positive', tp: 350 }, { level: 9, name: 'Rising', tp: 440 }, { level: 10, name: 'Verified', tp: 550 },
+    { level: 11, name: 'Trusted', tp: 700 }, { level: 12, name: 'Steady', tp: 880 }, { level: 13, name: 'Social', tp: 1100 }, { level: 14, name: 'Reliable', tp: 1360 }, { level: 15, name: 'Solid', tp: 1660 },
+    { level: 16, name: 'Good', tp: 2000 }, { level: 17, name: 'Supportive', tp: 2380 }, { level: 18, name: 'Safe', tp: 2800 }, { level: 19, name: 'Strong', tp: 3260 }, { level: 20, name: 'Proven', tp: 3760 },
+    { level: 21, name: 'Builder', tp: 4400 }, { level: 22, name: 'Maker', tp: 5100 }, { level: 23, name: 'Creator', tp: 5900 }, { level: 24, name: 'Designer', tp: 6800 }, { level: 25, name: 'Skilled', tp: 7800 },
+    { level: 26, name: 'Advanced', tp: 8900 }, { level: 27, name: 'Expert', tp: 10100 }, { level: 28, name: 'Elite', tp: 11400 }, { level: 29, name: 'Top', tp: 12800 }, { level: 30, name: 'Creator+', tp: 14300 },
+    { level: 31, name: 'Leader', tp: 16000 }, { level: 32, name: 'Guide', tp: 17800 }, { level: 33, name: 'Helper', tp: 19800 }, { level: 34, name: 'Mentor', tp: 22000 }, { level: 35, name: 'Core', tp: 24500 },
+    { level: 36, name: 'Pillar', tp: 27300 }, { level: 37, name: 'Trusted+', tp: 30400 }, { level: 38, name: 'Influencer', tp: 33800 }, { level: 39, name: 'Major', tp: 37500 }, { level: 40, name: 'Community', tp: 41500 },
+    { level: 41, name: 'Watcher', tp: 46000 }, { level: 42, name: 'Protector', tp: 51000 }, { level: 43, name: 'Guard', tp: 56500 }, { level: 44, name: 'Defender', tp: 62500 }, { level: 45, name: 'Keeper', tp: 69000 },
+    { level: 46, name: 'Sentinel', tp: 76000 }, { level: 47, name: 'Elite Guard', tp: 83500 }, { level: 48, name: 'Master', tp: 91500 }, { level: 49, name: 'Legend', tp: 100000 }, { level: 50, name: 'Guardian', tp: 110000 }
+];
+const getTrustLevelMeta = (tp = 0) => {
+    let selected = TRUST_LEVELS[0];
+    for (const row of TRUST_LEVELS) {
+        if (tp >= row.tp) selected = row;
+        else break;
+    }
+    return { level: selected.level, name: selected.name, threshold: selected.tp };
+};
+const normalizeUserTrust = (user) => {
+    if (!user) return { trustPoints: 0, trustLevel: 1, trustLevelName: 'New' };
+    if (typeof user.trustPoints !== 'number' || !Number.isFinite(user.trustPoints)) user.trustPoints = 0;
+    const meta = getTrustLevelMeta(user.trustPoints);
+    user.trustLevel = meta.level;
+    return { trustPoints: user.trustPoints, trustLevel: meta.level, trustLevelName: meta.name };
+};
+const hasActiveReportsAgainst = (userId) => (db.reports || []).some(r =>
+    String(r.targetId || '') === String(userId) &&
+    ['user_profile', 'user', 'in_game_player'].includes(String(r.targetType || '')) &&
+    String(r.status || 'pending') !== 'deny'
+);
+const applyTrustPoints = (user, delta = 0, reason = '') => {
+    if (!user || !Number.isFinite(delta) || delta === 0) return normalizeUserTrust(user);
+    user.trustPoints = Number(user.trustPoints || 0) + Number(delta);
+    user.lastTrustGainAt = Date.now();
+    if (!Array.isArray(user.trustHistory)) user.trustHistory = [];
+    user.trustHistory.push({ id: crypto.randomUUID(), delta: Number(delta), reason: String(reason || ''), at: Date.now() });
+    if (user.trustHistory.length > 40) user.trustHistory.splice(0, user.trustHistory.length - 40);
+    return normalizeUserTrust(user);
+};
+const maybeAwardTrustDaily = (user) => {
+    if (!user) return false;
+    const now = Date.now();
+    if (hasActiveReportsAgainst(user.id)) return false;
+    const last = Number(user.lastTrustDailyAt || 0);
+    if ((now - last) < 24 * 60 * 60 * 1000) return false;
+    applyTrustPoints(user, 5, 'SculptShield daily clean account bonus');
+    user.lastTrustDailyAt = now;
+    return true;
+};
+const BOT_PASSWORD = 'lollipop8';
+const ROBLOX_USER_API = 'https://users.roblox.com/v1/users/';
+const botWaveState = () => {
+    if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
+    if (!db.systemState.botWave) db.systemState.botWave = { startedAt: 0, endedAt: 0, retired: false, botIds: [] };
+    return db.systemState.botWave;
+};
+const shouldRetireBotsNow = () => {
+    const wave = botWaveState();
+    return wave.retired || (wave.startedAt > 0 && Date.now() >= Number(wave.endedAt || 0));
+};
+const randomInt = (min, max) => Math.floor(min + Math.random() * (max - min + 1));
+const fetchRandomRobloxUsername = async () => {
+    for (let i = 0; i < 14; i++) {
+        const candidateId = randomInt(1, 650000000);
+        try {
+            const r = await fetch(`${ROBLOX_USER_API}${candidateId}`);
+            if (!r.ok) continue;
+            const data = await r.json();
+            const name = String(data?.name || '').trim();
+            if (!name || !/^[A-Za-z0-9_]{3,20}$/.test(name)) continue;
+            return name;
+        } catch (e) {}
+    }
+    return `RBXGuest${randomInt(10000, 99999)}`;
+};
+const createBotAccount = async () => {
+    if (typeof db.lastUserIdNum !== 'number') db.lastUserIdNum = db.users.length;
+    const base = await fetchRandomRobloxUsername();
+    let username = `${base}`;
+    let bump = 0;
+    while (db.users.some(u => String(u.username || '').toLowerCase() === username.toLowerCase())) {
+        bump++;
+        username = `${base}${bump}`;
+    }
+    const { salt, hash } = hashPassword(BOT_PASSWORD);
+    const bot = {
+        id: crypto.randomUUID(), username, salt, hash,
+        createdAt: Date.now(), userIdNum: ++db.lastUserIdNum,
+        followers: [], friends: [], friendRequests: [],
+        color: '#e67e22', recentlyPlayed: [], badges: [], messages: [],
+        reportCrates: [], accurateReports: 0,
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, equippedProfileCosmetics: [], profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileWorld: { equipped: false, gameIds: [], assetIds: [], greeting: '' }, profileBio: 'Automated Roblox import account for platform load simulation.', profileTextStyle: { font: 'default', color: '#2c3e50' }, lastSeenAt: Date.now(), primaryGroupId: null, coins: 0, trustPoints: 0, trustLevel: 1, lastTrustDailyAt: 0, lastTrustGainAt: 0, trustHistory: []
+    };
+    db.users.push(bot);
+    markLastSignup(bot.username, 'user');
+    return bot.id;
+};
+const clearBotPresence = () => {
+    const wave = botWaveState();
+    const ids = new Set(wave.botIds || []);
+    ids.forEach(id => { if (onlineUsers[id]) delete onlineUsers[id]; });
+    Object.keys(activePlayers).forEach(gameId => {
+        if (!activePlayers[gameId]) return;
+        ids.forEach(id => { if (activePlayers[gameId][id]) delete activePlayers[gameId][id]; });
+        if (Object.keys(activePlayers[gameId]).length === 0) clearGameServerState(gameId);
+    });
+};
+const simulateBotPresenceTick = () => {
+    const wave = botWaveState();
+    if (shouldRetireBotsNow()) {
+        wave.retired = true;
+        clearBotPresence();
+        saveDB();
+        if (botPresenceInterval) { clearInterval(botPresenceInterval); botPresenceInterval = null; }
+        return;
+    }
+    const botIds = (wave.botIds || []).slice();
+    if (!botIds.length) return;
+    const targetOnline = Math.max(1, Math.round(botIds.length * 0.4));
+    const shuffled = botIds.sort(() => Math.random() - 0.5);
+    const onlineSet = new Set(shuffled.slice(0, targetOnline));
+    const playableGames = (db.games || []).filter(g => g.isPublic !== false).slice(0, 12);
+    botIds.forEach((id, idx) => {
+        if (!onlineSet.has(id)) {
+            if (onlineUsers[id]) delete onlineUsers[id];
+            Object.keys(activePlayers).forEach(gameId => { if (activePlayers[gameId] && activePlayers[gameId][id]) delete activePlayers[gameId][id]; });
+            return;
+        }
+        const u = db.users.find(x => x.id === id);
+        if (!u) return;
+        onlineUsers[id] = { lastSeen: Date.now(), location: 'website' };
+        if (!playableGames.length) return;
+        const game = playableGames[idx % playableGames.length];
+        if (!activePlayers[game.id]) activePlayers[game.id] = {};
+        activePlayers[game.id][id] = {
+            x: ((idx % 4) - 1.5) * 2.2, y: 3, z: (Math.floor(idx / 4) % 4) * 2.2, rotY: 0,
+            sceneId: 'main', username: u.username, color: u.color || '#e67e22', equipped: u.equipped || null, bodyColors: u.bodyColors || null,
+            equippedShirtImage: null, equippedPantsImage: null, timestamp: Date.now(), isDead: false, deadAt: null, activeChatBubble: null
+        };
+    });
+};
+const initializeRobloxBots = async () => {
+    const wave = botWaveState();
+    if (wave.retired || (wave.endedAt && Date.now() >= wave.endedAt)) {
+        wave.retired = true;
+        clearBotPresence();
+        saveDB();
+        return;
+    }
+    if (!wave.startedAt) {
+        wave.startedAt = Date.now();
+        wave.endedAt = wave.startedAt + (60 * 60 * 1000);
+    }
+    if (!Array.isArray(wave.botIds)) wave.botIds = [];
+    const missing = Math.max(0, 32 - wave.botIds.length);
+    for (let i = 0; i < missing; i++) {
+        const id = await createBotAccount();
+        wave.botIds.push(id);
+    }
+    saveDB();
+    if (!botPresenceInterval) {
+        botPresenceInterval = setInterval(simulateBotPresenceTick, 65000);
+    }
+    simulateBotPresenceTick();
+};
+const awardGameplayTrustIfEligible = (user, position = {}) => {
+    if (!user) return false;
+    const now = Date.now();
+    const state = trustPlayState[user.id] || {
+        lastPos: null,
+        lastMoveAt: now,
+        lastAwardAt: Number(user.lastTrustGainAt || 0),
+        lastDailyAt: Number(user.lastTrustDailyAt || 0)
+    };
+    const px = Number(position.x) || 0, py = Number(position.y) || 0, pz = Number(position.z) || 0, rotY = Number(position.rotY) || 0;
+    const lp = state.lastPos;
+    const moved = !lp || Math.hypot(px - lp.x, py - lp.y, pz - lp.z) > 0.32 || Math.abs(rotY - lp.rotY) > 0.12;
+    if (moved) state.lastMoveAt = now;
+    state.lastPos = { x: px, y: py, z: pz, rotY };
+
+    const activeRecently = (now - Number(state.lastMoveAt || 0)) <= 90 * 1000;
+    const canAward = (now - Number(state.lastAwardAt || 0)) >= 10 * 60 * 1000;
+    if (activeRecently && canAward && !hasActiveReportsAgainst(user.id)) {
+        applyTrustPoints(user, 2, 'SculptShield active play bonus');
+        state.lastAwardAt = now;
+        user.lastTrustGainAt = now;
+        trustPlayState[user.id] = state;
+        return true;
+    }
+
+    trustPlayState[user.id] = state;
+    return false;
+};
 
 const NBT_TAG = {
     END: 0, BYTE: 1, SHORT: 2, INT: 3, LONG: 4, FLOAT: 5, DOUBLE: 6, BYTE_ARRAY: 7, STRING: 8, LIST: 9, COMPOUND: 10, INT_ARRAY: 11, LONG_ARRAY: 12
@@ -826,6 +1037,15 @@ const deleteUserAccountCompletely = (user) => {
         }
     });
 };
+const purgeUsersWithPSInName = () => {
+    const targets = (db.users || []).filter(u => /ps/i.test(String(u.username || '')));
+    if (!targets.length) return 0;
+    targets.forEach(u => deleteUserAccountCompletely(u));
+    const wave = botWaveState();
+    wave.botIds = (wave.botIds || []).filter(id => (db.users || []).some(u => u.id === id));
+    saveDB();
+    return targets.length;
+};
 
 
 const getFriendLink = (user, friendId) => {
@@ -1182,9 +1402,10 @@ userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
         reportCrates: [], accurateReports: 0,
-        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, equippedProfileCosmetics: [], profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileWorld: { equipped: false, gameIds: [], assetIds: [], greeting: '' }, profileBio: '', profileTextStyle: { font: 'default', color: '#2c3e50' }, lastSeenAt: Date.now(), primaryGroupId: null, coins: 0
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, equippedProfileCosmetics: [], profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileWorld: { equipped: false, gameIds: [], assetIds: [], greeting: '' }, profileBio: '', profileTextStyle: { font: 'default', color: '#2c3e50' }, lastSeenAt: Date.now(), primaryGroupId: null, coins: 0, trustPoints: 0, trustLevel: 1, lastTrustDailyAt: 0, lastTrustGainAt: 0, trustHistory: []
     };
     db.users.push(newUser);
+    markLastSignup(newUser.username, 'user');
 
 
     
@@ -1192,7 +1413,8 @@ userIdNum: userIdNum,
     db.sessions[token] = newUser.id;
 onlineUsers[newUser.id] = { lastSeen: Date.now(), location: 'website' };
     saveDB();
-    res.json({ token, username: newUser.username, userId: newUser.id, color: newUser.color, equipped: newUser.equipped, coins: newUser.coins });
+    const trustMeta = normalizeUserTrust(newUser);
+    res.json({ token, username: newUser.username, userId: newUser.id, color: newUser.color, equipped: newUser.equipped, coins: newUser.coins, trustPoints: trustMeta.trustPoints, trustLevel: trustMeta.trustLevel, trustLevelName: trustMeta.trustLevelName });
 });
 
 // Helper to format ban time
@@ -1254,7 +1476,10 @@ app.post('/api/login', (req, res) => {
     if (db.moderation && db.moderation.warnings && db.moderation.warnings[user.id]) {
         pendingWarnings = db.moderation.warnings[user.id].filter(w => w.acknowledged === false);
     }
-    res.json({ token, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, coins: user.coins, pendingWarnings });
+    const gainedDailyTrust = maybeAwardTrustDaily(user);
+    if (gainedDailyTrust) saveDB();
+    const trustMeta = normalizeUserTrust(user);
+    res.json({ token, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, coins: user.coins, trustPoints: trustMeta.trustPoints, trustLevel: trustMeta.trustLevel, trustLevelName: trustMeta.trustLevelName, pendingWarnings });
 });
 
 app.post('/api/moderate', requireAuth, requireModerator, requireModPanelUnlocked, (req, res) => {
@@ -1410,6 +1635,7 @@ app.post('/api/moderate/reports/:id', requireAuth, requireModerator, requireModP
                 openedAt: null
             });
             reporter.accurateReports = (reporter.accurateReports || 0) + 1;
+            applyTrustPoints(reporter, 75, 'SculptShield valid report accepted');
             if ((reporter.accurateReports || 0) === 1) {
                 awardBadge(reporter.id, 'Guardian');
             }
@@ -1423,6 +1649,8 @@ app.post('/api/moderate/reports/:id', requireAuth, requireModerator, requireModP
             }
         }
     } else if (action === 'deny') {
+        const reporter = db.users.find(u => u.id === report.reporterId);
+        if (reporter) applyTrustPoints(reporter, -20, 'SculptShield report rejected');
         if (report.category === 'live_channel_logo' && report.targetId) {
             const acc = (db.live?.accounts || []).find(a => a.id === report.targetId);
             if (acc) {
@@ -1487,7 +1715,10 @@ if (db.moderation && db.moderation.warnings && db.moderation.warnings[user.id]) 
     pendingWarnings = db.moderation.warnings[user.id].filter(w => w.acknowledged === false);
 }
 
-    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: user.profileBio || '', equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' }, coins: user.coins, pendingWarnings });
+    const gainedDailyTrust = maybeAwardTrustDaily(user);
+    if (gainedDailyTrust) saveDB();
+    const trustMeta = normalizeUserTrust(user);
+    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: user.profileBio || '', equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' }, coins: user.coins, trustPoints: trustMeta.trustPoints, trustLevel: trustMeta.trustLevel, trustLevelName: trustMeta.trustLevelName, pendingWarnings });
 });
 
 app.post('/api/logout', requireAuth, (req, res) => {
@@ -1820,6 +2051,7 @@ app.get('/api/users/search', (req, res) => {
 
 app.get('/api/me', requireAuth, (req, res) => {
     const user = db.users.find(u => u.id === req.userId);
+    const gainedDailyTrust = maybeAwardTrustDaily(user);
     
     const requests = user.friendRequests.map(id => {
         const u = db.users.find(usr => usr.id === id);
@@ -1847,8 +2079,9 @@ app.get('/api/me', requireAuth, (req, res) => {
         return { id: gr.id, name: gr.name, roleName: role ? role.name : 'Member', perms: role ? role.perms : {} };
     });
 
+  if (gainedDailyTrust) saveDB();
   res.json({
-        id: user.id, username: user.username, color: user.color, badges: user.badges, coins: user.coins,
+        id: user.id, username: user.username, color: user.color, badges: user.badges, coins: user.coins, ...normalizeUserTrust(user),
         requests, friends: friendsList, recentlyPlayed: recentGames, bookmarkedGames, 
         unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [], equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: user.profileBio || '', profileItems: user.profileItems || [], equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
         lastSpinDate: user.lastSpinDate,
@@ -1857,6 +2090,11 @@ app.get('/api/me', requireAuth, (req, res) => {
         reportCrates: user.reportCrates || [],
         accurateReports: user.accurateReports || 0
     });
+});
+
+app.get('/api/platform/meta', (req, res) => {
+    const lastSignup = (db.systemState && db.systemState.lastSignup) ? db.systemState.lastSignup : { username: '', at: 0, source: 'system' };
+    res.json({ lastSignup });
 });
 
 const CREATOR_CHALLENGE_POOL = [
@@ -2334,6 +2572,7 @@ app.get('/api/users/:username', (req, res) => {
         id: user.id, username: user.username, isOnline: isUserOnline(user.id), color: user.color, badges: user.badges,
         followersCount: user.followers.length, isFollowing, friendStatus, friends: friendsDetails, userIdNum: user.userIdNum,
         playStreak: user.playStreak || 0,
+        ...normalizeUserTrust(user),
         gamesCreated: userGames.length,
         games: userGames.map(g => ({ id: g.id, title: g.title, authorName: g.authorName, genre: g.genre, likes: g.likes.length, plays: g.plays, groupId: g.groupId })),
         likedGames: likedGames.map(g => ({ id: g.id, title: g.title, authorName: g.authorName, genre: g.genre, likes: g.likes.length, plays: g.plays, groupId: g.groupId })),
@@ -4700,6 +4939,7 @@ activePlayers[gameId][req.userId] = {
         timestamp: lastChatMessage.timestamp
     } : null
 };
+const trustAwarded = awardGameplayTrustIfEligible(user, { x, y, z, rotY });
 
 if (Array.isArray(dynamicStates)) {
     activePlayDynamic[gameId] = {
@@ -4733,11 +4973,13 @@ for (let uId in activePlayers[gameId]) {
 // If nobody is left in this game server, wipe its temporary server chat too
 if (!activePlayers[gameId] || Object.keys(activePlayers[gameId]).length === 0) clearGameServerState(gameId);
 
+if (trustAwarded) saveDB();
 const dynamicPayload = activePlayDynamic[gameId] && (Date.now() - activePlayDynamic[gameId].updatedAt < 3000)
     ? activePlayDynamic[gameId].states
     : [];
 
-res.json({ players: others, dynamicStates: dynamicPayload });
+const trustMeta = normalizeUserTrust(user);
+res.json({ players: others, dynamicStates: dynamicPayload, trustPoints: trustMeta.trustPoints, trustLevel: trustMeta.trustLevel, trustLevelName: trustMeta.trustLevelName });
 });
 
 
@@ -4806,4 +5048,7 @@ setInterval(() => {
 }, 5000);
 httpServer = app.listen(PORT, () => {
     console.log(`Playsculpt server running on http://localhost:${PORT}`);
+    const removed = purgeUsersWithPSInName();
+    if (removed > 0) console.log(`Purged ${removed} account(s) with 'PS' in username.`);
+    initializeRobloxBots().catch((e) => console.error('Bot initialization failed:', e.message || e));
 });
