@@ -2655,7 +2655,7 @@ async function safeFetch(url, options = {}) {
       // ==========================================
         // 2015-2016 CLASSIC GRAPHICS ENGINE
         // ==========================================
-   const generateRealisticTexture = (type) => {
+        const generateRealisticTexture = (type) => {
             // FIX: Bulletproof initialization! If the cache doesn't exist, create it instantly.
             if (!window.proceduralTextures) window.proceduralTextures = {};
 
@@ -2857,6 +2857,68 @@ async function safeFetch(url, options = {}) {
             window.proceduralTextures[type] = tex;
             return tex;
         };
+        const IMAGE_TEXTURE_FILES = {
+            'stone tiles': 'stonetiles.jpg',
+            'wooden floor': 'woodenfloor.jpg',
+            'wood': 'wood.jpg',
+            'grass': 'grass.png',
+            'bricks': 'bricks.jpg'
+        };
+        const resolveTextureFileForMaterial = (matType = '') => {
+            const key = String(matType || '').trim().toLowerCase();
+            if (!key) return null;
+            if (IMAGE_TEXTURE_FILES[key]) return IMAGE_TEXTURE_FILES[key];
+            if (key === 'brick') return IMAGE_TEXTURE_FILES['bricks'];
+            if (key === 'wood') return IMAGE_TEXTURE_FILES['wood'];
+            if (key === 'grass') return IMAGE_TEXTURE_FILES['grass'];
+            if (['slate', 'concrete', 'asphalt', 'marble', 'obsidian', 'lavarock', 'metal', 'carbonfiber', 'sand'].includes(key)) return IMAGE_TEXTURE_FILES['stone tiles'];
+            if (['plastic', 'smoothplastic'].includes(key)) return IMAGE_TEXTURE_FILES['wooden floor'];
+            return null;
+        };
+        const getImageTextureForMaterial = (matType = '') => {
+            const file = resolveTextureFileForMaterial(matType);
+            if (!file) return null;
+            if (!window.imageTextureCache) window.imageTextureCache = {};
+            if (!window.imageTextureLoader) window.imageTextureLoader = new THREE.TextureLoader();
+            if (!window.imageTextureCache[file]) {
+                const texture = window.imageTextureLoader.load(`textures/${file}`);
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.minFilter = THREE.LinearMipmapLinearFilter;
+                texture.magFilter = THREE.LinearFilter;
+                texture.anisotropy = 8;
+                if (typeof THREE.SRGBColorSpace !== 'undefined') texture.colorSpace = THREE.SRGBColorSpace;
+                if (typeof THREE.sRGBEncoding !== 'undefined') texture.encoding = THREE.sRGBEncoding;
+                window.imageTextureCache[file] = texture;
+            }
+            const clone = window.imageTextureCache[file].clone();
+            clone.wrapS = THREE.RepeatWrapping;
+            clone.wrapT = THREE.RepeatWrapping;
+            clone.needsUpdate = true;
+            return clone;
+        };
+        const applyTextureRepeatToMesh = (mesh, scale = null) => {
+            if (!mesh) return;
+            const repeatSource = scale || mesh.scale || { x: 1, y: 1, z: 1 };
+            const rx = Math.max(1, Math.abs(Number(repeatSource.x) || 1));
+            const rz = Math.max(1, Math.abs(Number(repeatSource.z) || 1));
+            const applyRepeatToMaterial = (material) => {
+                if (!material?.map) return;
+                material.map.wrapS = THREE.RepeatWrapping;
+                material.map.wrapT = THREE.RepeatWrapping;
+                material.map.repeat.set(rx, rz);
+                material.map.needsUpdate = true;
+                material.needsUpdate = true;
+            };
+            if (mesh.isMesh) {
+                (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(applyRepeatToMaterial);
+            } else if (mesh.traverse) {
+                mesh.traverse((child) => {
+                    if (!child.isMesh) return;
+                    (Array.isArray(child.material) ? child.material : [child.material]).forEach(applyRepeatToMaterial);
+                });
+            }
+        };
        const getMaterialForType = (matType, colorHex) => {
             const c = new THREE.Color(colorHex || '#cccccc');
             const hsl = {}; c.getHSL(hsl);
@@ -2888,6 +2950,7 @@ async function safeFetch(url, options = {}) {
             const validTypes = Object.keys(nostalgicRules);
             const safeType = validTypes.includes(matType) ? matType : 'Plastic';
             const rule = nostalgicRules[safeType];
+            const tex = getImageTextureForMaterial(safeType);
 
             return new THREE.MeshPhongMaterial({
                 color: c,
@@ -8579,6 +8642,7 @@ document.addEventListener('keydown', (e) => {
                     mesh.userData.castsShadow = objData.castsShadow !== false && objData.type !== 'floatingText';
                     mesh.castShadow = objectCastsShadow(objData, edData.settings);
                     mesh.receiveShadow = areGlobalShadowsEnabled(edData.settings);
+                    applyTextureRepeatToMesh(mesh, objData.scale || mesh.scale);
                     applyFloatingTextVisual(mesh, objData);
                 }
             });
@@ -9247,6 +9311,7 @@ if (item.type === 'button' && item.onClickEvent) {
             objData.position = { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z };
             objData.rotation = { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z };
             objData.scale = { x: Math.max(0.1, mesh.scale.x), y: Math.max(0.1, mesh.scale.y), z: Math.max(0.1, mesh.scale.z) };
+            applyTextureRepeatToMesh(mesh, objData.scale);
 
             // --- ADD THESE TWO LINES ---
             objData.isAnchored = mesh.userData.isAnchored;
@@ -9749,6 +9814,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                         mesh.position.set(cData.position.x, cData.position.y, cData.position.z);
                         mesh.rotation.set(cData.rotation.x, cData.rotation.y, cData.rotation.z);
                         mesh.scale.set(cData.scale.x, cData.scale.y, cData.scale.z);
+                        applyTextureRepeatToMesh(mesh, cData.scale);
                         group.add(mesh);
                     });
                     const chunk = getChunkGroup(edScene, editorChunkGroups, chunkKeyFromPos(objData.position || {}), 80);
@@ -9775,6 +9841,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+                    applyTextureRepeatToMesh(mesh, objData.scale);
                     const blockCastsShadow = objectCastsShadow(objData, edData.settings);
                     mesh.castShadow = blockCastsShadow;
                     mesh.receiveShadow = areGlobalShadowsEnabled(edData.settings);
@@ -10721,7 +10788,10 @@ updatePlayFullscreenButton();
                 if (!target || !props) return target;
                 if (props.position) target.position.set(safeNum(props.position.x, target.position.x), safeNum(props.position.y, target.position.y), safeNum(props.position.z, target.position.z));
                 if (props.rotation) target.rotation.set(safeNum(props.rotation.x, target.rotation.x), safeNum(props.rotation.y, target.rotation.y), safeNum(props.rotation.z, target.rotation.z));
-                if (props.scale) target.scale.set(Math.max(0.05, safeNum(props.scale.x, target.scale.x)), Math.max(0.05, safeNum(props.scale.y, target.scale.y)), Math.max(0.05, safeNum(props.scale.z, target.scale.z)));
+                if (props.scale) {
+                    target.scale.set(Math.max(0.05, safeNum(props.scale.x, target.scale.x)), Math.max(0.05, safeNum(props.scale.y, target.scale.y)), Math.max(0.05, safeNum(props.scale.z, target.scale.z)));
+                    applyTextureRepeatToMesh(target, target.scale);
+                }
                 if (props.color && target.material?.color) target.material.color.set(String(props.color));
                 if (typeof props.transparency === 'number' && target.material) {
                     const t = Math.max(0, Math.min(1, safeNum(props.transparency, 0)));
@@ -11142,6 +11212,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         childMesh.position.set(cData.position.x, cData.position.y, cData.position.z);
                         childMesh.rotation.set(cData.rotation.x, cData.rotation.y, cData.rotation.z);
                         childMesh.scale.set(cData.scale.x, cData.scale.y, cData.scale.z);
+                        applyTextureRepeatToMesh(childMesh, cData.scale);
                         childMesh.castShadow = objectCastsShadow(cData, activeLevel.settings);
                         childMesh.receiveShadow = areGlobalShadowsEnabled(activeLevel.settings);
                         childMesh.userData = { type: cData.type };
@@ -11171,9 +11242,12 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mat.opacity = Math.max(0.02, 1 - objTransparency);
 
                     const hasScript = !!((objData.script || '').trim());
+                    const matType = objData.material || 'Plastic';
+                    const hasImageTexture = !!resolveTextureFileForMaterial(matType);
                     const isSimpleStatic = canUseInstancing &&
                         INSTANCABLE_PLAY_TYPES.has(objData.type) &&
                         !hasScript &&
+                        !hasImageTexture &&
                         !objData.smart &&
                         !isLadder &&
                         objData.type !== 'floatingText' &&
@@ -11187,7 +11261,6 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     if (isSimpleStatic) {
                         const objTransparency = Math.max(0, Math.min(1, objData.transparency || 0));
                         const chunkKey = chunkKeyFromPos(objData.position || {});
-                        const matType = objData.material || 'Plastic';
                         const castsShadow = objectCastsShadow(objData, activeLevel.settings);
                         const key = `${chunkKey}|${objData.type}|${matType}|${objData.color || '#3498db'}|${objTransparency.toFixed(2)}|${castsShadow ? 1 : 0}`;
                         if (!instancedBuckets.has(key)) {
@@ -11207,6 +11280,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+                    applyTextureRepeatToMesh(mesh, objData.scale);
                     mesh.castShadow = objectCastsShadow(objData, activeLevel.settings);
                     mesh.receiveShadow = areGlobalShadowsEnabled(activeLevel.settings);
                     mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: (objData.noCollide || objData.canCollide === false), isAnchored: objData.isAnchored !== false, smart: objData.smart || null, smartState: {} };
