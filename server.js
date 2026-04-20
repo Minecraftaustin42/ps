@@ -39,7 +39,6 @@ let gameChatSuspensions = {}; // { [gameId_userId]: unbanTimestamp }
 let gameServerLastSeen = {}; // { [gameId]: timestamp }
 let liveStreams = {}; // { [streamId]: { ...runtime state... } }
 let trustPlayState = {}; // { [userId]: { lastPos:{x,y,z,rotY}, lastMoveAt, lastAwardAt, lastDailyAt } }
-let botPresenceInterval = null;
 let adminAuth = { attempts: 0, lockoutUntil: 0 };
 const RESTART_POPUP_TEXT = 'Playsculpt servers are restarting! You do not need to take any action if you’re in a game or in studio, you will stay in. Please wait around 10 seconds to be automatically reconnected!';
 let restartState = { active: false, startedAt: 0, endsAt: 0, message: '' };
@@ -59,7 +58,6 @@ if (!db.moderation) db.moderation = { bans: {}, ipBans: [], warnings: {} }; // <
 if (!db.friendPetDaily) db.friendPetDaily = {};
 if (!db.live) db.live = { accounts: [], channelStats: {} };
 if (!db.systemState.lastSignup) db.systemState.lastSignup = { username: '', at: 0, source: 'system' };
-if (!db.systemState.botWave) db.systemState.botWave = { startedAt: 0, endedAt: 0, retired: false, botIds: [] };
     try {
         const loaded = JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
         db = { ...db, ...loaded };
@@ -77,7 +75,6 @@ if (!db.sounds) db.sounds = [];
         if (!db.live) db.live = { accounts: [], channelStats: {} };
         if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
         if (!db.systemState.lastSignup) db.systemState.lastSignup = { username: '', at: 0, source: 'system' };
-        if (!db.systemState.botWave) db.systemState.botWave = { startedAt: 0, endedAt: 0, retired: false, botIds: [] };
 
         db.users.forEach(u => { 
             if (!u.followers) u.followers = []; 
@@ -132,7 +129,7 @@ if (typeof u.trustPoints === 'undefined') u.trustPoints = 0;
 if (typeof u.trustLevel === 'undefined') u.trustLevel = 1;
 if (typeof u.lastTrustDailyAt === 'undefined') u.lastTrustDailyAt = 0;
 if (typeof u.lastTrustGainAt === 'undefined') u.lastTrustGainAt = 0;
-if (typeof u.lastSpinDate === 'undefined') u.lastSpinDate = 0; // NEW: Lucky Spin Tracker
+            if (typeof u.lastSpinDate === 'undefined') u.lastSpinDate = 0; // NEW: Lucky Spin Tracker
 
 if (typeof u.lastPlayDate === 'undefined') u.lastPlayDate = 0;
             if (typeof u.cityData === 'undefined') u.cityData = null; // NEW: Track if user is in Sculpt City
@@ -308,122 +305,6 @@ const maybeAwardTrustDaily = (user) => {
     applyTrustPoints(user, 5, 'SculptShield daily clean account bonus');
     user.lastTrustDailyAt = now;
     return true;
-};
-const BOT_PASSWORD = 'lollipop8';
-const ROBLOX_USER_API = 'https://users.roblox.com/v1/users/';
-const botWaveState = () => {
-    if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
-    if (!db.systemState.botWave) db.systemState.botWave = { startedAt: 0, endedAt: 0, retired: false, botIds: [] };
-    return db.systemState.botWave;
-};
-const shouldRetireBotsNow = () => {
-    const wave = botWaveState();
-    return wave.retired || (wave.startedAt > 0 && Date.now() >= Number(wave.endedAt || 0));
-};
-const randomInt = (min, max) => Math.floor(min + Math.random() * (max - min + 1));
-const fetchRandomRobloxUsername = async () => {
-    for (let i = 0; i < 14; i++) {
-        const candidateId = randomInt(1, 650000000);
-        try {
-            const r = await fetch(`${ROBLOX_USER_API}${candidateId}`);
-            if (!r.ok) continue;
-            const data = await r.json();
-            const name = String(data?.name || '').trim();
-            if (!name || !/^[A-Za-z0-9_]{3,20}$/.test(name)) continue;
-            return name;
-        } catch (e) {}
-    }
-    return `RBXGuest${randomInt(10000, 99999)}`;
-};
-const createBotAccount = async () => {
-    if (typeof db.lastUserIdNum !== 'number') db.lastUserIdNum = db.users.length;
-    const base = await fetchRandomRobloxUsername();
-    let username = `${base}`;
-    let bump = 0;
-    while (db.users.some(u => String(u.username || '').toLowerCase() === username.toLowerCase())) {
-        bump++;
-        username = `${base}${bump}`;
-    }
-    const { salt, hash } = hashPassword(BOT_PASSWORD);
-    const bot = {
-        id: crypto.randomUUID(), username, salt, hash,
-        createdAt: Date.now(), userIdNum: ++db.lastUserIdNum,
-        followers: [], friends: [], friendRequests: [],
-        color: '#e67e22', recentlyPlayed: [], badges: [], messages: [],
-        reportCrates: [], accurateReports: 0,
-        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, equippedProfileCosmetics: [], profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileWorld: { equipped: false, gameIds: [], assetIds: [], greeting: '' }, profileBio: 'Automated Roblox import account for platform load simulation.', profileTextStyle: { font: 'default', color: '#2c3e50' }, lastSeenAt: Date.now(), primaryGroupId: null, coins: 0, trustPoints: 0, trustLevel: 1, lastTrustDailyAt: 0, lastTrustGainAt: 0, trustHistory: []
-    };
-    db.users.push(bot);
-    markLastSignup(bot.username, 'user');
-    return bot.id;
-};
-const clearBotPresence = () => {
-    const wave = botWaveState();
-    const ids = new Set(wave.botIds || []);
-    ids.forEach(id => { if (onlineUsers[id]) delete onlineUsers[id]; });
-    Object.keys(activePlayers).forEach(gameId => {
-        if (!activePlayers[gameId]) return;
-        ids.forEach(id => { if (activePlayers[gameId][id]) delete activePlayers[gameId][id]; });
-        if (Object.keys(activePlayers[gameId]).length === 0) clearGameServerState(gameId);
-    });
-};
-const simulateBotPresenceTick = () => {
-    const wave = botWaveState();
-    if (shouldRetireBotsNow()) {
-        wave.retired = true;
-        clearBotPresence();
-        saveDB();
-        if (botPresenceInterval) { clearInterval(botPresenceInterval); botPresenceInterval = null; }
-        return;
-    }
-    const botIds = (wave.botIds || []).slice();
-    if (!botIds.length) return;
-    const targetOnline = Math.max(1, Math.round(botIds.length * 0.4));
-    const shuffled = botIds.sort(() => Math.random() - 0.5);
-    const onlineSet = new Set(shuffled.slice(0, targetOnline));
-    const playableGames = (db.games || []).filter(g => g.isPublic !== false).slice(0, 12);
-    botIds.forEach((id, idx) => {
-        if (!onlineSet.has(id)) {
-            if (onlineUsers[id]) delete onlineUsers[id];
-            Object.keys(activePlayers).forEach(gameId => { if (activePlayers[gameId] && activePlayers[gameId][id]) delete activePlayers[gameId][id]; });
-            return;
-        }
-        const u = db.users.find(x => x.id === id);
-        if (!u) return;
-        onlineUsers[id] = { lastSeen: Date.now(), location: 'website' };
-        if (!playableGames.length) return;
-        const game = playableGames[idx % playableGames.length];
-        if (!activePlayers[game.id]) activePlayers[game.id] = {};
-        activePlayers[game.id][id] = {
-            x: ((idx % 4) - 1.5) * 2.2, y: 3, z: (Math.floor(idx / 4) % 4) * 2.2, rotY: 0,
-            sceneId: 'main', username: u.username, color: u.color || '#e67e22', equipped: u.equipped || null, bodyColors: u.bodyColors || null,
-            equippedShirtImage: null, equippedPantsImage: null, timestamp: Date.now(), isDead: false, deadAt: null, activeChatBubble: null
-        };
-    });
-};
-const initializeRobloxBots = async () => {
-    const wave = botWaveState();
-    if (wave.retired || (wave.endedAt && Date.now() >= wave.endedAt)) {
-        wave.retired = true;
-        clearBotPresence();
-        saveDB();
-        return;
-    }
-    if (!wave.startedAt) {
-        wave.startedAt = Date.now();
-        wave.endedAt = wave.startedAt + (60 * 60 * 1000);
-    }
-    if (!Array.isArray(wave.botIds)) wave.botIds = [];
-    const missing = Math.max(0, 32 - wave.botIds.length);
-    for (let i = 0; i < missing; i++) {
-        const id = await createBotAccount();
-        wave.botIds.push(id);
-    }
-    saveDB();
-    if (!botPresenceInterval) {
-        botPresenceInterval = setInterval(simulateBotPresenceTick, 65000);
-    }
-    simulateBotPresenceTick();
 };
 const awardGameplayTrustIfEligible = (user, position = {}) => {
     if (!user) return false;
@@ -1036,15 +917,6 @@ const deleteUserAccountCompletely = (user) => {
             group.ownerId = group.members[0].userId;
         }
     });
-};
-const purgeUsersWithPSInName = () => {
-    const targets = (db.users || []).filter(u => /ps/i.test(String(u.username || '')));
-    if (!targets.length) return 0;
-    targets.forEach(u => deleteUserAccountCompletely(u));
-    const wave = botWaveState();
-    wave.botIds = (wave.botIds || []).filter(id => (db.users || []).some(u => u.id === id));
-    saveDB();
-    return targets.length;
 };
 
 
@@ -5048,7 +4920,4 @@ setInterval(() => {
 }, 5000);
 httpServer = app.listen(PORT, () => {
     console.log(`Playsculpt server running on http://localhost:${PORT}`);
-    const removed = purgeUsersWithPSInName();
-    if (removed > 0) console.log(`Purged ${removed} account(s) with 'PS' in username.`);
-    initializeRobloxBots().catch((e) => console.error('Bot initialization failed:', e.message || e));
 });
