@@ -3164,8 +3164,7 @@ if (currentUser && !data.groupCoins) {
                     el.innerText = 'No signups yet';
                     return;
                 }
-                const sourceTag = last.source === 'bot' ? ' (bot)' : '';
-                el.innerText = `${last.username}${sourceTag} • ${new Date(last.at || Date.now()).toLocaleString()}`;
+                el.innerText = `${last.username} • ${new Date(last.at || Date.now()).toLocaleString()}`;
             } catch (e) {
                 const el = document.getElementById('dash-last-signup');
                 if (el) el.innerText = 'Unavailable';
