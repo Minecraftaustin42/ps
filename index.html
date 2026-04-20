@@ -1702,6 +1702,8 @@
                     <p style="margin: 0; color:#e74c3c; font-weight:bold;">Play Streak: <span id="prof-streak">0</span></p>
                     <p style="margin: 0; color:#0f766e; font-weight:bold;">TrustPoints: <span id="prof-trust">0</span> TP</p>
                     <p style="margin: 0; color:#4338ca; font-weight:bold;">SculptShield Level: <span id="prof-trust-level">1 — New</span></p>
+                    <button id="prof-shield-surprise-btn" class="btn btn-sm btn-info" style="display:none;" onclick="claimSculptShieldSurprise()">SculptShield Surprise</button>
+                    <p id="prof-shield-tip" style="margin: 0; color:#1f2937; font-size:12px; max-width:520px;">SculptShield Tip: Keep chat respectful and report unsafe behavior.</p>
                     <p style="margin: 0;"><strong>Followers:</strong> <span id="prof-followers-count">0</span></p>
                     <p style="margin: 0;"><strong>Friends:</strong> <span id="prof-friends-count">0</span></p>
                     <p style="margin: 0;"><strong>Games:</strong> <span id="prof-count">0</span></p>
@@ -2855,70 +2857,10 @@ async function safeFetch(url, options = {}) {
             window.proceduralTextures[type] = tex;
             return tex;
         };
-       const getLegacyMaterialTexture = (matType, colorHex) => {
-            if (!window.legacyMaterialTextures) window.legacyMaterialTextures = {};
-            const cacheKey = `${matType || 'Plastic'}:${colorHex || '#cccccc'}`;
-            if (window.legacyMaterialTextures[cacheKey]) return window.legacyMaterialTextures[cacheKey];
-
-            const canvas = document.createElement('canvas');
-            canvas.width = 128;
-            canvas.height = 128;
-            const ctx = canvas.getContext('2d');
-            const base = new THREE.Color(colorHex || '#cccccc');
-            const tint = base.clone().offsetHSL(0, 0.08, 0.08);
-            const shade = base.clone().offsetHSL(0, -0.06, -0.1);
-
-            ctx.fillStyle = `#${base.getHexString()}`;
-            ctx.fillRect(0, 0, 128, 128);
-
-            const paintRows = (height = 16, alpha = 0.12) => {
-                for (let y = 0; y < 128; y += height) {
-                    ctx.fillStyle = y % (height * 2) === 0 ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha * 0.55})`;
-                    ctx.fillRect(0, y, 128, height);
-                }
-            };
-
-            if (matType === 'Grass') {
-                ctx.fillStyle = `#${tint.getHexString()}`;
-                for (let y = 0; y < 128; y += 8) ctx.fillRect(0, y, 128, 2);
-            } else if (matType === 'Wood') {
-                paintRows(12, 0.14);
-            } else if (matType === 'Brick') {
-                ctx.fillStyle = `#${shade.getHexString()}`;
-                for (let y = 0; y < 128; y += 20) ctx.fillRect(0, y, 128, 2);
-                for (let x = 0; x < 128; x += 32) ctx.fillRect(x, 0, 2, 128);
-            } else if (matType === 'Sand') {
-                for (let i = 0; i < 1300; i++) {
-                    ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
-                    ctx.fillRect(Math.random() * 128, Math.random() * 128, 1.5, 1.5);
-                }
-            } else if (matType === 'Asphalt' || matType === 'Concrete' || matType === 'Slate') {
-                for (let i = 0; i < 1500; i++) {
-                    ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)';
-                    ctx.fillRect(Math.random() * 128, Math.random() * 128, 1.2, 1.2);
-                }
-            } else {
-                const grad = ctx.createLinearGradient(0, 0, 0, 128);
-                grad.addColorStop(0, `rgba(255,255,255,0.18)`);
-                grad.addColorStop(0.5, `rgba(255,255,255,0.05)`);
-                grad.addColorStop(1, `rgba(0,0,0,0.1)`);
-                ctx.fillStyle = grad;
-                ctx.fillRect(0, 0, 128, 128);
-            }
-
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            tex.magFilter = THREE.NearestFilter;
-            tex.minFilter = THREE.LinearMipmapLinearFilter;
-            tex.anisotropy = 1;
-            window.legacyMaterialTextures[cacheKey] = tex;
-            return tex;
-        };
        const getMaterialForType = (matType, colorHex) => {
             const c = new THREE.Color(colorHex || '#cccccc');
             const hsl = {}; c.getHSL(hsl);
-            c.setRGB(c.r, c.g, c.b); // keep exact block color; avoid lighting hue drift
+            c.setHSL(hsl.h, Math.min(0.88, Math.max(0.42, hsl.s * 1.08)), Math.max(0.4, Math.min(hsl.l + 0.03, 0.78)));
 
             if (matType === 'Neon') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#ffe066') });
             if (matType === 'Hologram') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#66e5ff'), transparent: true, opacity: 0.38, wireframe: true });
@@ -2945,12 +2887,10 @@ async function safeFetch(url, options = {}) {
 
             const validTypes = Object.keys(nostalgicRules);
             const safeType = validTypes.includes(matType) ? matType : 'Plastic';
-            const tex = getLegacyMaterialTexture(safeType, `#${c.getHexString()}`);
             const rule = nostalgicRules[safeType];
 
             return new THREE.MeshPhongMaterial({
                 color: c,
-                map: tex,
                 combine: THREE.MultiplyOperation,
                 shininess: rule.shininess,
                 specular: new THREE.Color(rule.specular)
@@ -5903,6 +5843,36 @@ const dom = edRenderer.domElement;
         // --- Profiles ---
         let currentProfileData = null;
         let currentProfTab = 'created';
+        const loadSculptShieldTip = async () => {
+            const tipEl = document.getElementById('prof-shield-tip');
+            if (!tipEl) return;
+            try {
+                const data = await apiCall('/sculptshield/tip', 'GET');
+                tipEl.innerText = data?.tip ? `SculptShield Tip: ${data.tip}` : 'SculptShield Tip: Keep chat respectful and report unsafe behavior.';
+            } catch (e) {
+                tipEl.innerText = 'SculptShield Tip: Keep chat respectful and report unsafe behavior.';
+            }
+        };
+        const claimSculptShieldSurprise = async () => {
+            if (!currentUser) return showModal('Login Required', 'Please login to use SculptShield Surprise.');
+            try {
+                const data = await apiCall('/sculptshield/surprise', 'POST');
+                if (data?.coins !== undefined) currentUser.coins = Number(data.coins) || 0;
+                if (data?.trustPoints !== undefined) currentUser.trustPoints = Number(data.trustPoints) || 0;
+                if (data?.trustLevel !== undefined) currentUser.trustLevel = Number(data.trustLevel) || 1;
+                if (data?.trustLevelName !== undefined) currentUser.trustLevelName = String(data.trustLevelName || 'New');
+                updateCoinsUI();
+                if (currentProfileData?.username) await loadProfile(currentProfileData.username);
+                const rewardText = [];
+                if (Number(data?.rewardCoins || 0) > 0) rewardText.push(`+${Number(data.rewardCoins)} SC`);
+                if (Number(data?.rewardTrust || 0) > 0) rewardText.push(`+${Number(data.rewardTrust)} TP`);
+                showModal(
+                    data?.eventTitle || 'SculptShield Surprise',
+                    `${data?.eventText || 'You received a random safe bonus!'}\n${rewardText.length ? `Rewards: ${rewardText.join(' & ')}` : 'Rewards: Protection bonus only'}\nTip: ${data?.tip || 'Keep your account secure and report unsafe behavior.'}`
+                );
+            } catch (e) {}
+        };
+        window.claimSculptShieldSurprise = claimSculptShieldSurprise;
         const switchProfileTab = (tabId) => {
             currentProfTab = tabId;
             document.querySelectorAll('#view-profile .tab').forEach(t => t.classList.remove('active'));
@@ -5917,12 +5887,15 @@ const dom = edRenderer.domElement;
                 if (!username) return;
                 const profile = await apiCall(`/users/${encodeURIComponent(username)}`);
                 currentProfileData = profile;
+                loadSculptShieldTip();
 
                 document.getElementById('prof-username').innerText = profile.username;
                 document.getElementById('prof-count').innerText = profile.gamesCreated;
 document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 document.getElementById('prof-trust').innerText = Number(profile.trustPoints || 0);
                 document.getElementById('prof-trust-level').innerText = `${Number(profile.trustLevel || 1)} — ${profile.trustLevelName || 'New'}`;
+                const surpriseBtn = document.getElementById('prof-shield-surprise-btn');
+                if (surpriseBtn) surpriseBtn.style.display = (currentUser && currentUser.username && currentUser.username.toLowerCase() === String(profile.username || '').toLowerCase()) ? 'inline-flex' : 'none';
                 document.getElementById('prof-followers-count').innerText = profile.followersCount;
                 document.getElementById('prof-friends-count').innerText = profile.friendsCount || 0;
                 document.getElementById('prof-online-dot').className = `status-dot ${profile.isOnline ? 'online' : 'offline'}`;
@@ -6139,7 +6112,7 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
             profileWorldRenderer.physicallyCorrectLights = false;
             overlay.appendChild(profileWorldRenderer.domElement);
             const hemi = new THREE.HemisphereLight(0xffffff, 0xc3c8d0, 0.72); profileWorldScene.add(hemi);
-            const sun = new THREE.DirectionalLight(0xffffff, 0.62); sun.position.set(40, 70, 20); sun.castShadow = true; sun.shadow.mapSize.set(512, 512); sun.shadow.radius = 1.4; sun.shadow.bias = -0.0012; profileWorldScene.add(sun);
+            const sun = new THREE.DirectionalLight(0xffffff, 0.38); sun.position.set(40, 70, 20); sun.castShadow = true; sun.shadow.mapSize.set(512, 512); sun.shadow.radius = 1.4; sun.shadow.bias = -0.0012; profileWorldScene.add(sun);
             const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(5, 24, 24), new THREE.MeshBasicMaterial({ color: 0xffeb7a }));
             sunMesh.position.set(90, 70, -120); profileWorldScene.add(sunMesh);
             const island = new THREE.Mesh(new THREE.CylinderGeometry(52, 66, 18, 44), new THREE.MeshPhongMaterial({ color: 0x4f6b2e, shininess: 16, specular: 0x7da95c }));
@@ -7682,11 +7655,11 @@ const DEFAULT_STEP_HEIGHT = 1.0;
 const NOSTALGIA_GRAPHICS_DEFAULTS = {
     gravity: 0.08,
     skyColor: '#9ad8ff',
-    brightness: 1.08,
-    sunIntensity: 0.56,
+    brightness: 0.9,
+    sunIntensity: 0.34,
     fogDistance: 860,
     graphicsQuality: 'performance',
-    exposure: 1.04,
+    exposure: 0.9,
     globalShadows: true
 };
 const NOSTALGIA_PROFILE_VERSION = 3;
@@ -8808,13 +8781,13 @@ document.addEventListener('keydown', (e) => {
                 const shadow = areGlobalShadowsEnabled(edData.settings);
                 edScene.background = new THREE.Color(edData.settings.skyColor);
                 edScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = edData.settings.brightness; });
-                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.45, edData.settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
+                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.2, edData.settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
                 const fogDistance = Math.max(320, edData.settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
                 edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.28, fogDistance);
                 if (edRenderer) {
                     const q = (edData.settings.graphicsQuality === 'ultra') ? 'ultra' : 'performance';
                     edRenderer.toneMapping = THREE.LinearToneMapping;
-                    edRenderer.toneMappingExposure = Math.max(0.95, Math.min(1.2, (edData.settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
+                    edRenderer.toneMappingExposure = Math.max(0.75, Math.min(1.05, (edData.settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
                     edRenderer.outputEncoding = THREE.sRGBEncoding;
                     edRenderer.physicallyCorrectLights = false;
                     edRenderer.shadowMap.enabled = shadow;
@@ -10562,7 +10535,7 @@ const toggleGameLike = async () => {
 const applyPlayGraphicsSettings = (settings = {}) => {
             if (!playScene || !playRenderer) return;
             const quality = settings.graphicsQuality === 'ultra' ? 'ultra' : 'performance';
-            const exposure = Math.max(0.95, Math.min(1.2, (settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
+            const exposure = Math.max(0.75, Math.min(1.05, (settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
             const fogDistance = Math.max(320, settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
 
             playScene.fog = new THREE.Fog(settings.skyColor || NOSTALGIA_GRAPHICS_DEFAULTS.skyColor, fogDistance * 0.28, fogDistance);
@@ -10574,14 +10547,14 @@ const applyPlayGraphicsSettings = (settings = {}) => {
             playRenderer.shadowMap.enabled = shadowsEnabled;
             playRenderer.shadowMap.type = THREE.BasicShadowMap;
             if (playDirectionalLight) {
-                playDirectionalLight.intensity = Math.max(0.45, settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
+                playDirectionalLight.intensity = Math.max(0.2, settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
                 playDirectionalLight.castShadow = shadowsEnabled;
                 playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 768 : 512, quality === 'ultra' ? 768 : 512);
                 playDirectionalLight.shadow.radius = 1.4;
                 playDirectionalLight.shadow.bias = -0.0012;
                 playDirectionalLight.shadow.normalBias = 0;
             }
-            if (playAmbientLight) playAmbientLight.intensity = Math.max(0.45, settings.brightness || NOSTALGIA_GRAPHICS_DEFAULTS.brightness);
+            if (playAmbientLight) playAmbientLight.intensity = Math.max(0.25, settings.brightness || NOSTALGIA_GRAPHICS_DEFAULTS.brightness);
         };
 
 const startGame = () => {
@@ -13223,11 +13196,11 @@ const groupAsAircraft = () => {
                 settings: published?.settings || {
                     gravity: 0.08,
                     skyColor: '#5b88a5',
-                    brightness: 0.68,
-                    sunIntensity: 1.28,
+                    brightness: 0.58,
+                    sunIntensity: 0.42,
                     fogDistance: 1450,
                     graphicsQuality: 'performance',
-                    exposure: 1.05
+                    exposure: 0.9
                 },
                 spawn: published?.spawn || { x: 0, y: 2, z: 0, scale: { x: 4, y: 1, z: 4 } },
                 objects: cityObjects
