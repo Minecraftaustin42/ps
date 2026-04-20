@@ -1702,6 +1702,8 @@
                     <p style="margin: 0; color:#e74c3c; font-weight:bold;">Play Streak: <span id="prof-streak">0</span></p>
                     <p style="margin: 0; color:#0f766e; font-weight:bold;">TrustPoints: <span id="prof-trust">0</span> TP</p>
                     <p style="margin: 0; color:#4338ca; font-weight:bold;">SculptShield Level: <span id="prof-trust-level">1 — New</span></p>
+                    <button id="prof-shield-surprise-btn" class="btn btn-sm btn-info" style="display:none;" onclick="claimSculptShieldSurprise()">SculptShield Surprise</button>
+                    <p id="prof-shield-tip" style="margin: 0; color:#1f2937; font-size:12px; max-width:520px;">SculptShield Tip: Keep chat respectful and report unsafe behavior.</p>
                     <p style="margin: 0;"><strong>Followers:</strong> <span id="prof-followers-count">0</span></p>
                     <p style="margin: 0;"><strong>Friends:</strong> <span id="prof-friends-count">0</span></p>
                     <p style="margin: 0;"><strong>Games:</strong> <span id="prof-count">0</span></p>
@@ -2952,7 +2954,6 @@ async function safeFetch(url, options = {}) {
 
             return new THREE.MeshPhongMaterial({
                 color: c,
-                map: tex,
                 combine: THREE.MultiplyOperation,
                 shininess: rule.shininess,
                 specular: new THREE.Color(rule.specular)
@@ -3166,7 +3167,8 @@ if (currentUser && !data.groupCoins) {
                     el.innerText = 'No signups yet';
                     return;
                 }
-                el.innerText = `${last.username} • ${new Date(last.at || Date.now()).toLocaleString()}`;
+                const sourceTag = last.source === 'bot' ? ' (bot)' : '';
+                el.innerText = `${last.username}${sourceTag} • ${new Date(last.at || Date.now()).toLocaleString()}`;
             } catch (e) {
                 const el = document.getElementById('dash-last-signup');
                 if (el) el.innerText = 'Unavailable';
@@ -5905,6 +5907,36 @@ const dom = edRenderer.domElement;
         // --- Profiles ---
         let currentProfileData = null;
         let currentProfTab = 'created';
+        const loadSculptShieldTip = async () => {
+            const tipEl = document.getElementById('prof-shield-tip');
+            if (!tipEl) return;
+            try {
+                const data = await apiCall('/sculptshield/tip', 'GET');
+                tipEl.innerText = data?.tip ? `SculptShield Tip: ${data.tip}` : 'SculptShield Tip: Keep chat respectful and report unsafe behavior.';
+            } catch (e) {
+                tipEl.innerText = 'SculptShield Tip: Keep chat respectful and report unsafe behavior.';
+            }
+        };
+        const claimSculptShieldSurprise = async () => {
+            if (!currentUser) return showModal('Login Required', 'Please login to use SculptShield Surprise.');
+            try {
+                const data = await apiCall('/sculptshield/surprise', 'POST');
+                if (data?.coins !== undefined) currentUser.coins = Number(data.coins) || 0;
+                if (data?.trustPoints !== undefined) currentUser.trustPoints = Number(data.trustPoints) || 0;
+                if (data?.trustLevel !== undefined) currentUser.trustLevel = Number(data.trustLevel) || 1;
+                if (data?.trustLevelName !== undefined) currentUser.trustLevelName = String(data.trustLevelName || 'New');
+                updateCoinsUI();
+                if (currentProfileData?.username) await loadProfile(currentProfileData.username);
+                const rewardText = [];
+                if (Number(data?.rewardCoins || 0) > 0) rewardText.push(`+${Number(data.rewardCoins)} SC`);
+                if (Number(data?.rewardTrust || 0) > 0) rewardText.push(`+${Number(data.rewardTrust)} TP`);
+                showModal(
+                    data?.eventTitle || 'SculptShield Surprise',
+                    `${data?.eventText || 'You received a random safe bonus!'}\n${rewardText.length ? `Rewards: ${rewardText.join(' & ')}` : 'Rewards: Protection bonus only'}\nTip: ${data?.tip || 'Keep your account secure and report unsafe behavior.'}`
+                );
+            } catch (e) {}
+        };
+        window.claimSculptShieldSurprise = claimSculptShieldSurprise;
         const switchProfileTab = (tabId) => {
             currentProfTab = tabId;
             document.querySelectorAll('#view-profile .tab').forEach(t => t.classList.remove('active'));
@@ -5919,12 +5951,15 @@ const dom = edRenderer.domElement;
                 if (!username) return;
                 const profile = await apiCall(`/users/${encodeURIComponent(username)}`);
                 currentProfileData = profile;
+                loadSculptShieldTip();
 
                 document.getElementById('prof-username').innerText = profile.username;
                 document.getElementById('prof-count').innerText = profile.gamesCreated;
 document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 document.getElementById('prof-trust').innerText = Number(profile.trustPoints || 0);
                 document.getElementById('prof-trust-level').innerText = `${Number(profile.trustLevel || 1)} — ${profile.trustLevelName || 'New'}`;
+                const surpriseBtn = document.getElementById('prof-shield-surprise-btn');
+                if (surpriseBtn) surpriseBtn.style.display = (currentUser && currentUser.username && currentUser.username.toLowerCase() === String(profile.username || '').toLowerCase()) ? 'inline-flex' : 'none';
                 document.getElementById('prof-followers-count').innerText = profile.followersCount;
                 document.getElementById('prof-friends-count').innerText = profile.friendsCount || 0;
                 document.getElementById('prof-online-dot').className = `status-dot ${profile.isOnline ? 'online' : 'offline'}`;
