@@ -129,7 +129,7 @@ if (typeof u.trustPoints === 'undefined') u.trustPoints = 0;
 if (typeof u.trustLevel === 'undefined') u.trustLevel = 1;
 if (typeof u.lastTrustDailyAt === 'undefined') u.lastTrustDailyAt = 0;
 if (typeof u.lastTrustGainAt === 'undefined') u.lastTrustGainAt = 0;
-if (typeof u.lastSpinDate === 'undefined') u.lastSpinDate = 0; // NEW: Lucky Spin Tracker
+            if (typeof u.lastSpinDate === 'undefined') u.lastSpinDate = 0; // NEW: Lucky Spin Tracker
 
 if (typeof u.lastPlayDate === 'undefined') u.lastPlayDate = 0;
             if (typeof u.cityData === 'undefined') u.cityData = null; // NEW: Track if user is in Sculpt City
@@ -145,6 +145,7 @@ if (typeof u.loginStreak === 'undefined') u.loginStreak = 0;
             if (typeof u.lastLoginDate === 'undefined') u.lastLoginDate = 0;
             if (typeof u.playStreak === 'undefined') u.playStreak = 0;
             if (typeof u.lastPlayDate === 'undefined') u.lastPlayDate = 0;
+            if (!u.sculptShieldFun) u.sculptShieldFun = { lastSurpriseAt: 0, history: [] };
             
             if (u.friends.length > 0 && typeof u.friends[0] === 'string') {
                 u.friends = u.friends.map(id => ({ id, addedAt: Date.now() }));
@@ -1969,6 +1970,54 @@ app.get('/api/platform/meta', (req, res) => {
     res.json({ lastSignup });
 });
 
+app.get('/api/sculptshield/tip', (req, res) => {
+    const daySeed = Number(getDayKey().replace(/-/g, '')) || Date.now();
+    res.json({ tip: pickSculptShieldTip(daySeed) });
+});
+
+app.post('/api/sculptshield/surprise', requireAuth, (req, res) => {
+    const user = db.users.find(u => u.id === req.userId);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    if (!user.sculptShieldFun) user.sculptShieldFun = { lastSurpriseAt: 0, history: [] };
+    const now = Date.now();
+    const cooldownMs = 2 * 60 * 60 * 1000;
+    const waitMs = cooldownMs - (now - Number(user.sculptShieldFun.lastSurpriseAt || 0));
+    if (waitMs > 0) {
+        return res.status(429).json({
+            error: `SculptShield Surprise recharges in ${Math.ceil(waitMs / 60000)} minutes.`,
+            nextAt: Number(user.sculptShieldFun.lastSurpriseAt || 0) + cooldownMs
+        });
+    }
+
+    const chosen = SCULPTSHIELD_SURPRISE_EVENTS[Math.floor(Math.random() * SCULPTSHIELD_SURPRISE_EVENTS.length)];
+    const rewardCoins = randomRangeInt(chosen.coinRange[0], chosen.coinRange[1]);
+    const rewardTrust = randomRangeInt(chosen.trustRange[0], chosen.trustRange[1]);
+    user.coins = Number(user.coins || 0) + rewardCoins;
+    const trustMeta = applyTrustPoints(user, rewardTrust, `SculptShield surprise: ${chosen.id}`);
+    user.sculptShieldFun.lastSurpriseAt = now;
+    if (!Array.isArray(user.sculptShieldFun.history)) user.sculptShieldFun.history = [];
+    user.sculptShieldFun.history.push({ id: crypto.randomUUID(), at: now, eventId: chosen.id, rewardCoins, rewardTrust });
+    if (user.sculptShieldFun.history.length > 20) {
+        user.sculptShieldFun.history.splice(0, user.sculptShieldFun.history.length - 20);
+    }
+    const tip = pickSculptShieldTip(now + rewardCoins + rewardTrust);
+    saveDB();
+    res.json({
+        success: true,
+        eventId: chosen.id,
+        eventTitle: chosen.title,
+        eventText: chosen.text,
+        rewardCoins,
+        rewardTrust,
+        coins: user.coins,
+        trustPoints: trustMeta.trustPoints,
+        trustLevel: trustMeta.trustLevel,
+        trustLevelName: trustMeta.trustLevelName,
+        tip,
+        nextAt: now + cooldownMs
+    });
+});
+
 const CREATOR_CHALLENGE_POOL = [
     { id: 'parts_10', text: 'Place 10 parts in Studio', reward: 30, check: (p) => p.partsPlaced >= 10 },
     { id: 'publish_1', text: 'Publish one map update', reward: 70, check: (p) => p.publishes >= 1 },
@@ -1982,6 +2031,30 @@ const CREATOR_CHALLENGE_POOL = [
     { id: 'buy_2_items', text: 'Buy 2 shop items', reward: 50, check: (p) => (p.purchases || 0) >= 2 }
 ];
 const getDayKey = () => new Date().toISOString().slice(0, 10);
+const SCULPTSHIELD_TIPS = [
+    'Use a strong unique password and never share your login details.',
+    'Block and report users who spam, harass, or pressure you for personal info.',
+    'Keep private chats respectful and avoid sharing links you cannot verify.',
+    'If a build script seems suspicious, inspect it before running.',
+    'Take breaks and mute toxic players to keep sessions fun and safe.',
+    'Enable account recovery options so you can quickly restore access.'
+];
+const SCULPTSHIELD_SURPRISE_EVENTS = [
+    { id: 'clean_chat', title: 'Clean Chat Bonus', text: 'Positive communication streak detected.', coinRange: [20, 70], trustRange: [3, 9] },
+    { id: 'safety_scout', title: 'Safety Scout', text: 'You spotted and avoided risky behavior.', coinRange: [15, 55], trustRange: [4, 10] },
+    { id: 'kind_builder', title: 'Kind Builder Boost', text: 'Helpful building vibes earned a bonus.', coinRange: [25, 80], trustRange: [2, 8] },
+    { id: 'guardian_ping', title: 'Guardian Ping', text: 'SculptShield dropped a surprise protection reward.', coinRange: [10, 45], trustRange: [5, 12] }
+];
+const pickSculptShieldTip = (seed = Date.now()) => {
+    if (!SCULPTSHIELD_TIPS.length) return 'Stay respectful and report unsafe behavior.';
+    const idx = Math.abs(Number(seed) || Date.now()) % SCULPTSHIELD_TIPS.length;
+    return SCULPTSHIELD_TIPS[idx];
+};
+const randomRangeInt = (min, max) => {
+    const lo = Number(min) || 0;
+    const hi = Number(max) || lo;
+    return Math.floor(Math.random() * (hi - lo + 1)) + lo;
+};
 const getDailyChallenges = () => {
     const daySeed = parseInt(getDayKey().replace(/-/g, ''), 10);
     const out = [];
