@@ -1379,6 +1379,7 @@
                     <span>Balance: <span id="dash-coins">0</span> SC</span>
                     <span style="color: #e74c3c;">Play Streak: <span id="dash-play-streak">0</span> days</span>
                 </h3>
+                <p style="margin:6px 0 0 0; color:#475569; font-size:13px;">Last signup: <strong id="dash-last-signup">Loading...</strong></p>
                 <div style="display: flex; gap: 15px; margin-top: 20px; flex-wrap: wrap;">
                     <button class="btn btn-success" onclick="navigate('create')">Launch 3D Game Editor</button>
                     <button class="btn" onclick="navigate('library')">Play Community Games</button>
@@ -3153,6 +3154,23 @@ if (currentUser && !data.groupCoins) {
             renderGameGrid('editable-games-grid', myGames || [], true, 'You have no editable games yet.');
             renderReportCrates(me);
         };
+        const loadPlatformMeta = async () => {
+            try {
+                const meta = await apiCall('/platform/meta', 'GET');
+                const last = meta && meta.lastSignup ? meta.lastSignup : null;
+                const el = document.getElementById('dash-last-signup');
+                if (!el) return;
+                if (!last || !last.username) {
+                    el.innerText = 'No signups yet';
+                    return;
+                }
+                const sourceTag = last.source === 'bot' ? ' (bot)' : '';
+                el.innerText = `${last.username}${sourceTag} • ${new Date(last.at || Date.now()).toLocaleString()}`;
+            } catch (e) {
+                const el = document.getElementById('dash-last-signup');
+                if (el) el.innerText = 'Unavailable';
+            }
+        };
 
         const renderReportCrates = (meData) => {
             const grid = document.getElementById('report-crates-grid');
@@ -3182,6 +3200,7 @@ if (currentUser && !data.groupCoins) {
 
         window.loadLibrary = loadLibrary;
         window.loadDashboardGames = loadDashboardGames;
+        window.loadPlatformMeta = loadPlatformMeta;
         window.playRandomGame = async () => {
             try {
                 const random = await apiCall('/games/random', 'GET');
@@ -3660,6 +3679,7 @@ checkDailyReward(); // <-- ADDED HERE
                 updateCoinsUI();
 loadSponsoredAssetsDashboard(); // Add this line!
                 loadDashboardGames();
+                loadPlatformMeta();
                 loadDashboardFriends(false);
                 if (!dashboardFriendsInterval) dashboardFriendsInterval = setInterval(() => {
                     if (document.getElementById('view-dashboard').classList.contains('active')) loadDashboardFriends(true);
