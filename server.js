@@ -10,6 +10,7 @@ const PORT = 3000;
 app.use(express.json({ limit: '100mb' })); 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use("/seo", express.static(path.join(__dirname, "public", "seo")));
+app.use("/textures", express.static(path.join(__dirname, "textures")));
 
 // In-memory databases
 const DB_FILE = path.join(__dirname, 'db.json');
