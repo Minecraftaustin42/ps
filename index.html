@@ -16,27 +16,27 @@
         /* 2016 Nostalgic CSS / Flat Design Era */
         @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Audiowide&display=swap');
 
-        body { font-family: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #e9edfb; margin: 0; padding: 0; color: #27243d; overflow-x: hidden; touch-action: manipulation; }
+        body { font-family: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; background: radial-gradient(circle at top, #12264d 0%, #0a0f1f 45%, #070b16 100%); margin: 0; padding: 0; color: #d6dbe8; overflow-x: hidden; touch-action: manipulation; }
 
         /* Navbar */
-        .navbar { position: static; top: 0; z-index: 900; background: #4651cf; border-bottom: 3px solid #2f378d; padding: 10px 14px; min-height: 64px; display: flex; align-items: flex-start; gap: 12px; box-shadow: 0 8px 18px rgba(32,40,110,0.28); }
+        .navbar { position: static; top: 0; z-index: 900; background: linear-gradient(135deg, #0b1630, #11274d); border-bottom: 3px solid #d4af37; padding: 10px 14px; min-height: 64px; display: flex; align-items: flex-start; gap: 12px; box-shadow: 0 10px 28px rgba(0,0,0,0.45); }
         .navbar-left { display:flex; align-items:center; }
-        .navbar-brand { color: #eef4ff; font-size: 24px; font-weight: 800; text-decoration: none; cursor: pointer; letter-spacing: 1px; padding: 6px 12px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.22); background: #3d47ba; }
+        .navbar-brand { color: #f8e8a8; font-size: 24px; font-weight: 800; text-decoration: none; cursor: pointer; letter-spacing: 1px; padding: 6px 12px; border-radius: 8px; border: 2px solid rgba(212,175,55,0.55); background: #0f2145; }
         #nav-logged-out { margin-left:auto; display:flex; align-items:center; }
         #nav-logged-in { margin-left:auto; display:flex; flex-direction:column; gap:8px; width:min(980px, calc(100vw - 210px)); }
         .nav-utility-row { display:flex; align-items:center; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
-        .nav-chip { background:#e6ebff; color:#28317d; font-weight:700; padding:6px 10px; border-radius:8px; border:1px solid #bcc8ff; }
+        .nav-chip { background:#1a294d; color:#f8e8a8; font-weight:700; padding:6px 10px; border-radius:8px; border:1px solid #d4af37; }
         .navbar-links { display:flex; gap:6px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
-        .navbar-links a, #nav-logged-out a { color: #e4e9ff; text-decoration: none; font-weight: 700; cursor: pointer; transition: all 0.2s ease; line-height: 1.2; padding: 7px 10px; border-radius: 8px; border: 1px solid transparent; }
-        .navbar-links a:hover, .navbar-links a.active, #nav-logged-out a:hover { color: #fff; border-color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.13); }
+        .navbar-links a, #nav-logged-out a { color: #dbe7ff; text-decoration: none; font-weight: 700; cursor: pointer; transition: all 0.2s ease; line-height: 1.2; padding: 7px 10px; border-radius: 8px; border: 1px solid transparent; }
+        .navbar-links a:hover, .navbar-links a.active, #nav-logged-out a:hover { color: #ffe9a7; border-color: rgba(212,175,55,0.6); background: rgba(212,175,55,0.12); }
 
-        .search-bar { padding: 7px 12px; border-radius: 8px; border: none; outline: none; font-size: 14px; width: 200px; background: #f4f6ff; }
+        .search-bar { padding: 7px 12px; border-radius: 8px; border: 1px solid #2f456f; outline: none; font-size: 14px; width: 200px; background: #0f1d36; color:#e7eeff; }
         .sculpt-coins { color: #f1c40f; font-weight: 700; margin-right: 10px; display: flex; align-items: center; }
 
         /* Container & Cards */
         .container { max-width: 1080px; margin: 20px auto; padding: 12px; }
-        .card { background: #fff; border-radius: 10px; border: 1px solid #d5dcff; padding: 22px; box-shadow: 0 8px 24px rgba(68, 84, 175, 0.08); margin-bottom: 16px; }
-        .card-title { margin-top: 0; border-bottom: 1px solid #e5eaff; padding-bottom: 12px; margin-bottom: 16px; color: #342f63; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;}
+        .card { background: linear-gradient(160deg, #121c33, #1a2742); border-radius: 10px; border: 1px solid #2a3c63; padding: 22px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35); margin-bottom: 16px; color:#d8deed; }
+        .card-title { margin-top: 0; border-bottom: 1px solid #2d4068; padding-bottom: 12px; margin-bottom: 16px; color: #f8e8a8; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;}
 
 
 /* Studio Explorer & Layout */
@@ -62,11 +62,11 @@
 
         /* Forms & Buttons */
         .form-group { margin-bottom: 15px; }
-        .form-control { width: 100%; padding: 10px 12px; border: 1px solid #ccc; border-radius: 3px; font-size: 14px; box-sizing: border-box; transition: border-color 0.2s; }
-        .form-control:focus { border-color: #3498db; outline: none; }
+        .form-control { width: 100%; padding: 10px 12px; border: 1px solid #2f456f; border-radius: 6px; font-size: 14px; box-sizing: border-box; transition: border-color 0.2s; background:#0f1d36; color:#e8efff; }
+        .form-control:focus { border-color: #d4af37; outline: none; }
 
-        .btn { background-color: #4f46e5; color: white; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; border-bottom: 3px solid #3730a3; transition: all 0.1s; display: inline-flex; align-items: center; justify-content: center; }
-        .btn:active { transform: translateY(2px); border-bottom: 1px solid #3730a3; margin-bottom: 2px; }
+        .btn { background-color: #1b3f86; color: #f7f0d0; border: none; padding: 10px 20px; border-radius: 8px; font-size: 14px; font-weight: 700; cursor: pointer; border-bottom: 3px solid #d4af37; transition: all 0.1s; display: inline-flex; align-items: center; justify-content: center; }
+        .btn:active { transform: translateY(2px); border-bottom: 1px solid #d4af37; margin-bottom: 2px; }
         .btn-sm { padding: 6px 12px; font-size: 12px; }
         .btn-success { background-color: #2ecc71; border-bottom-color: #27ae60; }
         .btn-success:active { border-bottom-color: #27ae60; }
@@ -2653,7 +2653,7 @@ async function safeFetch(url, options = {}) {
       // ==========================================
         // 2015-2016 CLASSIC GRAPHICS ENGINE
         // ==========================================
-   const generateRealisticTexture = (type) => {
+        const generateRealisticTexture = (type) => {
             // FIX: Bulletproof initialization! If the cache doesn't exist, create it instantly.
             if (!window.proceduralTextures) window.proceduralTextures = {};
 
@@ -2855,70 +2855,71 @@ async function safeFetch(url, options = {}) {
             window.proceduralTextures[type] = tex;
             return tex;
         };
-       const getLegacyMaterialTexture = (matType, colorHex) => {
-            if (!window.legacyMaterialTextures) window.legacyMaterialTextures = {};
-            const cacheKey = `${matType || 'Plastic'}:${colorHex || '#cccccc'}`;
-            if (window.legacyMaterialTextures[cacheKey]) return window.legacyMaterialTextures[cacheKey];
-
-            const canvas = document.createElement('canvas');
-            canvas.width = 128;
-            canvas.height = 128;
-            const ctx = canvas.getContext('2d');
-            const base = new THREE.Color(colorHex || '#cccccc');
-            const tint = base.clone().offsetHSL(0, 0.08, 0.08);
-            const shade = base.clone().offsetHSL(0, -0.06, -0.1);
-
-            ctx.fillStyle = `#${base.getHexString()}`;
-            ctx.fillRect(0, 0, 128, 128);
-
-            const paintRows = (height = 16, alpha = 0.12) => {
-                for (let y = 0; y < 128; y += height) {
-                    ctx.fillStyle = y % (height * 2) === 0 ? `rgba(255,255,255,${alpha})` : `rgba(0,0,0,${alpha * 0.55})`;
-                    ctx.fillRect(0, y, 128, height);
-                }
-            };
-
-            if (matType === 'Grass') {
-                ctx.fillStyle = `#${tint.getHexString()}`;
-                for (let y = 0; y < 128; y += 8) ctx.fillRect(0, y, 128, 2);
-            } else if (matType === 'Wood') {
-                paintRows(12, 0.14);
-            } else if (matType === 'Brick') {
-                ctx.fillStyle = `#${shade.getHexString()}`;
-                for (let y = 0; y < 128; y += 20) ctx.fillRect(0, y, 128, 2);
-                for (let x = 0; x < 128; x += 32) ctx.fillRect(x, 0, 2, 128);
-            } else if (matType === 'Sand') {
-                for (let i = 0; i < 1300; i++) {
-                    ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)';
-                    ctx.fillRect(Math.random() * 128, Math.random() * 128, 1.5, 1.5);
-                }
-            } else if (matType === 'Asphalt' || matType === 'Concrete' || matType === 'Slate') {
-                for (let i = 0; i < 1500; i++) {
-                    ctx.fillStyle = i % 2 ? 'rgba(255,255,255,0.09)' : 'rgba(0,0,0,0.09)';
-                    ctx.fillRect(Math.random() * 128, Math.random() * 128, 1.2, 1.2);
-                }
-            } else {
-                const grad = ctx.createLinearGradient(0, 0, 0, 128);
-                grad.addColorStop(0, `rgba(255,255,255,0.18)`);
-                grad.addColorStop(0.5, `rgba(255,255,255,0.05)`);
-                grad.addColorStop(1, `rgba(0,0,0,0.1)`);
-                ctx.fillStyle = grad;
-                ctx.fillRect(0, 0, 128, 128);
-            }
-
-            const tex = new THREE.CanvasTexture(canvas);
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            tex.magFilter = THREE.NearestFilter;
-            tex.minFilter = THREE.LinearMipmapLinearFilter;
-            tex.anisotropy = 1;
-            window.legacyMaterialTextures[cacheKey] = tex;
-            return tex;
+        const IMAGE_TEXTURE_FILES = {
+            'stone tiles': 'stonetiles.jpg',
+            'wooden floor': 'woodenfloor.jpg',
+            'wood': 'wood.jpg',
+            'grass': 'grass.png',
+            'bricks': 'bricks.jpg'
         };
-       const getMaterialForType = (matType, colorHex) => {
+        const resolveTextureFileForMaterial = (matType = '') => {
+            const key = String(matType || '').trim().toLowerCase();
+            if (!key) return null;
+            if (IMAGE_TEXTURE_FILES[key]) return IMAGE_TEXTURE_FILES[key];
+            if (key === 'brick') return IMAGE_TEXTURE_FILES['bricks'];
+            if (key === 'wood') return IMAGE_TEXTURE_FILES['wood'];
+            if (key === 'grass') return IMAGE_TEXTURE_FILES['grass'];
+            if (['slate', 'concrete', 'asphalt', 'marble', 'obsidian', 'lavarock', 'metal', 'carbonfiber', 'sand'].includes(key)) return IMAGE_TEXTURE_FILES['stone tiles'];
+            if (['plastic', 'smoothplastic'].includes(key)) return IMAGE_TEXTURE_FILES['wooden floor'];
+            return null;
+        };
+        const getImageTextureForMaterial = (matType = '') => {
+            const file = resolveTextureFileForMaterial(matType);
+            if (!file) return null;
+            if (!window.imageTextureCache) window.imageTextureCache = {};
+            if (!window.imageTextureLoader) window.imageTextureLoader = new THREE.TextureLoader();
+            if (!window.imageTextureCache[file]) {
+                const texture = window.imageTextureLoader.load(`/textures/${file}`);
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.minFilter = THREE.LinearMipmapLinearFilter;
+                texture.magFilter = THREE.LinearFilter;
+                texture.anisotropy = 8;
+                if (typeof THREE.SRGBColorSpace !== 'undefined') texture.colorSpace = THREE.SRGBColorSpace;
+                if (typeof THREE.sRGBEncoding !== 'undefined') texture.encoding = THREE.sRGBEncoding;
+                window.imageTextureCache[file] = texture;
+            }
+            const clone = window.imageTextureCache[file].clone();
+            clone.wrapS = THREE.RepeatWrapping;
+            clone.wrapT = THREE.RepeatWrapping;
+            clone.needsUpdate = true;
+            return clone;
+        };
+        const applyTextureRepeatToMesh = (mesh, scale = null) => {
+            if (!mesh) return;
+            const repeatSource = scale || mesh.scale || { x: 1, y: 1, z: 1 };
+            const rx = Math.max(1, Math.abs(Number(repeatSource.x) || 1));
+            const rz = Math.max(1, Math.abs(Number(repeatSource.z) || 1));
+            const applyRepeatToMaterial = (material) => {
+                if (!material?.map) return;
+                material.map.wrapS = THREE.RepeatWrapping;
+                material.map.wrapT = THREE.RepeatWrapping;
+                material.map.repeat.set(rx, rz);
+                material.map.needsUpdate = true;
+                material.needsUpdate = true;
+            };
+            if (mesh.isMesh) {
+                (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(applyRepeatToMaterial);
+            } else if (mesh.traverse) {
+                mesh.traverse((child) => {
+                    if (!child.isMesh) return;
+                    (Array.isArray(child.material) ? child.material : [child.material]).forEach(applyRepeatToMaterial);
+                });
+            }
+        };
+        const getMaterialForType = (matType, colorHex) => {
             const c = new THREE.Color(colorHex || '#cccccc');
-            const hsl = {}; c.getHSL(hsl);
-            c.setRGB(c.r, c.g, c.b); // keep exact block color; avoid lighting hue drift
+            c.setRGB(c.r, c.g, c.b);
 
             if (matType === 'Neon') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#ffe066') });
             if (matType === 'Hologram') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#66e5ff'), transparent: true, opacity: 0.38, wireframe: true });
@@ -2945,8 +2946,8 @@ async function safeFetch(url, options = {}) {
 
             const validTypes = Object.keys(nostalgicRules);
             const safeType = validTypes.includes(matType) ? matType : 'Plastic';
-            const tex = getLegacyMaterialTexture(safeType, `#${c.getHexString()}`);
             const rule = nostalgicRules[safeType];
+            const tex = getImageTextureForMaterial(safeType);
 
             return new THREE.MeshPhongMaterial({
                 color: c,
@@ -5580,7 +5581,7 @@ let customGizmo = null;
             customGizmo.visible = false;
             edScene.add(customGizmo);
 
-            const ambLight = new THREE.AmbientLight( 0xf4f8ff, NOSTALGIA_GRAPHICS_DEFAULTS.brightness );
+            const ambLight = new THREE.AmbientLight( 0xffffff, NOSTALGIA_GRAPHICS_DEFAULTS.brightness );
             ambLight.isAmbientLight = true;
             edAmbientLight = ambLight;
             edScene.add( ambLight );
@@ -6139,7 +6140,7 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
             profileWorldRenderer.physicallyCorrectLights = false;
             overlay.appendChild(profileWorldRenderer.domElement);
             const hemi = new THREE.HemisphereLight(0xffffff, 0xc3c8d0, 0.72); profileWorldScene.add(hemi);
-            const sun = new THREE.DirectionalLight(0xffffff, 0.62); sun.position.set(40, 70, 20); sun.castShadow = true; sun.shadow.mapSize.set(512, 512); sun.shadow.radius = 1.4; sun.shadow.bias = -0.0012; profileWorldScene.add(sun);
+            const sun = new THREE.DirectionalLight(0xffffff, 0.38); sun.position.set(40, 70, 20); sun.castShadow = true; sun.shadow.mapSize.set(512, 512); sun.shadow.radius = 1.4; sun.shadow.bias = -0.0012; profileWorldScene.add(sun);
             const sunMesh = new THREE.Mesh(new THREE.SphereGeometry(5, 24, 24), new THREE.MeshBasicMaterial({ color: 0xffeb7a }));
             sunMesh.position.set(90, 70, -120); profileWorldScene.add(sunMesh);
             const island = new THREE.Mesh(new THREE.CylinderGeometry(52, 66, 18, 44), new THREE.MeshPhongMaterial({ color: 0x4f6b2e, shininess: 16, specular: 0x7da95c }));
@@ -7682,11 +7683,11 @@ const DEFAULT_STEP_HEIGHT = 1.0;
 const NOSTALGIA_GRAPHICS_DEFAULTS = {
     gravity: 0.08,
     skyColor: '#9ad8ff',
-    brightness: 1.08,
-    sunIntensity: 0.56,
+    brightness: 0.9,
+    sunIntensity: 0.34,
     fogDistance: 860,
     graphicsQuality: 'performance',
-    exposure: 1.04,
+    exposure: 0.9,
     globalShadows: true
 };
 const NOSTALGIA_PROFILE_VERSION = 3;
@@ -8605,6 +8606,7 @@ document.addEventListener('keydown', (e) => {
                     mesh.userData.castsShadow = objData.castsShadow !== false && objData.type !== 'floatingText';
                     mesh.castShadow = objectCastsShadow(objData, edData.settings);
                     mesh.receiveShadow = areGlobalShadowsEnabled(edData.settings);
+                    applyTextureRepeatToMesh(mesh, objData.scale || mesh.scale);
                     applyFloatingTextVisual(mesh, objData);
                 }
             });
@@ -8808,13 +8810,13 @@ document.addEventListener('keydown', (e) => {
                 const shadow = areGlobalShadowsEnabled(edData.settings);
                 edScene.background = new THREE.Color(edData.settings.skyColor);
                 edScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = edData.settings.brightness; });
-                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.45, edData.settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
+                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.2, edData.settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
                 const fogDistance = Math.max(320, edData.settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
                 edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.28, fogDistance);
                 if (edRenderer) {
                     const q = (edData.settings.graphicsQuality === 'ultra') ? 'ultra' : 'performance';
                     edRenderer.toneMapping = THREE.LinearToneMapping;
-                    edRenderer.toneMappingExposure = Math.max(0.95, Math.min(1.2, (edData.settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
+                    edRenderer.toneMappingExposure = Math.max(0.75, Math.min(1.05, (edData.settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
                     edRenderer.outputEncoding = THREE.sRGBEncoding;
                     edRenderer.physicallyCorrectLights = false;
                     edRenderer.shadowMap.enabled = shadow;
@@ -9273,6 +9275,7 @@ if (item.type === 'button' && item.onClickEvent) {
             objData.position = { x: mesh.position.x, y: mesh.position.y, z: mesh.position.z };
             objData.rotation = { x: mesh.rotation.x, y: mesh.rotation.y, z: mesh.rotation.z };
             objData.scale = { x: Math.max(0.1, mesh.scale.x), y: Math.max(0.1, mesh.scale.y), z: Math.max(0.1, mesh.scale.z) };
+            applyTextureRepeatToMesh(mesh, objData.scale);
 
             // --- ADD THESE TWO LINES ---
             objData.isAnchored = mesh.userData.isAnchored;
@@ -9775,6 +9778,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                         mesh.position.set(cData.position.x, cData.position.y, cData.position.z);
                         mesh.rotation.set(cData.rotation.x, cData.rotation.y, cData.rotation.z);
                         mesh.scale.set(cData.scale.x, cData.scale.y, cData.scale.z);
+                        applyTextureRepeatToMesh(mesh, cData.scale);
                         group.add(mesh);
                     });
                     const chunk = getChunkGroup(edScene, editorChunkGroups, chunkKeyFromPos(objData.position || {}), 80);
@@ -9801,6 +9805,7 @@ if (objData.type === 'vehicle' || objData.type === 'aircraft') {
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+                    applyTextureRepeatToMesh(mesh, objData.scale);
                     const blockCastsShadow = objectCastsShadow(objData, edData.settings);
                     mesh.castShadow = blockCastsShadow;
                     mesh.receiveShadow = areGlobalShadowsEnabled(edData.settings);
@@ -10562,7 +10567,7 @@ const toggleGameLike = async () => {
 const applyPlayGraphicsSettings = (settings = {}) => {
             if (!playScene || !playRenderer) return;
             const quality = settings.graphicsQuality === 'ultra' ? 'ultra' : 'performance';
-            const exposure = Math.max(0.95, Math.min(1.2, (settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
+            const exposure = Math.max(0.75, Math.min(1.05, (settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
             const fogDistance = Math.max(320, settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
 
             playScene.fog = new THREE.Fog(settings.skyColor || NOSTALGIA_GRAPHICS_DEFAULTS.skyColor, fogDistance * 0.28, fogDistance);
@@ -10574,14 +10579,14 @@ const applyPlayGraphicsSettings = (settings = {}) => {
             playRenderer.shadowMap.enabled = shadowsEnabled;
             playRenderer.shadowMap.type = THREE.BasicShadowMap;
             if (playDirectionalLight) {
-                playDirectionalLight.intensity = Math.max(0.45, settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
+                playDirectionalLight.intensity = Math.max(0.2, settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
                 playDirectionalLight.castShadow = shadowsEnabled;
                 playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 768 : 512, quality === 'ultra' ? 768 : 512);
                 playDirectionalLight.shadow.radius = 1.4;
                 playDirectionalLight.shadow.bias = -0.0012;
                 playDirectionalLight.shadow.normalBias = 0;
             }
-            if (playAmbientLight) playAmbientLight.intensity = Math.max(0.45, settings.brightness || NOSTALGIA_GRAPHICS_DEFAULTS.brightness);
+            if (playAmbientLight) playAmbientLight.intensity = Math.max(0.25, settings.brightness || NOSTALGIA_GRAPHICS_DEFAULTS.brightness);
         };
 
 const startGame = () => {
@@ -10614,7 +10619,7 @@ const startGame = () => {
                 playScene = new THREE.Scene();
                 playCamera = new THREE.PerspectiveCamera( 50, 16/9, 1, 2000 );
 
-                const ambLight = new THREE.AmbientLight( 0xf4f8ff, NOSTALGIA_GRAPHICS_DEFAULTS.brightness );
+                const ambLight = new THREE.AmbientLight( 0xffffff, NOSTALGIA_GRAPHICS_DEFAULTS.brightness );
                 ambLight.isAmbientLight = true;
                 playAmbientLight = ambLight;
                 playScene.add( ambLight );
@@ -10747,7 +10752,10 @@ updatePlayFullscreenButton();
                 if (!target || !props) return target;
                 if (props.position) target.position.set(safeNum(props.position.x, target.position.x), safeNum(props.position.y, target.position.y), safeNum(props.position.z, target.position.z));
                 if (props.rotation) target.rotation.set(safeNum(props.rotation.x, target.rotation.x), safeNum(props.rotation.y, target.rotation.y), safeNum(props.rotation.z, target.rotation.z));
-                if (props.scale) target.scale.set(Math.max(0.05, safeNum(props.scale.x, target.scale.x)), Math.max(0.05, safeNum(props.scale.y, target.scale.y)), Math.max(0.05, safeNum(props.scale.z, target.scale.z)));
+                if (props.scale) {
+                    target.scale.set(Math.max(0.05, safeNum(props.scale.x, target.scale.x)), Math.max(0.05, safeNum(props.scale.y, target.scale.y)), Math.max(0.05, safeNum(props.scale.z, target.scale.z)));
+                    applyTextureRepeatToMesh(target, target.scale);
+                }
                 if (props.color && target.material?.color) target.material.color.set(String(props.color));
                 if (typeof props.transparency === 'number' && target.material) {
                     const t = Math.max(0, Math.min(1, safeNum(props.transparency, 0)));
@@ -11168,6 +11176,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                         childMesh.position.set(cData.position.x, cData.position.y, cData.position.z);
                         childMesh.rotation.set(cData.rotation.x, cData.rotation.y, cData.rotation.z);
                         childMesh.scale.set(cData.scale.x, cData.scale.y, cData.scale.z);
+                        applyTextureRepeatToMesh(childMesh, cData.scale);
                         childMesh.castShadow = objectCastsShadow(cData, activeLevel.settings);
                         childMesh.receiveShadow = areGlobalShadowsEnabled(activeLevel.settings);
                         childMesh.userData = { type: cData.type };
@@ -11197,9 +11206,12 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mat.opacity = Math.max(0.02, 1 - objTransparency);
 
                     const hasScript = !!((objData.script || '').trim());
+                    const matType = objData.material || 'Plastic';
+                    const hasImageTexture = !!resolveTextureFileForMaterial(matType);
                     const isSimpleStatic = canUseInstancing &&
                         INSTANCABLE_PLAY_TYPES.has(objData.type) &&
                         !hasScript &&
+                        !hasImageTexture &&
                         !objData.smart &&
                         !isLadder &&
                         objData.type !== 'floatingText' &&
@@ -11213,7 +11225,6 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     if (isSimpleStatic) {
                         const objTransparency = Math.max(0, Math.min(1, objData.transparency || 0));
                         const chunkKey = chunkKeyFromPos(objData.position || {});
-                        const matType = objData.material || 'Plastic';
                         const castsShadow = objectCastsShadow(objData, activeLevel.settings);
                         const key = `${chunkKey}|${objData.type}|${matType}|${objData.color || '#3498db'}|${objTransparency.toFixed(2)}|${castsShadow ? 1 : 0}`;
                         if (!instancedBuckets.has(key)) {
@@ -11233,6 +11244,7 @@ else if (cData.type === 'aircraftSeat') geo = new THREE.BoxGeometry(1, 0.5, 1);
                     mesh.position.set(objData.position.x, objData.position.y, objData.position.z);
                     mesh.rotation.set(objData.rotation.x, objData.rotation.y, objData.rotation.z);
                     mesh.scale.set(objData.scale.x, objData.scale.y, objData.scale.z);
+                    applyTextureRepeatToMesh(mesh, objData.scale);
                     mesh.castShadow = objectCastsShadow(objData, activeLevel.settings);
                     mesh.receiveShadow = areGlobalShadowsEnabled(activeLevel.settings);
                     mesh.userData = { id: objData.id, compiledScript: null, isTool: objData.type === 'tool', isEquipped: false, type: objData.type, noCollide: (objData.noCollide || objData.canCollide === false), isAnchored: objData.isAnchored !== false, smart: objData.smart || null, smartState: {} };
@@ -13223,11 +13235,11 @@ const groupAsAircraft = () => {
                 settings: published?.settings || {
                     gravity: 0.08,
                     skyColor: '#5b88a5',
-                    brightness: 0.68,
-                    sunIntensity: 1.28,
+                    brightness: 0.58,
+                    sunIntensity: 0.42,
                     fogDistance: 1450,
                     graphicsQuality: 'performance',
-                    exposure: 1.05
+                    exposure: 0.9
                 },
                 spawn: published?.spawn || { x: 0, y: 2, z: 0, scale: { x: 4, y: 1, z: 4 } },
                 objects: cityObjects
