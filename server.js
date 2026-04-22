@@ -189,6 +189,7 @@ if (!g.analytics) {
             if (!gr.enemies) gr.enemies = [];
             if (typeof gr.allowEnemies === 'undefined') gr.allowEnemies = false;
             if (!gr.polls) gr.polls = [];
+            ensureGroupBadgeFields(gr);
             
             if (!gr.roles) {
                 const rOwnerId = crypto.randomUUID();
@@ -256,7 +257,73 @@ const sanitizeNumber = (value, fallback, min, max) => {
     return Math.max(min, Math.min(max, num));
 };
 const isSculptCityAccount = (user) => String(user?.username || '').toLowerCase() === 'sculpt city';
-const PLAYTIME_WAR_REWARDS = [2500, 1800, 1400, 1100, 900, 800, 700, 600, 500, 400];
+const PLAYTIME_WAR_BASE_PER_USER = 750;
+const PLAYTIME_WAR_BONUS_TOP3 = 200;
+const PLAYTIME_WAR_BONUS_FIRST_EXTRA = 100;
+const GROUP_BADGES = {
+    PLAYTIME_REWARDS_GROUP_WINNER: { title: 'Playtime Rewards Group Winner', desc: 'Get by being #1 in Playtime Wars.' },
+    TOP3_MOST_ACTIVE: { title: 'Top 3 Most Active', desc: 'Get by being top 3 in most active groups.' },
+    TOP3_MOST_MEMBERS: { title: 'Top 3 Most Members', desc: 'Get by being top 3 groups by members.' },
+    NUMBER1_MOST_ACTIVE: { title: '#1 Most Active', desc: 'Get by being the most active group on Playsculpt.' },
+    NUMBER1_MOST_MEMBERS: { title: '#1 Most Members', desc: 'Get by being the biggest group by members.' },
+    STREAK_CHAMPION: { title: 'Streak Champion', desc: 'Hold #1 in most active or most members for at least 3 days.' },
+    GAME_FACTORY: { title: 'Game Factory', desc: 'Make or own 10 games at once.' },
+    WEALTHIEST_GROUP: { title: 'Wealthiest Group', desc: 'Hold #1 richest group by Sculpt Coins for 3 days in a row.' },
+    BIG_SPENDERS: { title: 'Big Spenders', desc: 'Spend at least 5,000 group funds through payouts.' },
+    OG_GROUP: { title: 'OG Group', desc: 'Be one of the first 50 groups created on Playsculpt.' }
+};
+const ensureGroupBadgeFields = (group) => {
+    if (!Array.isArray(group.badges)) group.badges = [];
+    if (!group.badgeState) group.badgeState = { activeFirstStreakDays: 0, membersFirstStreakDays: 0, wealthFirstStreakDays: 0, lastDailyKey: '' };
+    if (typeof group.totalPayoutSpent !== 'number') group.totalPayoutSpent = 0;
+};
+const grantGroupBadge = (group, badgeKey) => {
+    ensureGroupBadgeFields(group);
+    if (!GROUP_BADGES[badgeKey]) return;
+    if (!group.badges.includes(badgeKey)) group.badges.push(badgeKey);
+};
+const computeGroupActivityScore = (gr) => {
+    let activityScore = 0;
+    activityScore += (gr.posts || []).length * 2;
+    activityScore += (gr.threads || []).length * 5;
+    (gr.threads || []).forEach(t => activityScore += (t.replies || []).length * 3);
+    (gr.polls || []).forEach(p => (p.options || []).forEach(o => activityScore += (o.votes || []).length * 4));
+    db.games.filter(g => g.groupId === gr.id).forEach(g => activityScore += (g.plays || 0));
+    return activityScore;
+};
+const runDailyGroupBadgeChecks = () => {
+    if (!db.groups || !db.groups.length) return false;
+    const dayKey = new Date().toISOString().slice(0, 10);
+    if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
+    if (db.systemState.groupBadgeDailyKey === dayKey) return false;
+    const byCreated = [...db.groups].sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+    const ogIds = new Set(byCreated.slice(0, 50).map(g => g.id));
+    const rankedActive = [...db.groups].sort((a, b) => computeGroupActivityScore(b) - computeGroupActivityScore(a));
+    const rankedMembers = [...db.groups].sort((a, b) => (b.members || []).length - (a.members || []).length);
+    const rankedCoins = [...db.groups].sort((a, b) => (b.coins || 0) - (a.coins || 0));
+    let changed = false;
+    db.groups.forEach((group) => {
+        ensureGroupBadgeFields(group);
+        if (ogIds.has(group.id)) { grantGroupBadge(group, 'OG_GROUP'); changed = true; }
+        if ((db.games.filter(g => g.groupId === group.id).length) >= 10) { grantGroupBadge(group, 'GAME_FACTORY'); changed = true; }
+        if ((group.totalPayoutSpent || 0) >= 5000) { grantGroupBadge(group, 'BIG_SPENDERS'); changed = true; }
+        const aIdx = rankedActive.findIndex(g => g.id === group.id);
+        const mIdx = rankedMembers.findIndex(g => g.id === group.id);
+        const cIdx = rankedCoins.findIndex(g => g.id === group.id);
+        if (aIdx >= 0 && aIdx < 3) { grantGroupBadge(group, 'TOP3_MOST_ACTIVE'); changed = true; }
+        if (mIdx >= 0 && mIdx < 3) { grantGroupBadge(group, 'TOP3_MOST_MEMBERS'); changed = true; }
+        if (aIdx === 0) { grantGroupBadge(group, 'NUMBER1_MOST_ACTIVE'); changed = true; }
+        if (mIdx === 0) { grantGroupBadge(group, 'NUMBER1_MOST_MEMBERS'); changed = true; }
+        group.badgeState.activeFirstStreakDays = aIdx === 0 ? (group.badgeState.activeFirstStreakDays || 0) + 1 : 0;
+        group.badgeState.membersFirstStreakDays = mIdx === 0 ? (group.badgeState.membersFirstStreakDays || 0) + 1 : 0;
+        group.badgeState.wealthFirstStreakDays = cIdx === 0 ? (group.badgeState.wealthFirstStreakDays || 0) + 1 : 0;
+        if (group.badgeState.activeFirstStreakDays >= 3 || group.badgeState.membersFirstStreakDays >= 3) { grantGroupBadge(group, 'STREAK_CHAMPION'); changed = true; }
+        if (group.badgeState.wealthFirstStreakDays >= 3) { grantGroupBadge(group, 'WEALTHIEST_GROUP'); changed = true; }
+        group.badgeState.lastDailyKey = dayKey;
+    });
+    db.systemState.groupBadgeDailyKey = dayKey;
+    return changed;
+};
 const getUtcWeekKey = (timestamp = Date.now()) => {
     const d = new Date(timestamp);
     const utc = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -276,6 +343,7 @@ const ensurePlaytimeWarState = () => {
 };
 const settlePlaytimeWarsIfNeeded = () => {
     const state = ensurePlaytimeWarState();
+    runDailyGroupBadgeChecks();
     const currentWeekKey = getUtcWeekKey(Date.now());
     const keys = Object.keys(state.weeks).sort();
     let changed = false;
@@ -303,19 +371,22 @@ const settlePlaytimeWarsIfNeeded = () => {
             .slice(0, 10);
         const winners = [];
         entries.forEach((entry, idx) => {
-            const rewardCoins = PLAYTIME_WAR_REWARDS[idx] || 0;
-            if (rewardCoins <= 0) return;
             const topTen = entry.contributors.slice(0, 10);
             if (!topTen.length) return;
-            const per = Math.floor(rewardCoins / topTen.length);
-            let rem = rewardCoins % topTen.length;
-            const rewardedContributors = topTen.map((c) => {
-                const payout = per + (rem > 0 ? 1 : 0);
-                if (rem > 0) rem--;
+            let rewardCoins = 0;
+            const rewardedContributors = topTen.map((c, contributorIdx) => {
+                let payout = PLAYTIME_WAR_BASE_PER_USER;
+                if (contributorIdx < 3) payout += PLAYTIME_WAR_BONUS_TOP3;
+                if (contributorIdx === 0) payout += PLAYTIME_WAR_BONUS_FIRST_EXTRA;
+                rewardCoins += payout;
                 const u = db.users.find(x => x.id === c.userId);
                 if (u) u.coins = (u.coins || 0) + payout;
                 return { userId: c.userId, username: c.username, seconds: c.seconds, payout };
             });
+            if (idx === 0) {
+                const winnerGroup = db.groups.find(g => g.id === entry.groupId);
+                if (winnerGroup) grantGroupBadge(winnerGroup, 'PLAYTIME_REWARDS_GROUP_WINNER');
+            }
             winners.push({ rank: idx + 1, groupId: entry.groupId, groupName: entry.groupName, rewardCoins, totalSeconds: entry.totalSeconds, rewardedContributors });
         });
         state.history.unshift({ weekKey, awardedAt: Date.now(), winners });
@@ -328,6 +399,7 @@ const settlePlaytimeWarsIfNeeded = () => {
         .forEach(k => delete state.weeks[k]);
     return changed;
 };
+runDailyGroupBadgeChecks();
 
 const TRUST_LEVELS = [
     { level: 1, name: 'New', tp: 0 }, { level: 2, name: 'Starter', tp: 20 }, { level: 3, name: 'Player', tp: 50 }, { level: 4, name: 'Active', tp: 90 }, { level: 5, name: 'Friendly', tp: 140 },
@@ -2698,17 +2770,10 @@ const getGroupMemberRank = (group, userId) => {
 };
 
 app.get('/api/groups/discover', (req, res) => {
+    runDailyGroupBadgeChecks();
     // Calculate the "Activity Score" for every group
     const groupsWithStats = db.groups.map(gr => {
-        let activityScore = 0;
-        activityScore += (gr.posts || []).length * 2; // Wall posts
-        activityScore += (gr.threads || []).length * 5; // Forum threads
-        (gr.threads || []).forEach(t => activityScore += (t.replies || []).length * 3); // Forum replies
-        (gr.polls || []).forEach(p => p.options.forEach(o => activityScore += (o.votes || []).length * 4)); // Votes
-        
-        // Game plays on group games
-        const groupGames = db.games.filter(g => g.groupId === gr.id);
-        groupGames.forEach(g => activityScore += (g.plays || 0));
+        const activityScore = computeGroupActivityScore(gr);
 
         return {
             id: gr.id, name: gr.name, description: gr.description, 
@@ -2758,7 +2823,11 @@ app.get('/api/groups/playtime-wars', (req, res) => {
         .slice(0, 10);
     const lastWeek = state.history[0] || null;
     if (changed) saveDB();
-    res.json({ currentWeek: { weekKey: currentWeekKey, standings }, lastWeek });
+    res.json({
+        currentWeek: { weekKey: currentWeekKey, standings },
+        lastWeek,
+        payoutModel: { pool: 7500, basePerUser: PLAYTIME_WAR_BASE_PER_USER, top3Bonus: PLAYTIME_WAR_BONUS_TOP3, firstExtraBonus: PLAYTIME_WAR_BONUS_FIRST_EXTRA }
+    });
 });
 
 app.post('/api/groups', requireAuth, (req, res) => {
@@ -2793,6 +2862,7 @@ app.post('/api/groups', requireAuth, (req, res) => {
         affiliates: [], affiliateRequests: [], enemies: [], allowEnemies: false,
         coins: 0, level: 1, xp: 0, createdAt: Date.now()
     };
+    ensureGroupBadgeFields(newGroup);
     db.groups.push(newGroup);
     saveDB();
     res.json({ message: 'Group created!', groupId: newGroup.id, coins: creator.coins, cost: GROUP_CREATE_COST });
@@ -2927,6 +2997,7 @@ app.post('/api/groups/:id/roles', requireAuth, (req, res) => {
 
 
 app.get('/api/groups/:id', (req, res) => {
+    runDailyGroupBadgeChecks();
     const group = db.groups.find(gr => gr.id === req.params.id);
     if (!group) return res.status(404).json({ error: 'Group not found.' });
 
@@ -3003,7 +3074,9 @@ res.json({
     polls: group.polls || [],
     nextLevelReqs: { xp: reqXp, members: reqMembers },
     shout: group.shout || null,
-    bannedUsers: bannedUsersList
+    bannedUsers: bannedUsersList,
+    badges: group.badges || [],
+    badgeMeta: GROUP_BADGES
 });
 });
 
@@ -3385,7 +3458,9 @@ app.post('/api/groups/:id/payout', requireAuth, (req, res) => {
     if (!(group.members || []).some(m => m.userId === targetUser.id)) return res.status(400).json({ error: 'Target user must be a group member.' });
     
     group.coins -= amt;
+    group.totalPayoutSpent = (group.totalPayoutSpent || 0) + amt;
     targetUser.coins += amt;
+    if (group.totalPayoutSpent >= 5000) grantGroupBadge(group, 'BIG_SPENDERS');
     saveDB();
     res.json({ success: true, groupCoins: group.coins });
 });
@@ -4341,25 +4416,36 @@ app.post('/api/games/:id/tip-creator', requireAuth, (req, res) => {
     if (!game) return res.status(404).json({ error: 'Game not found.' });
     const sender = db.users.find(u => u.id === req.userId);
     const creator = db.users.find(u => u.id === game.authorId);
-    if (!sender || !creator) return res.status(404).json({ error: 'Account not found.' });
-    if (sender.id === creator.id) return res.status(400).json({ error: 'You cannot tip your own game.' });
+    const group = game.groupId ? db.groups.find(gr => gr.id === game.groupId) : null;
+    if (!sender || (!creator && !group)) return res.status(404).json({ error: 'Account not found.' });
+    if (!group && sender.id === creator.id) return res.status(400).json({ error: 'You cannot tip your own game.' });
     const amount = Math.floor(Number(req.body?.amount));
     if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Invalid tip amount.' });
     if ((sender.coins || 0) < amount) return res.status(400).json({ error: 'Not enough SculptCoins.' });
     sender.coins -= amount;
-    creator.coins = (creator.coins || 0) + amount;
+    let recipientName = creator ? creator.username : 'Creator';
+    let recipientType = 'creator';
+    if (group) {
+        group.coins = (group.coins || 0) + amount;
+        recipientName = `${group.name} Group Funds`;
+        recipientType = 'group_funds';
+    } else {
+        creator.coins = (creator.coins || 0) + amount;
+    }
     if (!game.creatorTips) game.creatorTips = { total: 0, entries: [] };
     game.creatorTips.total += amount;
     game.creatorTips.entries.unshift({
         id: crypto.randomUUID(),
         fromUserId: sender.id,
         fromUsername: sender.username,
+        recipientType,
+        recipientGroupId: group ? group.id : null,
         amount,
         timestamp: Date.now()
     });
     game.creatorTips.entries = game.creatorTips.entries.slice(0, 100);
     saveDB();
-    res.json({ success: true, amount, creatorName: creator.username, coins: sender.coins });
+    res.json({ success: true, amount, creatorName: recipientName, coins: sender.coins });
 });
 app.post('/api/games/:id/like', requireAuth, (req, res) => {
     const game = db.games.find(g => g.id === req.params.id);

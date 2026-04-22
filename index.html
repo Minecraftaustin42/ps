@@ -16,11 +16,7 @@
         /* 2016 Nostalgic CSS / Flat Design Era */
         @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Audiowide&display=swap');
 
-        body { font-family: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; background:
-            radial-gradient(circle at 12% 8%, rgba(191,219,254,0.38), transparent 34%),
-            radial-gradient(circle at 86% 12%, rgba(167,139,250,0.30), transparent 32%),
-            radial-gradient(circle at 70% 84%, rgba(224,231,255,0.40), transparent 30%),
-            linear-gradient(180deg, #ffffff 0%, #f8f8ff 55%, #eef1f8 100%);
+        body { font-family: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #eef2ff;
             margin: 0; padding: 0; color: #302a4a; overflow-x: hidden; touch-action: manipulation; }
 
         /* Navbar */
@@ -1013,6 +1009,7 @@
                         <h2 style="margin: 0;" id="gd-name">Group Name</h2>
                     </div>
                     <div style="display:flex; gap:10px;">
+                        <button class="btn btn-sm btn-warning" id="btn-group-badges" onclick="openGroupBadgesModal()">Badges</button>
                         <button class="btn btn-sm btn-info" id="btn-group-join" style="display:none;" onclick="joinGroup()">Join Group</button>
                         <button class="btn btn-sm btn-danger" id="btn-group-leave" style="display:none;" onclick="leaveGroup()">Leave Group</button>
                         <button class="btn btn-sm btn-danger" id="btn-group-report" style="display:none;">Report Group</button>
@@ -4068,6 +4065,28 @@ else if (viewId === 'groups') {
         // --- Groups System (Advanced) ---
         let currentGroupData = null;
         let currentCategoryId = null;
+        const GROUP_BADGE_META = {
+            PLAYTIME_REWARDS_GROUP_WINNER: { title: 'Playtime Rewards Group Winner', desc: 'Earned by finishing #1 in weekly Playtime Wars.', unlock: 'Reach rank #1 in weekly Playtime Wars standings.' },
+            TOP3_MOST_ACTIVE: { title: 'Top 3 Most Active', desc: 'This group reached top 3 in activity rankings.', unlock: 'Place in the top 3 most active groups.' },
+            TOP3_MOST_MEMBERS: { title: 'Top 3 Most Members', desc: 'This group reached top 3 by member count.', unlock: 'Place in the top 3 groups by members.' },
+            NUMBER1_MOST_ACTIVE: { title: '#1 Most Active', desc: 'This group reached #1 most active on Playsculpt.', unlock: 'Hold the #1 most active position.' },
+            NUMBER1_MOST_MEMBERS: { title: '#1 Most Members', desc: 'This group reached #1 by member count.', unlock: 'Hold the #1 most members position.' },
+            STREAK_CHAMPION: { title: 'Streak Champion', desc: 'Held #1 in most active or most members for at least 3 days.', unlock: 'Stay #1 in either category for 3 consecutive UTC days.' },
+            GAME_FACTORY: { title: 'Game Factory', desc: 'Group has at least 10 games at the same time.', unlock: 'Own or publish 10+ group games.' },
+            WEALTHIEST_GROUP: { title: 'Wealthiest Group', desc: 'Held the #1 richest group spot for 3 days in a row.', unlock: 'Be #1 in group funds for 3 consecutive UTC days.' },
+            BIG_SPENDERS: { title: 'Big Spenders', desc: 'Spent at least 5,000 SC through group payouts.', unlock: 'Use group payouts to spend 5,000+ SC in total.' },
+            OG_GROUP: { title: 'OG Group', desc: 'One of the first 50 groups created on Playsculpt.', unlock: 'Reserved for launch-era groups.' }
+        };
+        const openGroupBadgesModal = () => {
+            if (!currentGroupData) return;
+            const earned = new Set(currentGroupData.badges || []);
+            const rows = Object.entries(GROUP_BADGE_META).map(([key, meta]) => {
+                const unlocked = earned.has(key);
+                return `${unlocked ? '✅' : '🔒'} ${meta.title}\n${unlocked ? meta.desc : `Locked: ${meta.unlock}`}`;
+            });
+            showModal('Group Badges', rows.join('\n\n'));
+        };
+        window.openGroupBadgesModal = openGroupBadgesModal;
 
     const renderGroupCard = (gr) => {
             const isPlatformAdmin = !!(currentUser && ['austin', 'nick', 'admin'].includes(String(currentUser.username || '').toLowerCase()));
@@ -4611,6 +4630,8 @@ const openLuckySpin = () => {
                 }
 
                 document.getElementById('gd-coins').innerText = group.groupCoins || 0;
+                const badgeBtn = document.getElementById('btn-group-badges');
+                if (badgeBtn) badgeBtn.innerText = `Badges (${(group.badges || []).length}/${Object.keys(GROUP_BADGE_META).length})`;
                 // --- BUTTONS & PERMS ---
                 const joinBtn = document.getElementById('btn-group-join');
                 const leaveBtn = document.getElementById('btn-group-leave');
