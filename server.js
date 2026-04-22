@@ -256,6 +256,78 @@ const sanitizeNumber = (value, fallback, min, max) => {
     return Math.max(min, Math.min(max, num));
 };
 const isSculptCityAccount = (user) => String(user?.username || '').toLowerCase() === 'sculpt city';
+const PLAYTIME_WAR_REWARDS = [2500, 1800, 1400, 1100, 900, 800, 700, 600, 500, 400];
+const getUtcWeekKey = (timestamp = Date.now()) => {
+    const d = new Date(timestamp);
+    const utc = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    const dayNum = utc.getUTCDay() || 7;
+    utc.setUTCDate(utc.getUTCDate() + 4 - dayNum);
+    const yearStart = new Date(Date.UTC(utc.getUTCFullYear(), 0, 1));
+    const weekNo = Math.ceil((((utc - yearStart) / 86400000) + 1) / 7);
+    return `${utc.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
+};
+const ensurePlaytimeWarState = () => {
+    if (!db.systemState) db.systemState = { restartUntil: 0, restartMessage: '' };
+    if (!db.systemState.playtimeWars) db.systemState.playtimeWars = { weeks: {}, settledWeeks: {}, history: [] };
+    if (!db.systemState.playtimeWars.weeks) db.systemState.playtimeWars.weeks = {};
+    if (!db.systemState.playtimeWars.settledWeeks) db.systemState.playtimeWars.settledWeeks = {};
+    if (!Array.isArray(db.systemState.playtimeWars.history)) db.systemState.playtimeWars.history = [];
+    return db.systemState.playtimeWars;
+};
+const settlePlaytimeWarsIfNeeded = () => {
+    const state = ensurePlaytimeWarState();
+    const currentWeekKey = getUtcWeekKey(Date.now());
+    const keys = Object.keys(state.weeks).sort();
+    let changed = false;
+    keys.forEach((weekKey) => {
+        if (weekKey >= currentWeekKey || state.settledWeeks[weekKey]) return;
+        const weekData = state.weeks[weekKey] || { groups: {} };
+        const entries = Object.entries(weekData.groups || {})
+            .map(([groupId, payload]) => {
+                const group = db.groups.find(gr => gr.id === groupId);
+                const contributors = Object.entries(payload.contributors || {})
+                    .map(([userId, seconds]) => {
+                        const user = db.users.find(u => u.id === userId);
+                        return { userId, username: user ? user.username : 'Unknown', seconds: Number(seconds) || 0 };
+                    })
+                    .sort((a, b) => b.seconds - a.seconds);
+                return {
+                    groupId,
+                    groupName: group ? group.name : 'Unknown Group',
+                    totalSeconds: Number(payload.totalSeconds) || 0,
+                    contributors
+                };
+            })
+            .filter(r => r.totalSeconds > 0)
+            .sort((a, b) => b.totalSeconds - a.totalSeconds)
+            .slice(0, 10);
+        const winners = [];
+        entries.forEach((entry, idx) => {
+            const rewardCoins = PLAYTIME_WAR_REWARDS[idx] || 0;
+            if (rewardCoins <= 0) return;
+            const topTen = entry.contributors.slice(0, 10);
+            if (!topTen.length) return;
+            const per = Math.floor(rewardCoins / topTen.length);
+            let rem = rewardCoins % topTen.length;
+            const rewardedContributors = topTen.map((c) => {
+                const payout = per + (rem > 0 ? 1 : 0);
+                if (rem > 0) rem--;
+                const u = db.users.find(x => x.id === c.userId);
+                if (u) u.coins = (u.coins || 0) + payout;
+                return { userId: c.userId, username: c.username, seconds: c.seconds, payout };
+            });
+            winners.push({ rank: idx + 1, groupId: entry.groupId, groupName: entry.groupName, rewardCoins, totalSeconds: entry.totalSeconds, rewardedContributors });
+        });
+        state.history.unshift({ weekKey, awardedAt: Date.now(), winners });
+        state.history = state.history.slice(0, 8);
+        state.settledWeeks[weekKey] = true;
+        changed = true;
+    });
+    Object.keys(state.weeks)
+        .filter(k => state.settledWeeks[k] && state.history.every(h => h.weekKey !== k))
+        .forEach(k => delete state.weeks[k]);
+    return changed;
+};
 
 const TRUST_LEVELS = [
     { level: 1, name: 'New', tp: 0 }, { level: 2, name: 'Starter', tp: 20 }, { level: 3, name: 'Player', tp: 50 }, { level: 4, name: 'Active', tp: 90 }, { level: 5, name: 'Friendly', tp: 140 },
@@ -2660,6 +2732,34 @@ app.get('/api/groups/search', (req, res) => {
         .slice(0, 20);
     res.json(results);
 });
+app.get('/api/groups/playtime-wars', (req, res) => {
+    const changed = settlePlaytimeWarsIfNeeded();
+    const state = ensurePlaytimeWarState();
+    const currentWeekKey = getUtcWeekKey(Date.now());
+    const currentGroups = state.weeks[currentWeekKey]?.groups || {};
+    const standings = Object.entries(currentGroups)
+        .map(([groupId, payload]) => {
+            const group = db.groups.find(gr => gr.id === groupId);
+            const contributors = Object.entries(payload.contributors || {})
+                .map(([userId, seconds]) => {
+                    const user = db.users.find(u => u.id === userId);
+                    return { userId, username: user ? user.username : 'Unknown', seconds: Number(seconds) || 0 };
+                })
+                .sort((a, b) => b.seconds - a.seconds);
+            return {
+                groupId,
+                groupName: group ? group.name : 'Unknown Group',
+                totalSeconds: Number(payload.totalSeconds) || 0,
+                topContributor: contributors[0] || null
+            };
+        })
+        .filter(r => r.totalSeconds > 0)
+        .sort((a, b) => b.totalSeconds - a.totalSeconds)
+        .slice(0, 10);
+    const lastWeek = state.history[0] || null;
+    if (changed) saveDB();
+    res.json({ currentWeek: { weekKey: currentWeekKey, standings }, lastWeek });
+});
 
 app.post('/api/groups', requireAuth, (req, res) => {
     const { name, description, logo } = req.body;
@@ -4003,6 +4103,7 @@ app.post('/api/ping', requireAuth, (req, res) => {
 // Analytics Data Receiver
 // Analytics Data Receiver
 app.post('/api/games/:id/track', requireAuth, (req, res) => {
+    settlePlaytimeWarsIfNeeded();
     const game = db.games.find(g => g.id === req.params.id);
     if (!game) return res.status(404).json({ error: 'Game not found.' });
 
@@ -4059,6 +4160,19 @@ app.post('/api/games/:id/track', requireAuth, (req, res) => {
             }
         }
         game.creatorRewards.playerSeconds[req.userId] = next;
+    }
+    if (game.groupId && safeSessionSeconds > 0) {
+        const group = db.groups.find(gr => gr.id === game.groupId);
+        const isMember = !!group && (group.members || []).some(m => m.userId === req.userId);
+        if (group && isMember) {
+            const state = ensurePlaytimeWarState();
+            const weekKey = getUtcWeekKey(Date.now());
+            if (!state.weeks[weekKey]) state.weeks[weekKey] = { groups: {} };
+            if (!state.weeks[weekKey].groups[group.id]) state.weeks[weekKey].groups[group.id] = { totalSeconds: 0, contributors: {} };
+            const row = state.weeks[weekKey].groups[group.id];
+            row.totalSeconds += safeSessionSeconds;
+            row.contributors[req.userId] = (row.contributors[req.userId] || 0) + safeSessionSeconds;
+        }
     }
 
     saveDB();
@@ -4221,6 +4335,31 @@ app.post('/api/games/:id/play', requireAuth, (req, res) => {
     awardBadge(req.userId, 'Gamer');
     saveDB();
     res.json({ success: true, coins: user.coins, streakReward, playStreak: user.playStreak, basePlayCoins });
+});
+app.post('/api/games/:id/tip-creator', requireAuth, (req, res) => {
+    const game = db.games.find(g => g.id === req.params.id);
+    if (!game) return res.status(404).json({ error: 'Game not found.' });
+    const sender = db.users.find(u => u.id === req.userId);
+    const creator = db.users.find(u => u.id === game.authorId);
+    if (!sender || !creator) return res.status(404).json({ error: 'Account not found.' });
+    if (sender.id === creator.id) return res.status(400).json({ error: 'You cannot tip your own game.' });
+    const amount = Math.floor(Number(req.body?.amount));
+    if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'Invalid tip amount.' });
+    if ((sender.coins || 0) < amount) return res.status(400).json({ error: 'Not enough SculptCoins.' });
+    sender.coins -= amount;
+    creator.coins = (creator.coins || 0) + amount;
+    if (!game.creatorTips) game.creatorTips = { total: 0, entries: [] };
+    game.creatorTips.total += amount;
+    game.creatorTips.entries.unshift({
+        id: crypto.randomUUID(),
+        fromUserId: sender.id,
+        fromUsername: sender.username,
+        amount,
+        timestamp: Date.now()
+    });
+    game.creatorTips.entries = game.creatorTips.entries.slice(0, 100);
+    saveDB();
+    res.json({ success: true, amount, creatorName: creator.username, coins: sender.coins });
 });
 app.post('/api/games/:id/like', requireAuth, (req, res) => {
     const game = db.games.find(g => g.id === req.params.id);
