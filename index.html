@@ -16,11 +16,7 @@
         /* 2016 Nostalgic CSS / Flat Design Era */
         @import url('https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Audiowide&display=swap');
 
-        body { font-family: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; background:
-            radial-gradient(circle at 12% 8%, rgba(255,182,193,0.35), transparent 34%),
-            radial-gradient(circle at 86% 12%, rgba(147,197,253,0.35), transparent 32%),
-            radial-gradient(circle at 70% 84%, rgba(196,181,253,0.35), transparent 30%),
-            linear-gradient(180deg, #ffffff 0%, #f8f8ff 55%, #eef1f8 100%);
+        body { font-family: 'Open Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #eef2ff;
             margin: 0; padding: 0; color: #302a4a; overflow-x: hidden; touch-action: manipulation; }
 
         /* Navbar */
@@ -41,7 +37,7 @@
         /* Container & Cards */
         .container { max-width: 1160px; margin: 22px auto; padding: 14px; }
         .card { background: #ffffff; border-radius: 12px; border: 1px solid #e2e4ee; padding: 22px; box-shadow: 0 8px 24px rgba(94,88,137,0.11); margin-bottom: 16px; color:#312c4c; position:relative; overflow:hidden; }
-        .card::before { content:''; position:absolute; left:0; right:0; top:0; height:4px; background:linear-gradient(90deg,#8b5cf6,#ec4899,#22c55e,#3b82f6,#f59e0b); opacity:0.85; }
+        .card::before { content:''; position:absolute; left:0; right:0; top:0; height:4px; background:linear-gradient(90deg,#4f46e5,#6366f1,#60a5fa,#a78bfa,#ffffff); opacity:0.85; }
         .card-title { margin-top: 0; border-bottom: 1px solid #ececf3; padding-bottom: 12px; margin-bottom: 16px; color: #4a3aa7; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;}
 
 
@@ -89,7 +85,7 @@
 
 
 /* Sculpt City CSS */
-        #city-loading-screen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #ff9a9e, #fecfef, #a1c4fd, #c2e9fb); background-size: 400% 400%; animation: gradientBG 5s ease infinite; z-index: 100000; display: none; flex-direction: column; align-items: center; justify-content: center; color: #fff; font-family: 'Open Sans', sans-serif; text-align: center; }
+        #city-loading-screen { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: linear-gradient(135deg, #312e81, #4f46e5, #60a5fa, #f8fafc); background-size: 300% 300%; animation: gradientBG 6s ease infinite; z-index: 100000; display: none; flex-direction: column; align-items: center; justify-content: center; color: #fff; font-family: 'Open Sans', sans-serif; text-align: center; }
         @keyframes gradientBG { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
         .city-logo { font-size: 60px; font-weight: 900; letter-spacing: 2px; text-shadow: 0 4px 15px rgba(0,0,0,0.2); margin-bottom: 10px; }
         .city-spinner { width: 50px; height: 50px; border: 6px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
@@ -978,6 +974,10 @@
 
                     <h3 style="border-bottom: 1px solid #eee; padding-bottom: 5px;">Recently Created</h3>
                     <div id="groups-recent-grid" class="game-grid mb-10"></div>
+
+                    <h3 style="border-bottom: 1px solid #eee; padding-bottom: 5px;">Playtime Wars</h3>
+                    <p style="font-size:12px; color:#666; margin-top:0;">Track total weekly group playtime. Top groups each week win SculptCoin rewards split across their top 10 contributors.</p>
+                    <div id="playtime-wars-grid" class="game-grid mb-10"></div>
                 </div>
             </div>
         </div>
@@ -1009,6 +1009,7 @@
                         <h2 style="margin: 0;" id="gd-name">Group Name</h2>
                     </div>
                     <div style="display:flex; gap:10px;">
+                        <button class="btn btn-sm btn-warning" id="btn-group-badges" onclick="openGroupBadgesModal()">Badges</button>
                         <button class="btn btn-sm btn-info" id="btn-group-join" style="display:none;" onclick="joinGroup()">Join Group</button>
                         <button class="btn btn-sm btn-danger" id="btn-group-leave" style="display:none;" onclick="leaveGroup()">Leave Group</button>
                         <button class="btn btn-sm btn-danger" id="btn-group-report" style="display:none;">Report Group</button>
@@ -1035,8 +1036,10 @@
 </div>
                 <div style="display: flex; gap: 20px; align-items: center; margin-bottom: 20px;">
                     <p style="font-size: 16px; color: #f39c12; font-weight: bold; margin: 0;">Group Funds: <span id="gd-coins">0</span> SC</p>
+                    <p id="gd-weekly-revenue" style="font-size:13px; color:#4338ca; font-weight:700; margin:0; display:none;"></p>
                     <span id="gd-my-role" class="badge-pill badge-genre" style="display:none;"></span>
                 </div>
+                <div id="gd-badges-showcase" style="display:flex; flex-wrap:wrap; gap:6px; margin:-8px 0 14px 0;"></div>
 
                 <div class="tabs" style="margin-bottom: 20px;">
                     <div class="tab active" onclick="switchGroupTab('wall')">Group Wall</div>
@@ -1394,6 +1397,7 @@
                     <span style="color: #e74c3c;">Play Streak: <span id="dash-play-streak">0</span> days</span>
                 </h3>
                 <p style="margin:6px 0 0 0; color:#475569; font-size:13px;">Last signup: <strong id="dash-last-signup">Loading...</strong></p>
+                <p id="dash-shield-tip" style="margin:8px 0 0 0; color:#1f2937; font-size:13px;">SculptShield Tip: Keep chat respectful and report unsafe behavior.</p>
                 <div style="display: flex; gap: 15px; margin-top: 20px; flex-wrap: wrap;">
                     <button class="btn btn-success" onclick="navigate('create')">Launch 3D Game Editor</button>
                     <button class="btn" onclick="navigate('library')">Play Community Games</button>
@@ -1717,7 +1721,6 @@
                     <p style="margin: 0; color:#0f766e; font-weight:bold;">TrustPoints: <span id="prof-trust">0</span> TP</p>
                     <p style="margin: 0; color:#4338ca; font-weight:bold;">SculptShield Level: <span id="prof-trust-level">1 — New</span></p>
                     <button id="prof-shield-surprise-btn" class="btn btn-sm btn-info" style="display:none;" onclick="claimSculptShieldSurprise()">SculptShield Surprise</button>
-                    <p id="prof-shield-tip" style="margin: 0; color:#1f2937; font-size:12px; max-width:520px;">SculptShield Tip: Keep chat respectful and report unsafe behavior.</p>
                     <p style="margin: 0;"><strong>Followers:</strong> <span id="prof-followers-count">0</span></p>
                     <p style="margin: 0;"><strong>Friends:</strong> <span id="prof-friends-count">0</span></p>
                     <p style="margin: 0;"><strong>Games:</strong> <span id="prof-count">0</span></p>
@@ -3113,6 +3116,7 @@ if (currentUser && !data.groupCoins) {
                     <div class="game-actions">
                         <button class="btn btn-success btn-sm" onclick="loadGame('${g.id}')">Play</button>
                         <button class="btn btn-info btn-sm" onclick="toggleBookmark('${g.id}')">Save</button>
+                        <button class="btn btn-warning btn-sm" onclick="tipGameCreatorPrompt('${g.id}', '${String(g.title || '').replace(/'/g, "\\'")}')">Tip Creator</button>
                         <button class="btn btn-danger btn-sm" onclick="openReportModal({ category:'games', categoryLabel:'Games', targetType:'game', targetId:'${g.id}', targetName:'${String(g.title).replace(/'/g, "\\'")}' })">Report</button>
                       ${showEdit ? `
     <button class="btn btn-warning btn-sm" onclick="editExistingGame('${g.id}')">Edit</button>
@@ -3123,6 +3127,27 @@ if (currentUser && !data.groupCoins) {
                 </div>
             `;
         };
+        const tipGameCreatorPrompt = (gameId, gameTitle) => {
+            if (!currentUser) return showModal('Tip Creator', 'Please login to send SculptCoin tips.');
+            showModal(
+                'Tip Creator',
+                `Send a custom SculptCoin tip to the creator of "${gameTitle || 'this game'}".\n\n100% goes to the developer.`,
+                'Send Tip',
+                async (rawAmount) => {
+                    const amount = parseInt(rawAmount, 10);
+                    if (!Number.isFinite(amount) || amount <= 0) return showModal('Tip Creator', 'Please enter a valid positive amount.');
+                    try {
+                        const res = await apiCall(`/games/${gameId}/tip-creator`, 'POST', { amount });
+                        if (currentUser) currentUser.coins = res.coins;
+                        updateCoinsUI();
+                        showModal('Tip Sent', `You tipped ${res.amount} SC to ${res.creatorName}.`);
+                    } catch (e) {}
+                },
+                true,
+                true
+            );
+        };
+        window.tipGameCreatorPrompt = tipGameCreatorPrompt;
 
 
         const renderGameGrid = (containerId, games = [], showEdit = false, emptyText = 'No games found yet.') => {
@@ -3696,6 +3721,7 @@ checkDailyReward(); // <-- ADDED HERE
 loadSponsoredAssetsDashboard(); // Add this line!
                 loadDashboardGames();
                 loadPlatformMeta();
+                loadSculptShieldTip();
                 loadDashboardFriends(false);
                 if (!dashboardFriendsInterval) dashboardFriendsInterval = setInterval(() => {
                     if (document.getElementById('view-dashboard').classList.contains('active')) loadDashboardFriends(true);
@@ -4042,6 +4068,28 @@ else if (viewId === 'groups') {
         // --- Groups System (Advanced) ---
         let currentGroupData = null;
         let currentCategoryId = null;
+        const GROUP_BADGE_META = {
+            PLAYTIME_REWARDS_GROUP_WINNER: { title: 'Playtime Rewards Group Winner', desc: 'Earned by finishing #1 in weekly Playtime Wars.', unlock: 'Reach rank #1 in weekly Playtime Wars standings.' },
+            TOP3_MOST_ACTIVE: { title: 'Top 3 Most Active', desc: 'This group reached top 3 in activity rankings.', unlock: 'Place in the top 3 most active groups.' },
+            TOP3_MOST_MEMBERS: { title: 'Top 3 Most Members', desc: 'This group reached top 3 by member count.', unlock: 'Place in the top 3 groups by members.' },
+            NUMBER1_MOST_ACTIVE: { title: '#1 Most Active', desc: 'This group reached #1 most active on Playsculpt.', unlock: 'Hold the #1 most active position.' },
+            NUMBER1_MOST_MEMBERS: { title: '#1 Most Members', desc: 'This group reached #1 by member count.', unlock: 'Hold the #1 most members position.' },
+            STREAK_CHAMPION: { title: 'Streak Champion', desc: 'Held #1 in most active or most members for at least 3 days.', unlock: 'Stay #1 in either category for 3 consecutive UTC days.' },
+            GAME_FACTORY: { title: 'Game Factory', desc: 'Group has at least 10 games at the same time.', unlock: 'Own or publish 10+ group games.' },
+            WEALTHIEST_GROUP: { title: 'Wealthiest Group', desc: 'Held the #1 richest group spot for 3 days in a row.', unlock: 'Be #1 in group funds for 3 consecutive UTC days.' },
+            BIG_SPENDERS: { title: 'Big Spenders', desc: 'Spent at least 5,000 SC through group payouts.', unlock: 'Use group payouts to spend 5,000+ SC in total.' },
+            OG_GROUP: { title: 'OG Group', desc: 'One of the first 50 groups created on Playsculpt.', unlock: 'Reserved for launch-era groups.' }
+        };
+        const openGroupBadgesModal = () => {
+            if (!currentGroupData) return;
+            const earned = new Set(currentGroupData.badges || []);
+            const rows = Object.entries(GROUP_BADGE_META).map(([key, meta]) => {
+                const unlocked = earned.has(key);
+                return `${unlocked ? '✅' : '🔒'} ${meta.title}\n${unlocked ? meta.desc : `Locked: ${meta.unlock}`}`;
+            });
+            showModal('Group Badges', rows.join('\n\n'));
+        };
+        window.openGroupBadgesModal = openGroupBadgesModal;
 
     const renderGroupCard = (gr) => {
             const isPlatformAdmin = !!(currentUser && ['austin', 'nick', 'admin'].includes(String(currentUser.username || '').toLowerCase()));
@@ -4063,6 +4111,7 @@ else if (viewId === 'groups') {
         const loadGroupsList = async () => {
             try {
                 const data = await apiCall('/groups/discover');
+                const wars = await apiCall('/groups/playtime-wars');
                 document.getElementById('group-discover-container').style.display = 'block';
                 document.getElementById('group-search-results-container').style.display = 'none';
 
@@ -4077,6 +4126,32 @@ else if (viewId === 'groups') {
                 const rGrid = document.getElementById('groups-recent-grid');
                 rGrid.innerHTML = data.recent.length === 0 ? '<p>No groups found.</p>' : '';
                 data.recent.forEach(gr => rGrid.innerHTML += renderGroupCard(gr));
+
+                const wGrid = document.getElementById('playtime-wars-grid');
+                const currentRows = wars?.currentWeek?.standings || [];
+                const lastRows = wars?.lastWeek?.winners || [];
+                wGrid.innerHTML = '';
+                if (!currentRows.length && !lastRows.length) {
+                    wGrid.innerHTML = '<p style="color:#777;">No Playtime Wars data yet. Group members can start playing now to set the board.</p>';
+                } else {
+                    currentRows.slice(0, 8).forEach((row, idx) => {
+                        wGrid.innerHTML += `
+                            <div class="game-card">
+                                <h3 style="margin:0 0 8px 0; text-align:left;">#${idx + 1} ${row.groupName}</h3>
+                                <p style="font-size:12px; text-align:left; color:#4f46e5;">${Math.round((row.totalSeconds || 0) / 60)} mins this week</p>
+                                <p style="font-size:11px; text-align:left; color:#666; margin:0;">Top contributor: ${(row.topContributor && row.topContributor.username) || '—'}</p>
+                            </div>
+                        `;
+                    });
+                    if (lastRows.length) {
+                        wGrid.innerHTML += `
+                            <div class="game-card" style="grid-column: 1 / -1; text-align:left;">
+                                <h3 style="margin-top:0;">Last Week Winners (${wars.lastWeek.weekKey})</h3>
+                                ${(lastRows || []).slice(0, 5).map(w => `<p style="margin:4px 0; font-size:12px;">#${w.rank} ${w.groupName} — Reward ${w.rewardCoins} SC</p>`).join('')}
+                            </div>
+                        `;
+                    }
+                }
             } catch(e) {}
         };
 
@@ -4558,6 +4633,25 @@ const openLuckySpin = () => {
                 }
 
                 document.getElementById('gd-coins').innerText = group.groupCoins || 0;
+                const badgeBtn = document.getElementById('btn-group-badges');
+                if (badgeBtn) badgeBtn.innerText = `Badges (${(group.badges || []).length}/${Object.keys(GROUP_BADGE_META).length})`;
+                const badgesShowcase = document.getElementById('gd-badges-showcase');
+                if (badgesShowcase) {
+                    const unlocked = (group.badges || []).map(k => GROUP_BADGE_META[k]?.title || k);
+                    badgesShowcase.innerHTML = unlocked.length
+                        ? unlocked.slice(0, 6).map(t => `<span class="badge-pill" style="background:linear-gradient(135deg,#22c55e,#16a34a);">${t}</span>`).join('')
+                        : '<span style="font-size:12px; color:#777;">No badges unlocked yet.</span>';
+                }
+                const revenueEl = document.getElementById('gd-weekly-revenue');
+                if (revenueEl) {
+                    if (group.weeklyRevenueRecap && group.weeklyRevenueRecap.canView) {
+                        revenueEl.style.display = 'inline-block';
+                        revenueEl.innerText = `Weekly Revenue: Your group earned ${group.weeklyRevenueRecap.coins || 0} SC this week`;
+                    } else {
+                        revenueEl.style.display = 'none';
+                        revenueEl.innerText = '';
+                    }
+                }
                 // --- BUTTONS & PERMS ---
                 const joinBtn = document.getElementById('btn-group-join');
                 const leaveBtn = document.getElementById('btn-group-leave');
@@ -5921,7 +6015,7 @@ const dom = edRenderer.domElement;
         let currentProfileData = null;
         let currentProfTab = 'created';
         const loadSculptShieldTip = async () => {
-            const tipEl = document.getElementById('prof-shield-tip');
+            const tipEl = document.getElementById('dash-shield-tip');
             if (!tipEl) return;
             try {
                 const data = await apiCall('/sculptshield/tip', 'GET');
@@ -5964,7 +6058,6 @@ const dom = edRenderer.domElement;
                 if (!username) return;
                 const profile = await apiCall(`/users/${encodeURIComponent(username)}`);
                 currentProfileData = profile;
-                loadSculptShieldTip();
 
                 document.getElementById('prof-username').innerText = profile.username;
                 document.getElementById('prof-count').innerText = profile.gamesCreated;
