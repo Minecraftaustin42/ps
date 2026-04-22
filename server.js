@@ -272,10 +272,13 @@ const GROUP_BADGES = {
     BIG_SPENDERS: { title: 'Big Spenders', desc: 'Spend at least 5,000 group funds through payouts.' },
     OG_GROUP: { title: 'OG Group', desc: 'Be one of the first 50 groups created on Playsculpt.' }
 };
+const HIDDEN_PROFILE_BIO_SNIPPET = 'Automated Roblox import account for platform load simulation.';
+const cleanProfileBio = (bio = '') => String(bio || '').replace(HIDDEN_PROFILE_BIO_SNIPPET, '').trim();
 const ensureGroupBadgeFields = (group) => {
     if (!Array.isArray(group.badges)) group.badges = [];
     if (!group.badgeState) group.badgeState = { activeFirstStreakDays: 0, membersFirstStreakDays: 0, wealthFirstStreakDays: 0, lastDailyKey: '' };
     if (typeof group.totalPayoutSpent !== 'number') group.totalPayoutSpent = 0;
+    if (!group.weeklyRevenue) group.weeklyRevenue = {};
 };
 const grantGroupBadge = (group, badgeKey) => {
     ensureGroupBadgeFields(group);
@@ -290,6 +293,17 @@ const computeGroupActivityScore = (gr) => {
     (gr.polls || []).forEach(p => (p.options || []).forEach(o => activityScore += (o.votes || []).length * 4));
     db.games.filter(g => g.groupId === gr.id).forEach(g => activityScore += (g.plays || 0));
     return activityScore;
+};
+const addGroupWeeklyRevenue = (group, amount) => {
+    if (!group || !Number.isFinite(Number(amount)) || Number(amount) <= 0) return;
+    ensureGroupBadgeFields(group);
+    const weekKey = getUtcWeekKey(Date.now());
+    group.weeklyRevenue[weekKey] = (group.weeklyRevenue[weekKey] || 0) + Number(amount);
+};
+const getGroupWeeklyRevenue = (group) => {
+    ensureGroupBadgeFields(group);
+    const weekKey = getUtcWeekKey(Date.now());
+    return Number(group.weeklyRevenue[weekKey] || 0);
 };
 const runDailyGroupBadgeChecks = () => {
     if (!db.groups || !db.groups.length) return false;
@@ -400,6 +414,7 @@ const settlePlaytimeWarsIfNeeded = () => {
     return changed;
 };
 runDailyGroupBadgeChecks();
+db.users.forEach(u => { u.profileBio = cleanProfileBio(u.profileBio || ''); });
 
 const TRUST_LEVELS = [
     { level: 1, name: 'New', tp: 0 }, { level: 2, name: 'Starter', tp: 20 }, { level: 3, name: 'Player', tp: 50 }, { level: 4, name: 'Active', tp: 90 }, { level: 5, name: 'Friendly', tp: 140 },
@@ -1202,8 +1217,10 @@ const addGroupXp = (group, amount) => {
         // Level Up Rewards
         if (group.level % 10 === 0) {
             group.coins = (group.coins || 0) + 250; // Milestone Reward
+            addGroupWeeklyRevenue(group, 250);
         } else {
             group.coins = (group.coins || 0) + 100; // Standard Reward
+            addGroupWeeklyRevenue(group, 100);
         }
         
         // Recalculate for next iteration in case of massive XP gain
@@ -1736,7 +1753,7 @@ if (db.moderation && db.moderation.warnings && db.moderation.warnings[user.id]) 
     const gainedDailyTrust = maybeAwardTrustDaily(user);
     if (gainedDailyTrust) saveDB();
     const trustMeta = normalizeUserTrust(user);
-    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: user.profileBio || '', equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' }, coins: user.coins, trustPoints: trustMeta.trustPoints, trustLevel: trustMeta.trustLevel, trustLevelName: trustMeta.trustLevelName, pendingWarnings });
+    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: cleanProfileBio(user.profileBio || ''), equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' }, coins: user.coins, trustPoints: trustMeta.trustPoints, trustLevel: trustMeta.trustLevel, trustLevelName: trustMeta.trustLevelName, pendingWarnings });
 });
 
 app.post('/api/logout', requireAuth, (req, res) => {
@@ -1774,11 +1791,11 @@ app.put('/api/me/settings', requireAuth, (req, res) => {
         user.hash = hash;
     }
     if (profileBio !== undefined) {
-        user.profileBio = String(profileBio || '').slice(0, 400);
+        user.profileBio = cleanProfileBio(String(profileBio || '').slice(0, 400));
     }
 
     saveDB();
-    res.json({ message: 'Settings updated successfully!', username: user.username, profileBio: user.profileBio || '' });
+    res.json({ message: 'Settings updated successfully!', username: user.username, profileBio: cleanProfileBio(user.profileBio || '') });
 });
 
 app.delete('/api/admin/users/:username', requireAuth, (req, res) => {
@@ -2101,7 +2118,7 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({
         id: user.id, username: user.username, color: user.color, badges: user.badges, coins: user.coins, ...normalizeUserTrust(user),
         requests, friends: friendsList, recentlyPlayed: recentGames, bookmarkedGames, 
-        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [], equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: user.profileBio || '', profileItems: user.profileItems || [], equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
+        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [], equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: cleanProfileBio(user.profileBio || ''), profileItems: user.profileItems || [], equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
         lastSpinDate: user.lastSpinDate,
         loginStreak: user.loginStreak, playStreak: user.playStreak, lastLoginDate: user.lastLoginDate,
         toolboxInventory: user.toolboxInventory,
@@ -2667,7 +2684,7 @@ app.get('/api/users/:username', (req, res) => {
         games: userGames.map(g => ({ id: g.id, title: g.title, authorName: g.authorName, genre: g.genre, likes: g.likes.length, plays: g.plays, groupId: g.groupId })),
         likedGames: likedGames.map(g => ({ id: g.id, title: g.title, authorName: g.authorName, genre: g.genre, likes: g.likes.length, plays: g.plays, groupId: g.groupId })),
         inventory: inventoryItems,
-        profileBio: user.profileBio || '',
+        profileBio: cleanProfileBio(user.profileBio || ''),
         createdAt: user.createdAt || Date.now(),
         friendsCount: (user.friends || []).length,
         lastSeenAt: getUserLastSeenAt(user.id),
@@ -3025,6 +3042,7 @@ app.get('/api/groups/:id', (req, res) => {
         myPerms = getGroupMemberPerms(group, reqUserId);
         myRank = getGroupMemberRank(group, reqUserId);
     }
+    const canViewWeeklyRevenue = !!(reqUserId && (group.ownerId === reqUserId || (myPerms && Object.values(myPerms).some(Boolean))));
 
     // Map relations to names for the UI
     const mapGroupBasic = (gId) => {
@@ -3076,7 +3094,8 @@ res.json({
     shout: group.shout || null,
     bannedUsers: bannedUsersList,
     badges: group.badges || [],
-    badgeMeta: GROUP_BADGES
+    badgeMeta: GROUP_BADGES,
+    weeklyRevenueRecap: canViewWeeklyRevenue ? { canView: true, weekKey: getUtcWeekKey(Date.now()), coins: getGroupWeeklyRevenue(group) } : { canView: false }
 });
 });
 
@@ -4377,7 +4396,7 @@ app.post('/api/games/:id/play', requireAuth, (req, res) => {
         game.plays = (game.plays || 0) + 1;
         if (game.groupId) {
             const group = db.groups.find(gr => gr.id === game.groupId);
-            if (group) { group.coins = (group.coins || 0) + 1; addGroupXp(group, 4); }
+            if (group) { group.coins = (group.coins || 0) + 1; addGroupWeeklyRevenue(group, 1); addGroupXp(group, 4); }
         }
     }
     ensureChallengeProgressDay(user);
@@ -4427,6 +4446,7 @@ app.post('/api/games/:id/tip-creator', requireAuth, (req, res) => {
     let recipientType = 'creator';
     if (group) {
         group.coins = (group.coins || 0) + amount;
+        addGroupWeeklyRevenue(group, amount);
         recipientName = `${group.name} Group Funds`;
         recipientType = 'group_funds';
     } else {

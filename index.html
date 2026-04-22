@@ -1036,8 +1036,10 @@
 </div>
                 <div style="display: flex; gap: 20px; align-items: center; margin-bottom: 20px;">
                     <p style="font-size: 16px; color: #f39c12; font-weight: bold; margin: 0;">Group Funds: <span id="gd-coins">0</span> SC</p>
+                    <p id="gd-weekly-revenue" style="font-size:13px; color:#4338ca; font-weight:700; margin:0; display:none;"></p>
                     <span id="gd-my-role" class="badge-pill badge-genre" style="display:none;"></span>
                 </div>
+                <div id="gd-badges-showcase" style="display:flex; flex-wrap:wrap; gap:6px; margin:-8px 0 14px 0;"></div>
 
                 <div class="tabs" style="margin-bottom: 20px;">
                     <div class="tab active" onclick="switchGroupTab('wall')">Group Wall</div>
@@ -1395,6 +1397,7 @@
                     <span style="color: #e74c3c;">Play Streak: <span id="dash-play-streak">0</span> days</span>
                 </h3>
                 <p style="margin:6px 0 0 0; color:#475569; font-size:13px;">Last signup: <strong id="dash-last-signup">Loading...</strong></p>
+                <p id="dash-shield-tip" style="margin:8px 0 0 0; color:#1f2937; font-size:13px;">SculptShield Tip: Keep chat respectful and report unsafe behavior.</p>
                 <div style="display: flex; gap: 15px; margin-top: 20px; flex-wrap: wrap;">
                     <button class="btn btn-success" onclick="navigate('create')">Launch 3D Game Editor</button>
                     <button class="btn" onclick="navigate('library')">Play Community Games</button>
@@ -1718,7 +1721,6 @@
                     <p style="margin: 0; color:#0f766e; font-weight:bold;">TrustPoints: <span id="prof-trust">0</span> TP</p>
                     <p style="margin: 0; color:#4338ca; font-weight:bold;">SculptShield Level: <span id="prof-trust-level">1 — New</span></p>
                     <button id="prof-shield-surprise-btn" class="btn btn-sm btn-info" style="display:none;" onclick="claimSculptShieldSurprise()">SculptShield Surprise</button>
-                    <p id="prof-shield-tip" style="margin: 0; color:#1f2937; font-size:12px; max-width:520px;">SculptShield Tip: Keep chat respectful and report unsafe behavior.</p>
                     <p style="margin: 0;"><strong>Followers:</strong> <span id="prof-followers-count">0</span></p>
                     <p style="margin: 0;"><strong>Friends:</strong> <span id="prof-friends-count">0</span></p>
                     <p style="margin: 0;"><strong>Games:</strong> <span id="prof-count">0</span></p>
@@ -3719,6 +3721,7 @@ checkDailyReward(); // <-- ADDED HERE
 loadSponsoredAssetsDashboard(); // Add this line!
                 loadDashboardGames();
                 loadPlatformMeta();
+                loadSculptShieldTip();
                 loadDashboardFriends(false);
                 if (!dashboardFriendsInterval) dashboardFriendsInterval = setInterval(() => {
                     if (document.getElementById('view-dashboard').classList.contains('active')) loadDashboardFriends(true);
@@ -4632,6 +4635,23 @@ const openLuckySpin = () => {
                 document.getElementById('gd-coins').innerText = group.groupCoins || 0;
                 const badgeBtn = document.getElementById('btn-group-badges');
                 if (badgeBtn) badgeBtn.innerText = `Badges (${(group.badges || []).length}/${Object.keys(GROUP_BADGE_META).length})`;
+                const badgesShowcase = document.getElementById('gd-badges-showcase');
+                if (badgesShowcase) {
+                    const unlocked = (group.badges || []).map(k => GROUP_BADGE_META[k]?.title || k);
+                    badgesShowcase.innerHTML = unlocked.length
+                        ? unlocked.slice(0, 6).map(t => `<span class="badge-pill" style="background:linear-gradient(135deg,#22c55e,#16a34a);">${t}</span>`).join('')
+                        : '<span style="font-size:12px; color:#777;">No badges unlocked yet.</span>';
+                }
+                const revenueEl = document.getElementById('gd-weekly-revenue');
+                if (revenueEl) {
+                    if (group.weeklyRevenueRecap && group.weeklyRevenueRecap.canView) {
+                        revenueEl.style.display = 'inline-block';
+                        revenueEl.innerText = `Weekly Revenue: Your group earned ${group.weeklyRevenueRecap.coins || 0} SC this week`;
+                    } else {
+                        revenueEl.style.display = 'none';
+                        revenueEl.innerText = '';
+                    }
+                }
                 // --- BUTTONS & PERMS ---
                 const joinBtn = document.getElementById('btn-group-join');
                 const leaveBtn = document.getElementById('btn-group-leave');
@@ -5995,7 +6015,7 @@ const dom = edRenderer.domElement;
         let currentProfileData = null;
         let currentProfTab = 'created';
         const loadSculptShieldTip = async () => {
-            const tipEl = document.getElementById('prof-shield-tip');
+            const tipEl = document.getElementById('dash-shield-tip');
             if (!tipEl) return;
             try {
                 const data = await apiCall('/sculptshield/tip', 'GET');
@@ -6038,7 +6058,6 @@ const dom = edRenderer.domElement;
                 if (!username) return;
                 const profile = await apiCall(`/users/${encodeURIComponent(username)}`);
                 currentProfileData = profile;
-                loadSculptShieldTip();
 
                 document.getElementById('prof-username').innerText = profile.username;
                 document.getElementById('prof-count').innerText = profile.gamesCreated;
