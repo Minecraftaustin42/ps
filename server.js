@@ -119,7 +119,8 @@ if (typeof db.lastUserIdNum === 'undefined') {
             if (typeof u.equippedProfileTheme === 'undefined') u.equippedProfileTheme = null;
             if (typeof u.equippedProfileCosmetic === 'undefined') u.equippedProfileCosmetic = null;
             if (!Array.isArray(u.equippedProfileCosmetics)) u.equippedProfileCosmetics = (u.equippedProfileCosmetic ? [u.equippedProfileCosmetic] : []);
-            if (!u.profilePinnedGame) u.profilePinnedGame = { enabled: false, gameId: null, description: '' };
+            if (!u.profilePinnedGame) u.profilePinnedGame = { enabled: false, gameId: null, description: '', backgroundColor: '#f8fbff' };
+            if (!u.profilePinnedGame.backgroundColor || !/^#[0-9a-fA-F]{6}$/.test(String(u.profilePinnedGame.backgroundColor || ''))) u.profilePinnedGame.backgroundColor = '#f8fbff';
             if (!u.profileWorld) u.profileWorld = { equipped: false, gameIds: [], assetIds: [], greeting: '' };
             if (typeof u.profileBio === 'undefined') u.profileBio = '';
             if (!u.profileTextStyle) u.profileTextStyle = { font: 'default', color: '#2c3e50' };
@@ -1437,7 +1438,7 @@ userIdNum: userIdNum,
         followers: [], friends: [], friendRequests: [],
         color: '#e74c3c', recentlyPlayed: [], badges: [], messages: [],
         reportCrates: [], accurateReports: 0,
-        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, equippedProfileCosmetics: [], profilePinnedGame: { enabled: false, gameId: null, description: '' }, profileWorld: { equipped: false, gameIds: [], assetIds: [], greeting: '' }, profileBio: '', profileTextStyle: { font: 'default', color: '#2c3e50' }, lastSeenAt: Date.now(), primaryGroupId: null, coins: 0, trustPoints: 0, trustLevel: 1, lastTrustDailyAt: 0, lastTrustGainAt: 0, trustHistory: []
+        inventory: [], clothingInventory: [], equippedShirt: null, equippedPants: null, challengeClaims: {}, challengeProgress: { dayKey: '', partsPlaced: 0, publishes: 0, cityVisits: 0, gamesPlayed: 0, likesGiven: 0, friendsAdded: 0, messagesSent: 0, groupPosts: 0, purchases: 0 }, academyProgress: {}, academyClaims: {}, jamVotes: {}, blueprintFavorites: [], bookmarks: [], equipped: null, profileItems: [], equippedProfileTheme: null, equippedProfileCosmetic: null, equippedProfileCosmetics: [], profilePinnedGame: { enabled: false, gameId: null, description: '', backgroundColor: '#f8fbff' }, profileWorld: { equipped: false, gameIds: [], assetIds: [], greeting: '' }, profileBio: '', profileTextStyle: { font: 'default', color: '#2c3e50' }, lastSeenAt: Date.now(), primaryGroupId: null, coins: 0, trustPoints: 0, trustLevel: 1, lastTrustDailyAt: 0, lastTrustGainAt: 0, trustHistory: []
     };
     db.users.push(newUser);
     markLastSignup(newUser.username, 'user');
@@ -1660,7 +1661,8 @@ app.post('/api/moderate/reports/:id', requireAuth, requireModerator, requireModP
 
     if (action === 'approve') {
         const reporter = db.users.find(u => u.id === report.reporterId);
-        if (reporter) {
+        const isLiveLogoReview = report.category === 'live_channel_logo';
+        if (reporter && !isLiveLogoReview) {
             if (!Array.isArray(reporter.reportCrates)) reporter.reportCrates = [];
             reporter.reportCrates.push({
                 id: crypto.randomUUID(),
@@ -1675,7 +1677,7 @@ app.post('/api/moderate/reports/:id', requireAuth, requireModerator, requireModP
                 awardBadge(reporter.id, 'Guardian');
             }
         }
-        if (report.category === 'live_channel_logo' && report.targetId) {
+        if (isLiveLogoReview && report.targetId) {
             const acc = (db.live?.accounts || []).find(a => a.id === report.targetId);
             if (acc && acc.pendingLogo) {
                 acc.logo = acc.pendingLogo;
@@ -1753,7 +1755,7 @@ if (db.moderation && db.moderation.warnings && db.moderation.warnings[user.id]) 
     const gainedDailyTrust = maybeAwardTrustDaily(user);
     if (gainedDailyTrust) saveDB();
     const trustMeta = normalizeUserTrust(user);
-    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: cleanProfileBio(user.profileBio || ''), equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' }, coins: user.coins, trustPoints: trustMeta.trustPoints, trustLevel: trustMeta.trustLevel, trustLevelName: trustMeta.trustLevelName, pendingWarnings });
+    res.json({ token: req.headers.authorization, username: user.username, userId: user.id, color: user.color, equipped: user.equipped, equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: cleanProfileBio(user.profileBio || ''), equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '', backgroundColor: '#f8fbff' }, coins: user.coins, trustPoints: trustMeta.trustPoints, trustLevel: trustMeta.trustLevel, trustLevelName: trustMeta.trustLevelName, pendingWarnings });
 });
 
 app.post('/api/logout', requireAuth, (req, res) => {
@@ -2118,7 +2120,7 @@ app.get('/api/me', requireAuth, (req, res) => {
   res.json({
         id: user.id, username: user.username, color: user.color, badges: user.badges, coins: user.coins, ...normalizeUserTrust(user),
         requests, friends: friendsList, recentlyPlayed: recentGames, bookmarkedGames, 
-        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [], equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: cleanProfileBio(user.profileBio || ''), profileItems: user.profileItems || [], equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
+        unreadMessages: (user.messages || []).length, equipped: user.equipped, myGroups, clothingInventory: user.clothingInventory || [], equippedShirt: user.equippedShirt || null, equippedPants: user.equippedPants || null, profileBio: cleanProfileBio(user.profileBio || ''), profileItems: user.profileItems || [], equippedProfileTheme: user.equippedProfileTheme || null, equippedProfileCosmetic: user.equippedProfileCosmetic || null, equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []), profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' }, profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '', backgroundColor: '#f8fbff' },
         lastSpinDate: user.lastSpinDate,
         loginStreak: user.loginStreak, playStreak: user.playStreak, lastLoginDate: user.lastLoginDate,
         toolboxInventory: user.toolboxInventory,
@@ -2692,7 +2694,7 @@ app.get('/api/users/:username', (req, res) => {
         equippedProfileCosmetic: user.equippedProfileCosmetic || null,
         equippedProfileCosmetics: user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []),
         profileTextStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' },
-        profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
+        profilePinnedGame: user.profilePinnedGame || { enabled: false, gameId: null, description: '', backgroundColor: '#f8fbff' },
         profileWorld: user.profileWorld || { equipped: false, gameIds: [], assetIds: [], greeting: '' },
         pinnedGameData: pinnedGame ? { id: pinnedGame.id, title: pinnedGame.title } : null,
         equipped: user.equipped,
@@ -3501,7 +3503,7 @@ app.get('/api/profile-store', requireAuth, (req, res) => {
         themes: PROFILE_THEME_CATALOG.map(t => ({ ...t, owned: owned.has(t.id), equipped: user.equippedProfileTheme === t.id })),
         cosmetics: PROFILE_COSMETIC_CATALOG.map(c => ({ ...c, owned: owned.has(c.id), equipped: equippedSet.has(c.id) })),
         textStyle: user.profileTextStyle || { font: 'default', color: '#2c3e50' },
-        pinned: user.profilePinnedGame || { enabled: false, gameId: null, description: '' },
+        pinned: user.profilePinnedGame || { enabled: false, gameId: null, description: '', backgroundColor: '#f8fbff' },
         profileWorld: user.profileWorld || { equipped: false, gameIds: [], assetIds: [], greeting: '' },
         games
     });
@@ -3548,7 +3550,7 @@ app.post('/api/profile-store/equip-cosmetic', requireAuth, (req, res) => {
     if (alreadyEquipped) {
         user.equippedProfileCosmetics = user.equippedProfileCosmetics.filter(id => id !== item.id);
         if (item.id === 'cosmetic_pinned_game_feature') {
-            if (!user.profilePinnedGame) user.profilePinnedGame = { enabled: false, gameId: null, description: '' };
+            if (!user.profilePinnedGame) user.profilePinnedGame = { enabled: false, gameId: null, description: '', backgroundColor: '#f8fbff' };
             user.profilePinnedGame.enabled = false;
         }
         if (item.id === 'cosmetic_profile_worlds') {
@@ -3573,17 +3575,18 @@ app.post('/api/profile-store/pinned-game', requireAuth, (req, res) => {
     const user = db.users.find(u => u.id === req.userId);
     const equipped = new Set(user.equippedProfileCosmetics || (user.equippedProfileCosmetic ? [user.equippedProfileCosmetic] : []));
     if (!equipped.has('cosmetic_pinned_game_feature')) return res.status(403).json({ error: 'Pinned Game cosmetic must be equipped.' });
-    const { gameId, description, enabled } = req.body || {};
-    if (!user.profilePinnedGame) user.profilePinnedGame = { enabled: false, gameId: null, description: '' };
+    const { gameId, description, enabled, backgroundColor } = req.body || {};
+    if (!user.profilePinnedGame) user.profilePinnedGame = { enabled: false, gameId: null, description: '', backgroundColor: '#f8fbff' };
     const desc = String(description || '').slice(0, 180);
+    const bg = /^#[0-9a-fA-F]{6}$/.test(String(backgroundColor || '').trim()) ? String(backgroundColor).trim() : (user.profilePinnedGame.backgroundColor || '#f8fbff');
     if (!enabled) {
-        user.profilePinnedGame = { enabled: false, gameId: null, description: desc };
+        user.profilePinnedGame = { enabled: false, gameId: null, description: desc, backgroundColor: bg };
         saveDB();
         return res.json({ success: true, profilePinnedGame: user.profilePinnedGame });
     }
     const game = (db.games || []).find(g => g.id === gameId && g.authorId === user.id);
     if (!game) return res.status(400).json({ error: 'You can only pin games you created.' });
-    user.profilePinnedGame = { enabled: true, gameId: game.id, description: desc };
+    user.profilePinnedGame = { enabled: true, gameId: game.id, description: desc, backgroundColor: bg };
     saveDB();
     res.json({ success: true, profilePinnedGame: user.profilePinnedGame });
 });

@@ -1715,12 +1715,15 @@
 	                </div>
                 <div id="prof-pinned-game" style="display:none; margin-top:10px; padding:12px; border:1px solid #e6edf3; border-radius:8px; background:#f8fbff;"></div>
                 <p id="prof-bio" style="margin:10px 0 0 0; color:#555; white-space:pre-wrap;"></p>
+                <div id="prof-bio-editor" style="display:none; margin-top:8px;">
+                    <textarea id="prof-bio-input" class="form-control" maxlength="400" placeholder="Update your profile bio..." style="min-height:72px;"></textarea>
+                    <button class="btn btn-sm btn-info mt-10" onclick="saveProfileBioFromProfile()">Save Bio</button>
+                </div>
 
                 <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap;">
                     <p style="margin: 0; color:#e74c3c; font-weight:bold;">Play Streak: <span id="prof-streak">0</span></p>
                     <p style="margin: 0; color:#0f766e; font-weight:bold;">TrustPoints: <span id="prof-trust">0</span> TP</p>
                     <p style="margin: 0; color:#4338ca; font-weight:bold;">SculptShield Level: <span id="prof-trust-level">1 — New</span></p>
-                    <button id="prof-shield-surprise-btn" class="btn btn-sm btn-info" style="display:none;" onclick="claimSculptShieldSurprise()">SculptShield Surprise</button>
                     <p style="margin: 0;"><strong>Followers:</strong> <span id="prof-followers-count">0</span></p>
                     <p style="margin: 0;"><strong>Friends:</strong> <span id="prof-friends-count">0</span></p>
                     <p style="margin: 0;"><strong>Games:</strong> <span id="prof-count">0</span></p>
@@ -6024,26 +6027,17 @@ const dom = edRenderer.domElement;
                 tipEl.innerText = 'SculptShield Tip: Keep chat respectful and report unsafe behavior.';
             }
         };
-        const claimSculptShieldSurprise = async () => {
-            if (!currentUser) return showModal('Login Required', 'Please login to use SculptShield Surprise.');
+        const saveProfileBioFromProfile = async () => {
+            if (!currentUser || !currentProfileData || currentUser.username !== currentProfileData.username) return;
+            const profileBio = (document.getElementById('prof-bio-input') || {}).value || '';
             try {
-                const data = await apiCall('/sculptshield/surprise', 'POST');
-                if (data?.coins !== undefined) currentUser.coins = Number(data.coins) || 0;
-                if (data?.trustPoints !== undefined) currentUser.trustPoints = Number(data.trustPoints) || 0;
-                if (data?.trustLevel !== undefined) currentUser.trustLevel = Number(data.trustLevel) || 1;
-                if (data?.trustLevelName !== undefined) currentUser.trustLevelName = String(data.trustLevelName || 'New');
-                updateCoinsUI();
-                if (currentProfileData?.username) await loadProfile(currentProfileData.username);
-                const rewardText = [];
-                if (Number(data?.rewardCoins || 0) > 0) rewardText.push(`+${Number(data.rewardCoins)} SC`);
-                if (Number(data?.rewardTrust || 0) > 0) rewardText.push(`+${Number(data.rewardTrust)} TP`);
-                showModal(
-                    data?.eventTitle || 'SculptShield Surprise',
-                    `${data?.eventText || 'You received a random safe bonus!'}\n${rewardText.length ? `Rewards: ${rewardText.join(' & ')}` : 'Rewards: Protection bonus only'}\nTip: ${data?.tip || 'Keep your account secure and report unsafe behavior.'}`
-                );
+                const res = await apiCall('/me/settings', 'PUT', { profileBio });
+                if (currentUser && typeof res.profileBio === 'string') currentUser.profileBio = res.profileBio;
+                showModal('Saved', 'Your profile bio was updated.');
+                loadProfile(currentUser.username);
             } catch (e) {}
         };
-        window.claimSculptShieldSurprise = claimSculptShieldSurprise;
+        window.saveProfileBioFromProfile = saveProfileBioFromProfile;
         const switchProfileTab = (tabId) => {
             currentProfTab = tabId;
             document.querySelectorAll('#view-profile .tab').forEach(t => t.classList.remove('active'));
@@ -6064,12 +6058,17 @@ const dom = edRenderer.domElement;
 document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 document.getElementById('prof-trust').innerText = Number(profile.trustPoints || 0);
                 document.getElementById('prof-trust-level').innerText = `${Number(profile.trustLevel || 1)} — ${profile.trustLevelName || 'New'}`;
-                const surpriseBtn = document.getElementById('prof-shield-surprise-btn');
-                if (surpriseBtn) surpriseBtn.style.display = (currentUser && currentUser.username && currentUser.username.toLowerCase() === String(profile.username || '').toLowerCase()) ? 'inline-flex' : 'none';
                 document.getElementById('prof-followers-count').innerText = profile.followersCount;
                 document.getElementById('prof-friends-count').innerText = profile.friendsCount || 0;
                 document.getElementById('prof-online-dot').className = `status-dot ${profile.isOnline ? 'online' : 'offline'}`;
                 document.getElementById('prof-bio').innerText = profile.profileBio || '';
+                const canEditBio = !!(currentUser && currentUser.username && String(currentUser.username).toLowerCase() === String(profile.username || '').toLowerCase());
+                const bioEditor = document.getElementById('prof-bio-editor');
+                if (bioEditor) bioEditor.style.display = canEditBio ? 'block' : 'none';
+                if (canEditBio) {
+                    const bioInput = document.getElementById('prof-bio-input');
+                    if (bioInput) bioInput.value = profile.profileBio || '';
+                }
                 document.getElementById('prof-join-date').innerText = new Date(profile.createdAt || Date.now()).toLocaleDateString();
                 const ls = Number(profile.lastSeenAt || 0);
                 document.getElementById('prof-last-seen').innerText = profile.isOnline ? 'Online now' : (ls ? new Date(ls).toLocaleString() : 'Unknown');
@@ -6107,8 +6106,12 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                     const canShowPinned = equippedCosmetics.includes('cosmetic_pinned_game_feature') && profile.profilePinnedGame && profile.profilePinnedGame.enabled && profile.pinnedGameData;
                     if (canShowPinned) {
                         pinnedWrap.style.display = 'block';
+                        pinnedWrap.style.background = profile.profilePinnedGame.backgroundColor || '#f8fbff';
                         pinnedWrap.innerHTML = `<div style="font-size:11px; color:#6b7280; margin-bottom:4px;">Pinned Game</div><div style="font-weight:700; color:#1f2937;">${profile.pinnedGameData.title}</div><div style="font-size:12px; color:#4b5563; margin-top:4px;">${profile.profilePinnedGame.description || ''}</div>`;
-                    } else pinnedWrap.style.display = 'none';
+                    } else {
+                        pinnedWrap.style.display = 'none';
+                        pinnedWrap.style.background = '#f8fbff';
+                    }
                 }
                 document.getElementById('prof-userid').innerText = currentProfileData.userIdNum || '?';
 
@@ -6707,12 +6710,19 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                 showModal('Pinned Game ID', `Enter game ID to pin:\n${data.games.map(g => `${g.id} — ${g.title}`).join('\n')}`, 'Next', (gameId) => {
                     if (!gameId) return;
                     showModal('Pinned Description', 'Write a short description:', 'Save', async (desc) => {
-                        try {
-                            await apiCall('/profile-store/pinned-game', 'POST', { enabled: true, gameId: String(gameId).trim(), description: String(desc || '').slice(0, 180) });
-                            showModal('Saved', 'Pinned game added to your profile.');
-                            if (currentUser) loadProfile(currentUser.username);
-                            loadInventoryTab();
-                        } catch (e) {}
+                        showModal('Pinned Card Background', 'Pick a hex color (example: #dbeafe).', 'Save', async (bgColor) => {
+                            try {
+                                await apiCall('/profile-store/pinned-game', 'POST', {
+                                    enabled: true,
+                                    gameId: String(gameId).trim(),
+                                    description: String(desc || '').slice(0, 180),
+                                    backgroundColor: String(bgColor || '').trim() || '#f8fbff'
+                                });
+                                showModal('Saved', 'Pinned game added to your profile.');
+                                if (currentUser) loadProfile(currentUser.username);
+                                loadInventoryTab();
+                            } catch (e) {}
+                        }, true, true);
                     }, true, true);
                 }, true, true);
             } catch (e) {}
