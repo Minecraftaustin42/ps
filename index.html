@@ -2049,7 +2049,7 @@
                         </div>
                       <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Sky Color:</label>
-                            <input type="color" id="ws-skycolor" class="form-control" style="padding:0; height:35px; cursor:pointer;" value="#8b9cab" onchange="updateWorldSettings()">
+                            <input type="color" id="ws-skycolor" class="form-control" style="padding:0; height:35px; cursor:pointer;" value="#bfe4ff" onchange="updateWorldSettings()">
                         </div>
                         <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Ambient Brightness:</label>
@@ -2057,7 +2057,7 @@
                         </div>
                         <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Sun Intensity:</label>
-                            <input type="number" id="ws-sun-intensity" class="form-control" value="1.1" step="0.1" onchange="updateWorldSettings()">
+                            <input type="number" id="ws-sun-intensity" class="form-control" value="0.12" step="0.05" onchange="updateWorldSettings()">
                         </div>
                         <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Fog Distance:</label>
@@ -2891,8 +2891,8 @@ async function safeFetch(url, options = {}) {
             if (key === 'brick') return IMAGE_TEXTURE_FILES['bricks'];
             if (key === 'wood') return IMAGE_TEXTURE_FILES['wood'];
             if (key === 'grass') return IMAGE_TEXTURE_FILES['grass'];
-            if (['slate', 'concrete', 'asphalt', 'marble', 'obsidian', 'lavarock', 'metal', 'carbonfiber', 'sand'].includes(key)) return IMAGE_TEXTURE_FILES['stone tiles'];
-            if (['plastic', 'smoothplastic'].includes(key)) return IMAGE_TEXTURE_FILES['wooden floor'];
+            if (['slate', 'concrete', 'asphalt', 'marble', 'obsidian', 'lavarock', 'metal', 'carbonfiber', 'sand', 'ice', 'glass'].includes(key)) return IMAGE_TEXTURE_FILES['stone tiles'];
+            if (['smoothplastic', 'neon', 'hologram'].includes(key)) return IMAGE_TEXTURE_FILES['wooden floor'];
             return null;
         };
         const getImageTextureForMaterial = (matType = '') => {
@@ -2942,11 +2942,12 @@ async function safeFetch(url, options = {}) {
         const getMaterialForType = (matType, colorHex) => {
             const c = new THREE.Color(colorHex || '#cccccc');
             c.setRGB(c.r, c.g, c.b);
+            const tex = getImageTextureForMaterial(matType);
 
-            if (matType === 'Neon') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#ffe066') });
-            if (matType === 'Hologram') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#66e5ff'), transparent: true, opacity: 0.38, wireframe: true });
+            if (matType === 'Neon') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#ffe066'), map: tex || null, combine: THREE.MultiplyOperation });
+            if (matType === 'Hologram') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#66e5ff'), map: tex || null, combine: THREE.MultiplyOperation, transparent: true, opacity: 0.38, wireframe: true });
             if (matType === 'Glass' || matType === 'Ice') {
-                return new THREE.MeshPhongMaterial({ color: c, transparent: true, opacity: matType === 'Glass' ? 0.38 : 0.56, shininess: 38, specular: new THREE.Color('#f2f7ff') });
+                return new THREE.MeshBasicMaterial({ color: c, map: tex || null, combine: THREE.MultiplyOperation, transparent: true, opacity: matType === 'Glass' ? 0.38 : 0.56 });
             }
 
             const nostalgicRules = {
@@ -2968,14 +2969,14 @@ async function safeFetch(url, options = {}) {
 
             const validTypes = Object.keys(nostalgicRules);
             const safeType = validTypes.includes(matType) ? matType : 'Plastic';
-            const rule = nostalgicRules[safeType];
-            const tex = getImageTextureForMaterial(safeType);
-
-            return new THREE.MeshPhongMaterial({
+            if (safeType === 'Plastic') {
+                return new THREE.MeshBasicMaterial({ color: c });
+            }
+            return new THREE.MeshBasicMaterial({
                 color: c,
+                map: tex || getImageTextureForMaterial('stone tiles'),
                 combine: THREE.MultiplyOperation,
-                shininess: rule.shininess,
-                specular: new THREE.Color(rule.specular)
+                transparent: false
             });
         };  // --------------------------------------
 
@@ -5349,6 +5350,8 @@ window.EnvironmentEngine = {
         }
         // Apply settings
         this.sunMesh.material.color.set(sunColor);
+        this.sunMesh.material.transparent = true;
+        this.sunMesh.material.opacity = 0.35;
         this.sunMesh.scale.set(sunSize, sunSize, sunSize);
         this.sunLight.color.set('#ffffff');
 
@@ -5712,7 +5715,7 @@ edRenderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: 
 window.EnvironmentEngine.applyRealisticSettings(edRenderer);
 
 window.EnvironmentEngine.generateClouds(edScene, '#ffffff');
-        window.EnvironmentEngine.updateSunAndTime(edScene, edCamera, NOSTALGIA_GRAPHICS_DEFAULTS.skyColor, 12, '#fff2cf', 42);
+        window.EnvironmentEngine.updateSunAndTime(edScene, edCamera, NOSTALGIA_GRAPHICS_DEFAULTS.skyColor, 12, '#fff9dc', 20);
 
             edRenderer.setPixelRatio(1);
             resizeCanvas(edRenderer, edCamera, 'editor-container-3d');
@@ -7869,9 +7872,9 @@ Keep playing together for more daily rewards.`, 'Aww!');
 const DEFAULT_STEP_HEIGHT = 1.0;
 const NOSTALGIA_GRAPHICS_DEFAULTS = {
     gravity: 0.08,
-    skyColor: '#8b9cab',
-    brightness: 0.45,
-    sunIntensity: 0.62,
+    skyColor: '#bfe4ff',
+    brightness: 0.75,
+    sunIntensity: 0.12,
     fogDistance: 860,
     graphicsQuality: 'performance',
     exposure: 1.0,
@@ -7898,7 +7901,7 @@ const areGlobalShadowsEnabled = (settings = {}) => settings?.globalShadows !== f
 const objectCastsShadow = (objData = {}, settings = {}) => areGlobalShadowsEnabled(settings) && objData?.castsShadow !== false && objData?.type !== 'floatingText';
 const withLegacyShadowDefaults = (obj = {}) => ({ ...obj, castsShadow: obj?.castsShadow !== false && obj?.type !== 'floatingText' });
 let edData = {
-            settings: normalizeNostalgiaWorldSettings({ skyColor: '#8b9cab', brightness: 0.45 }), // Nostalgic default look
+            settings: normalizeNostalgiaWorldSettings({ skyColor: '#bfe4ff', brightness: 0.75, sunIntensity: 0.12 }), // Daylight default look
             spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}},
             objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#6f8a62', material: 'Grass' }],
             uiLayout: [],
@@ -8997,7 +9000,7 @@ document.addEventListener('keydown', (e) => {
                 const shadow = areGlobalShadowsEnabled(edData.settings);
                 edScene.background = new THREE.Color(edData.settings.skyColor);
                 edScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = edData.settings.brightness; });
-                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.2, edData.settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
+                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.01, edData.settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
                 const fogDistance = Math.max(320, edData.settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
                 edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.28, fogDistance);
                 if (edRenderer) {
@@ -9929,7 +9932,7 @@ const promptClearEditor = () => {
      const clearEditor = () => {
             currentEditGameId = null;
             localEditedObjectIds.clear();
-            edData = { settings: normalizeNostalgiaWorldSettings({ skyColor: '#8b9cab', brightness: 0.45 }), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#6f8a62', material: 'Grass' }], uiLayout: [] };
+            edData = { settings: normalizeNostalgiaWorldSettings({ skyColor: '#bfe4ff', brightness: 0.75, sunIntensity: 0.12 }), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#6f8a62', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
@@ -10764,7 +10767,7 @@ const applyPlayGraphicsSettings = (settings = {}) => {
             playRenderer.shadowMap.enabled = shadowsEnabled;
             playRenderer.shadowMap.type = THREE.BasicShadowMap;
             if (playDirectionalLight) {
-                playDirectionalLight.intensity = Math.max(0.2, settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
+                playDirectionalLight.intensity = Math.max(0.01, settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
                 playDirectionalLight.castShadow = shadowsEnabled;
                 playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 768 : 512, quality === 'ultra' ? 768 : 512);
                 playDirectionalLight.shadow.radius = 1.4;
