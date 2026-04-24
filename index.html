@@ -46,7 +46,7 @@
         .explorer-item { padding: 8px 10px; border-bottom: 1px solid #eee; cursor: pointer; display: flex; justify-content: space-between; align-items: center; font-size: 13px; user-select: none; }
         .explorer-item:hover { background: #f1f8ff; }
         .explorer-item.selected { background: #3498db; color: white; }
-        .studio-layout { display: flex; position: relative; width: 100%; height: 68vh; min-height: 540px; background: #87CEEB; text-align: left;}
+        .studio-layout { display: flex; position: relative; width: 100%; height: 68vh; min-height: 540px; background: #8b9cab; text-align: left;}
         #editor-container-3d { touch-action: none; flex-grow: 1; height: 100%; position: relative; outline: none; margin-right: 250px;}
 
 
@@ -159,10 +159,10 @@
 
         /* 3D Canvas Container */
         .canvas-container { background: #34495e; padding: 10px; border-radius: 4px; display: inline-block; position: relative; width: 100%; box-sizing: border-box; }
-        #editor-container-3d, #play-container-3d { width: 100%; aspect-ratio: 16/9; max-height: 500px; background: #87CEEB; border-radius: 2px; position: relative; outline: none; }
+        #editor-container-3d, #play-container-3d { width: 100%; aspect-ratio: 16/9; max-height: 500px; background: #8b9cab; border-radius: 2px; position: relative; outline: none; }
 
         .acc-editor-container { display: flex; gap: 20px; align-items: flex-start; justify-content: center; flex-wrap: wrap; }
-        #acc-editor-3d { width: 100%; max-width: 400px; aspect-ratio: 1/1; background: #87CEEB; border-radius: 4px; border: 1px solid #ccc; cursor: crosshair; outline: none; }
+        #acc-editor-3d { width: 100%; max-width: 400px; aspect-ratio: 1/1; background: #8b9cab; border-radius: 4px; border: 1px solid #ccc; cursor: crosshair; outline: none; }
 
         /* Toolbar */
         .toolbar { background: #fff; padding: 10px; border: 1px solid #d8dee2; border-radius: 4px; margin-bottom: 15px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
@@ -2049,7 +2049,7 @@
                         </div>
                       <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Sky Color:</label>
-                            <input type="color" id="ws-skycolor" class="form-control" style="padding:0; height:35px; cursor:pointer;" value="#5b88a5" onchange="updateWorldSettings()">
+                            <input type="color" id="ws-skycolor" class="form-control" style="padding:0; height:35px; cursor:pointer;" value="#8b9cab" onchange="updateWorldSettings()">
                         </div>
                         <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Ambient Brightness:</label>
@@ -5265,8 +5265,7 @@ window.EnvironmentEngine = {
     // 1. Realistic Engine Adjustments
    applyRealisticSettings: function(renderer) {
         renderer.outputEncoding = THREE.sRGBEncoding;
-        renderer.toneMapping = THREE.LinearToneMapping;
-        renderer.toneMappingExposure = NOSTALGIA_GRAPHICS_DEFAULTS.exposure;
+        renderer.toneMapping = THREE.NoToneMapping;
         renderer.shadowMap.enabled = true;
         renderer.shadowMap.type = THREE.BasicShadowMap;
     },
@@ -5715,7 +5714,7 @@ window.EnvironmentEngine.applyRealisticSettings(edRenderer);
 window.EnvironmentEngine.generateClouds(edScene, '#ffffff');
         window.EnvironmentEngine.updateSunAndTime(edScene, edCamera, NOSTALGIA_GRAPHICS_DEFAULTS.skyColor, 12, '#fff2cf', 42);
 
-            edRenderer.setPixelRatio( window.devicePixelRatio );
+            edRenderer.setPixelRatio(1);
             resizeCanvas(edRenderer, edCamera, 'editor-container-3d');
             container.appendChild( edRenderer.domElement );
             initStudioMobileControls();
@@ -6280,8 +6279,7 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
             profileWorldRenderer.setSize(width, height);
             profileWorldRenderer.shadowMap.enabled = true;
             profileWorldRenderer.shadowMap.type = THREE.BasicShadowMap;
-            profileWorldRenderer.toneMapping = THREE.LinearToneMapping;
-            profileWorldRenderer.toneMappingExposure = 1.02;
+            profileWorldRenderer.toneMapping = THREE.NoToneMapping;
             profileWorldRenderer.physicallyCorrectLights = false;
             overlay.appendChild(profileWorldRenderer.domElement);
             const hemi = new THREE.HemisphereLight(0xffffff, 0xc3c8d0, 0.72); profileWorldScene.add(hemi);
@@ -6707,14 +6705,50 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
             try {
                 const data = await apiCall('/profile-store');
                 if (!data.games || data.games.length === 0) return showModal('Pinned Game', 'Create a game first so you can pin it.');
-                showModal('Pinned Game ID', `Enter game ID to pin:\n${data.games.map(g => `${g.id} — ${g.title}`).join('\n')}`, 'Next', (gameId) => {
-                    if (!gameId) return;
-                    showModal('Pinned Description', 'Write a short description:', 'Save', async (desc) => {
-                        showModal('Pinned Card Background', 'Pick a hex color (example: #dbeafe).', 'Save', async (bgColor) => {
+                const modalTitle = document.getElementById('modal-title');
+                const modalDesc = document.getElementById('modal-desc');
+                const inputContainer = document.getElementById('modal-input-container');
+                const modalInput = document.getElementById('modal-input');
+                const modalBtn = document.getElementById('modal-btn');
+                const modalCancel = document.getElementById('modal-cancel-btn');
+                modalTitle.innerText = 'Select Pinned Game';
+                modalDesc.innerText = 'Choose one of your games to pin on your profile.';
+                inputContainer.style.display = 'block';
+                modalInput.style.display = 'none';
+                let selectEl = document.getElementById('modal-pinned-game-select');
+                if (!selectEl) {
+                    selectEl = document.createElement('select');
+                    selectEl.id = 'modal-pinned-game-select';
+                    selectEl.className = 'form-control';
+                    inputContainer.appendChild(selectEl);
+                }
+                selectEl.innerHTML = data.games.map(g => `<option value="${g.id}">${g.title}</option>`).join('');
+                modalCancel.style.display = 'inline-block';
+                modalCancel.onclick = () => {
+                    modalInput.style.display = '';
+                    if (selectEl) selectEl.remove();
+                    modalCancel.onclick = () => closeModal();
+                    closeModal();
+                };
+                modalBtn.innerText = 'Next';
+                modalBtn.onclick = () => {
+                    const pickedGameId = selectEl.value;
+                    modalInput.style.display = '';
+                    selectEl.remove();
+                    modalCancel.onclick = () => closeModal();
+                    closeModal();
+                    if (!pickedGameId) return;
+                    showModal('Pinned Description', 'Write a short description:', 'Next', async (desc) => {
+                        const input = document.getElementById('modal-input');
+                        const originalType = input.type;
+                        input.type = 'color';
+                        input.value = '#f8fbff';
+                        showModal('Pinned Card Color', 'Pick your pinned game card color.', 'Save', async (bgColor) => {
+                            input.type = originalType;
                             try {
                                 await apiCall('/profile-store/pinned-game', 'POST', {
                                     enabled: true,
-                                    gameId: String(gameId).trim(),
+                                    gameId: pickedGameId,
                                     description: String(desc || '').slice(0, 180),
                                     backgroundColor: String(bgColor || '').trim() || '#f8fbff'
                                 });
@@ -6724,7 +6758,8 @@ document.getElementById('prof-streak').innerText = profile.playStreak || 0;
                             } catch (e) {}
                         }, true, true);
                     }, true, true);
-                }, true, true);
+                };
+                document.getElementById('message-modal').style.display = 'flex';
             } catch (e) {}
         };
         window.configurePinnedGameProfile = configurePinnedGameProfile;
@@ -7834,12 +7869,12 @@ Keep playing together for more daily rewards.`, 'Aww!');
 const DEFAULT_STEP_HEIGHT = 1.0;
 const NOSTALGIA_GRAPHICS_DEFAULTS = {
     gravity: 0.08,
-    skyColor: '#9ad8ff',
-    brightness: 0.9,
-    sunIntensity: 0.34,
+    skyColor: '#8b9cab',
+    brightness: 0.45,
+    sunIntensity: 0.62,
     fogDistance: 860,
     graphicsQuality: 'performance',
-    exposure: 0.9,
+    exposure: 1.0,
     globalShadows: true
 };
 const NOSTALGIA_PROFILE_VERSION = 3;
@@ -7863,9 +7898,9 @@ const areGlobalShadowsEnabled = (settings = {}) => settings?.globalShadows !== f
 const objectCastsShadow = (objData = {}, settings = {}) => areGlobalShadowsEnabled(settings) && objData?.castsShadow !== false && objData?.type !== 'floatingText';
 const withLegacyShadowDefaults = (obj = {}) => ({ ...obj, castsShadow: obj?.castsShadow !== false && obj?.type !== 'floatingText' });
 let edData = {
-            settings: normalizeNostalgiaWorldSettings({ skyColor: '#9ad8ff', brightness: 1.0 }), // Nostalgic default look
+            settings: normalizeNostalgiaWorldSettings({ skyColor: '#8b9cab', brightness: 0.45 }), // Nostalgic default look
             spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}},
-            objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }],
+            objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#6f8a62', material: 'Grass' }],
             uiLayout: [],
             genre: 'Sandbox'
         };
@@ -8967,8 +9002,7 @@ document.addEventListener('keydown', (e) => {
                 edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.28, fogDistance);
                 if (edRenderer) {
                     const q = (edData.settings.graphicsQuality === 'ultra') ? 'ultra' : 'performance';
-                    edRenderer.toneMapping = THREE.LinearToneMapping;
-                    edRenderer.toneMappingExposure = Math.max(0.75, Math.min(1.05, (edData.settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
+                    edRenderer.toneMapping = THREE.NoToneMapping;
                     edRenderer.outputEncoding = THREE.sRGBEncoding;
                     edRenderer.physicallyCorrectLights = false;
                     edRenderer.shadowMap.enabled = shadow;
@@ -9895,7 +9929,7 @@ const promptClearEditor = () => {
      const clearEditor = () => {
             currentEditGameId = null;
             localEditedObjectIds.clear();
-            edData = { settings: normalizeNostalgiaWorldSettings({ skyColor: '#9ad8ff', brightness: 1.0 }), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#55aa55', material: 'Grass' }], uiLayout: [] };
+            edData = { settings: normalizeNostalgiaWorldSettings({ skyColor: '#8b9cab', brightness: 0.45 }), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#6f8a62', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
@@ -10723,8 +10757,7 @@ const applyPlayGraphicsSettings = (settings = {}) => {
             const fogDistance = Math.max(320, settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
 
             playScene.fog = new THREE.Fog(settings.skyColor || NOSTALGIA_GRAPHICS_DEFAULTS.skyColor, fogDistance * 0.28, fogDistance);
-            playRenderer.toneMapping = THREE.LinearToneMapping;
-            playRenderer.toneMappingExposure = exposure;
+            playRenderer.toneMapping = THREE.NoToneMapping;
             playRenderer.outputEncoding = THREE.sRGBEncoding;
             playRenderer.physicallyCorrectLights = false;
             const shadowsEnabled = areGlobalShadowsEnabled(settings);
@@ -10789,7 +10822,7 @@ const startGame = () => {
                 playScene.add( dirLight );
 
                 playRenderer = new THREE.WebGLRenderer( { antialias: true } );
-                playRenderer.setPixelRatio( window.devicePixelRatio );
+                playRenderer.setPixelRatio(1);
                 resizeCanvas(playRenderer, playCamera, 'play-container-3d');
                 container.appendChild( playRenderer.domElement );
 
@@ -11188,7 +11221,7 @@ updatePlayFullscreenButton();
                     message: (msg, title = 'Script') => showModal(title, String(msg || '')),
                     getGravity: () => safeNum(activeLevel?.settings?.gravity, 0.08),
                     setGravity: (value = 0.08) => { if (activeLevel?.settings) activeLevel.settings.gravity = Math.max(0, Math.min(5, safeNum(value, 0.08))); },
-                    setSkyColor: (hex = '#87CEEB') => { if (activeLevel?.settings) activeLevel.settings.skyColor = String(hex); if (playScene) playScene.background = new THREE.Color(String(hex)); }
+                    setSkyColor: (hex = '#8b9cab') => { if (activeLevel?.settings) activeLevel.settings.skyColor = String(hex); if (playScene) playScene.background = new THREE.Color(String(hex)); }
                 },
                 floatingText: {
                     create: (cfg = {}) => {
@@ -14091,7 +14124,7 @@ Your Playsculpt Live account is directly tied to your main account, and all acti
             const thumbnailData = edRenderer.domElement.toDataURL('image/jpeg', 0.6);
 
 // FIX: Restore the actual sky color instead of null (black)
-            edScene.background = new THREE.Color(edData.settings.skyColor || '#87CEEB');
+            edScene.background = new THREE.Color(edData.settings.skyColor || '#8b9cab');
             editorMeshes.forEach(m => m.visible = true);
             if(window.terrainMesh) window.terrainMesh.visible = true;
             if(customGizmo) customGizmo.visible = true;
@@ -14528,14 +14561,14 @@ const toggleOutputPanel = () => {
             if (!mount || authSceneRenderer || typeof THREE === 'undefined') return;
 
             const scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB);
+            scene.background = new THREE.Color(0x8b9cab);
 
             authSceneCamera = new THREE.PerspectiveCamera(58, mount.clientWidth / mount.clientHeight, 0.1, 1000);
             authSceneCamera.position.set(0, 13, 38);
             authSceneCamera.lookAt(0, 4, 0);
 
             authSceneRenderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-            authSceneRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+            authSceneRenderer.setPixelRatio(1);
             authSceneRenderer.setSize(mount.clientWidth, mount.clientHeight);
             mount.appendChild(authSceneRenderer.domElement);
 
@@ -15068,7 +15101,7 @@ function openAccessoryPreview(itemId) {
     document.getElementById('accessory-review-modal').style.display = 'flex';
     if (!accessoryPreviewRenderer) {
         accessoryPreviewScene = new THREE.Scene();
-        accessoryPreviewScene.background = new THREE.Color('#87CEEB');
+        accessoryPreviewScene.background = new THREE.Color('#8b9cab');
         accessoryPreviewCamera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
         accessoryPreviewCamera.position.set(8, 8, 10);
         accessoryPreviewRenderer = new THREE.WebGLRenderer({ antialias: true });
