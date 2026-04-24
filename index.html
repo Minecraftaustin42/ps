@@ -1813,7 +1813,7 @@
                     </div>
 
 <button class="btn btn-sm btn-warning" style="margin-left: 10px;" onclick="downloadPsworld()">Save .psworld</button>
-<button class="btn btn-sm btn-info" style="margin-left: 10px;" onclick="downloadRbxl()">Export .rbxl</button>
+<button class="btn btn-sm btn-info" style="margin-left: 10px;" onclick="downloadRbxl()">Export .rbxlx</button>
 <button class="btn btn-sm btn-warning" onclick="document.getElementById('psworld-upload').click()">Load .psworld</button>
 <input type="file" id="psworld-upload" style="display: none;" accept=".psworld" onchange="loadPsworld(event)">
 
@@ -10550,14 +10550,18 @@ const buildRbxlXmlFromBlocks = (world = {}) => {
         const canCollide = b.canCollide !== false && !b.noCollide;
         const name = String(b.name || `Block_${i + 1}`).replace(/[<&>\"]/g, '');
         const tr = Math.max(0, Math.min(1, Number(b.transparency) || 0));
-        return `    <Item class="Part" referent="RBX${i + 2}">
+        return `  <Item class="Part" referent="RBX${i + 1}">
       <Properties>
+        <BinaryString name="AttributesSerialize"></BinaryString>
+        <bool name="Locked">false</bool>
         <string name="Name">${name}</string>
         <bool name="Anchored">${anchored ? 'true' : 'false'}</bool>
         <bool name="CanCollide">${canCollide ? 'true' : 'false'}</bool>
         <float name="Transparency">${tr.toFixed(4)}</float>
-        <Color3 name="Color"><R>${(c.r / 255).toFixed(6)}</R><G>${(c.g / 255).toFixed(6)}</G><B>${(c.b / 255).toFixed(6)}</B></Color3>
-        <Vector3 name="Size"><X>${Number(sc.x) || 1}</X><Y>${Number(sc.y) || 1}</Y><Z>${Number(sc.z) || 1}</Z></Vector3>
+        <Color3uint8 name="Color3uint8">${c.r}, ${c.g}, ${c.b}</Color3uint8>
+        <int name="Material">256</int>
+        <Vector3 name="size"><X>${Number(sc.x) || 1}</X><Y>${Number(sc.y) || 1}</Y><Z>${Number(sc.z) || 1}</Z></Vector3>
+        <Vector3 name="Position"><X>${Number(pos.x) || 0}</X><Y>${Number(pos.y) || 0}</Y><Z>${Number(pos.z) || 0}</Z></Vector3>
         <CoordinateFrame name="CFrame">
           <X>${Number(pos.x) || 0}</X><Y>${Number(pos.y) || 0}</Y><Z>${Number(pos.z) || 0}</Z>
           <R00>${m.r00}</R00><R01>${m.r01}</R01><R02>${m.r02}</R02>
@@ -10571,19 +10575,16 @@ const buildRbxlXmlFromBlocks = (world = {}) => {
     }).join('\n');
 
     return `<?xml version="1.0" encoding="utf-8"?>
-<roblox version="4">
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="4">
+  <Meta name="ExplicitAutoJoints">true</Meta>
   <External>null</External>
   <External>nil</External>
-  <Item class="DataModel" referent="RBX0">
+  <Item class="Workspace" referent="RBX0">
     <Properties>
-      <string name="Name">DataModel</string>
+      <string name="Name">Workspace</string>
+      <bool name="StreamingEnabled">false</bool>
     </Properties>
-    <Item class="Workspace" referent="RBX1">
-      <Properties>
-        <string name="Name">Workspace</string>
-      </Properties>
 ${workspaceItems}
-    </Item>
   </Item>
 </roblox>`;
 };
@@ -10599,12 +10600,12 @@ const downloadRbxl = () => {
     const baseName = (titleInput && titleInput.value ? titleInput.value : 'game').replace(/[^\w\- ]+/g, '').trim() || 'game';
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${baseName}.rbxl`;
+    a.download = `${baseName}.rbxlx`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 400);
-    showModal('Exported', `Exported ${blockCount} block(s) to ${baseName}.rbxl`);
+    showModal('Exported', `Exported ${blockCount} block(s) to ${baseName}.rbxlx`);
 };
 
 // Function to load a .psworld file into the studio
