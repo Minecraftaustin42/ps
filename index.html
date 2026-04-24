@@ -1813,6 +1813,7 @@
                     </div>
 
 <button class="btn btn-sm btn-warning" style="margin-left: 10px;" onclick="downloadPsworld()">Save .psworld</button>
+<button class="btn btn-sm btn-info" style="margin-left: 10px;" onclick="downloadRbxl()">Export .rbxlx</button>
 <button class="btn btn-sm btn-warning" onclick="document.getElementById('psworld-upload').click()">Load .psworld</button>
 <input type="file" id="psworld-upload" style="display: none;" accept=".psworld" onchange="loadPsworld(event)">
 
@@ -2049,7 +2050,7 @@
                         </div>
                       <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Sky Color:</label>
-                            <input type="color" id="ws-skycolor" class="form-control" style="padding:0; height:35px; cursor:pointer;" value="#8b9cab" onchange="updateWorldSettings()">
+                            <input type="color" id="ws-skycolor" class="form-control" style="padding:0; height:35px; cursor:pointer;" value="#bfe4ff" onchange="updateWorldSettings()">
                         </div>
                         <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Ambient Brightness:</label>
@@ -2057,7 +2058,7 @@
                         </div>
                         <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Sun Intensity:</label>
-                            <input type="number" id="ws-sun-intensity" class="form-control" value="1.1" step="0.1" onchange="updateWorldSettings()">
+                            <input type="number" id="ws-sun-intensity" class="form-control" value="0.12" step="0.05" onchange="updateWorldSettings()">
                         </div>
                         <div class="form-group">
                             <label style="font-size:12px; font-weight:bold;">Fog Distance:</label>
@@ -2169,27 +2170,11 @@
 </div>
 
                         <div class="form-group mb-10">
-                            <label><strong>Material:</strong></label>
-                          <select id="prop-material" class="form-control" onchange="updateSelectedProperties()">
-                            <option value="Plastic">Plastic</option>
-                            <option value="SmoothPlastic">Smooth Plastic</option>
-                            <option value="Neon">Neon</option>
-                            <option value="Wood">Wood</option>
-                            <option value="Grass">Grass</option>
-                            <option value="Sand">Sand / Dirt</option>
-                            <option value="Slate">Slate / Stone</option>
-                            <option value="Metal">Metal</option>
-                            <option value="Glass">Glass</option>
-                            <option value="Marble">Marble</option>
-                            <option value="CarbonFiber">Carbon Fiber</option>
-                            <option value="Obsidian">Obsidian</option>
-                            <option value="Ice">Ice</option>
-                            <option value="Hologram">Hologram</option>
-                            <option value="LavaRock">Lava Rock</option>
-                            <option value="Concrete">Concrete</option>
-                            <option value="Asphalt">Asphalt</option>
-                            <option value="Brick">Brick</option>
-                        </select>
+                            <label><strong>Block Surface:</strong></label>
+                            <div style="font-size:12px; color:#666; background:#f3f5fb; border:1px solid #d7deef; border-radius:6px; padding:8px;">
+                                Materials are disabled. Blocks now export/use solid colors only.
+                            </div>
+                        </div>
                         <div id="floating-text-props" style="display:none; margin-top:10px; background:#fff7ec; border:1px solid #f2d2a7; border-radius:4px; padding:8px;">
                             <h5 style="margin:0 0 8px 0; color:#8a5a18;">Floating Text</h5>
                             <div class="form-group mb-10">
@@ -2877,106 +2862,11 @@ async function safeFetch(url, options = {}) {
             window.proceduralTextures[type] = tex;
             return tex;
         };
-        const IMAGE_TEXTURE_FILES = {
-            'stone tiles': 'stonetiles.jpg',
-            'wooden floor': 'woodenfloor.jpg',
-            'wood': 'wood.jpg',
-            'grass': 'grass.png',
-            'bricks': 'bricks.jpg'
-        };
-        const resolveTextureFileForMaterial = (matType = '') => {
-            const key = String(matType || '').trim().toLowerCase();
-            if (!key) return null;
-            if (IMAGE_TEXTURE_FILES[key]) return IMAGE_TEXTURE_FILES[key];
-            if (key === 'brick') return IMAGE_TEXTURE_FILES['bricks'];
-            if (key === 'wood') return IMAGE_TEXTURE_FILES['wood'];
-            if (key === 'grass') return IMAGE_TEXTURE_FILES['grass'];
-            if (['slate', 'concrete', 'asphalt', 'marble', 'obsidian', 'lavarock', 'metal', 'carbonfiber', 'sand'].includes(key)) return IMAGE_TEXTURE_FILES['stone tiles'];
-            if (['plastic', 'smoothplastic'].includes(key)) return IMAGE_TEXTURE_FILES['wooden floor'];
-            return null;
-        };
-        const getImageTextureForMaterial = (matType = '') => {
-            const file = resolveTextureFileForMaterial(matType);
-            if (!file) return null;
-            if (!window.imageTextureCache) window.imageTextureCache = {};
-            if (!window.imageTextureLoader) window.imageTextureLoader = new THREE.TextureLoader();
-            if (!window.imageTextureCache[file]) {
-                const texture = window.imageTextureLoader.load(`/textures/${file}`);
-                texture.wrapS = THREE.RepeatWrapping;
-                texture.wrapT = THREE.RepeatWrapping;
-                texture.minFilter = THREE.LinearMipmapLinearFilter;
-                texture.magFilter = THREE.LinearFilter;
-                texture.anisotropy = 8;
-                if (typeof THREE.SRGBColorSpace !== 'undefined') texture.colorSpace = THREE.SRGBColorSpace;
-                if (typeof THREE.sRGBEncoding !== 'undefined') texture.encoding = THREE.sRGBEncoding;
-                window.imageTextureCache[file] = texture;
-            }
-            const clone = window.imageTextureCache[file].clone();
-            clone.wrapS = THREE.RepeatWrapping;
-            clone.wrapT = THREE.RepeatWrapping;
-            clone.needsUpdate = true;
-            return clone;
-        };
-        const applyTextureRepeatToMesh = (mesh, scale = null) => {
-            if (!mesh) return;
-            const repeatSource = scale || mesh.scale || { x: 1, y: 1, z: 1 };
-            const rx = Math.max(1, Math.abs(Number(repeatSource.x) || 1));
-            const rz = Math.max(1, Math.abs(Number(repeatSource.z) || 1));
-            const applyRepeatToMaterial = (material) => {
-                if (!material?.map) return;
-                material.map.wrapS = THREE.RepeatWrapping;
-                material.map.wrapT = THREE.RepeatWrapping;
-                material.map.repeat.set(rx, rz);
-                material.map.needsUpdate = true;
-                material.needsUpdate = true;
-            };
-            if (mesh.isMesh) {
-                (Array.isArray(mesh.material) ? mesh.material : [mesh.material]).forEach(applyRepeatToMaterial);
-            } else if (mesh.traverse) {
-                mesh.traverse((child) => {
-                    if (!child.isMesh) return;
-                    (Array.isArray(child.material) ? child.material : [child.material]).forEach(applyRepeatToMaterial);
-                });
-            }
-        };
+        const applyTextureRepeatToMesh = (mesh, scale = null) => {};
         const getMaterialForType = (matType, colorHex) => {
             const c = new THREE.Color(colorHex || '#cccccc');
             c.setRGB(c.r, c.g, c.b);
-
-            if (matType === 'Neon') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#ffe066') });
-            if (matType === 'Hologram') return new THREE.MeshBasicMaterial({ color: new THREE.Color(colorHex || '#66e5ff'), transparent: true, opacity: 0.38, wireframe: true });
-            if (matType === 'Glass' || matType === 'Ice') {
-                return new THREE.MeshPhongMaterial({ color: c, transparent: true, opacity: matType === 'Glass' ? 0.38 : 0.56, shininess: 38, specular: new THREE.Color('#f2f7ff') });
-            }
-
-            const nostalgicRules = {
-                Plastic: { shininess: 44, specular: '#f6f8ff' },
-                SmoothPlastic: { shininess: 54, specular: '#ffffff' },
-                Metal: { shininess: 36, specular: '#d3deea' },
-                Grass: { shininess: 14, specular: '#8ccc74' },
-                Wood: { shininess: 20, specular: '#bf9368' },
-                Sand: { shininess: 10, specular: '#f2d089' },
-                Slate: { shininess: 12, specular: '#8e99a6' },
-                Marble: { shininess: 24, specular: '#f3f3f3' },
-                CarbonFiber: { shininess: 18, specular: '#7c8997' },
-                Obsidian: { shininess: 20, specular: '#a8b0be' },
-                LavaRock: { shininess: 8, specular: '#705348' },
-                Concrete: { shininess: 8, specular: '#c6ced6' },
-                Asphalt: { shininess: 8, specular: '#7b8590' },
-                Brick: { shininess: 12, specular: '#c3826f' }
-            };
-
-            const validTypes = Object.keys(nostalgicRules);
-            const safeType = validTypes.includes(matType) ? matType : 'Plastic';
-            const rule = nostalgicRules[safeType];
-            const tex = getImageTextureForMaterial(safeType);
-
-            return new THREE.MeshPhongMaterial({
-                color: c,
-                combine: THREE.MultiplyOperation,
-                shininess: rule.shininess,
-                specular: new THREE.Color(rule.specular)
-            });
+            return new THREE.MeshBasicMaterial({ color: c });
         };  // --------------------------------------
 
 
@@ -5349,6 +5239,8 @@ window.EnvironmentEngine = {
         }
         // Apply settings
         this.sunMesh.material.color.set(sunColor);
+        this.sunMesh.material.transparent = true;
+        this.sunMesh.material.opacity = 0.35;
         this.sunMesh.scale.set(sunSize, sunSize, sunSize);
         this.sunLight.color.set('#ffffff');
 
@@ -5712,7 +5604,7 @@ edRenderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: 
 window.EnvironmentEngine.applyRealisticSettings(edRenderer);
 
 window.EnvironmentEngine.generateClouds(edScene, '#ffffff');
-        window.EnvironmentEngine.updateSunAndTime(edScene, edCamera, NOSTALGIA_GRAPHICS_DEFAULTS.skyColor, 12, '#fff2cf', 42);
+        window.EnvironmentEngine.updateSunAndTime(edScene, edCamera, NOSTALGIA_GRAPHICS_DEFAULTS.skyColor, 12, '#fff9dc', 20);
 
             edRenderer.setPixelRatio(1);
             resizeCanvas(edRenderer, edCamera, 'editor-container-3d');
@@ -7869,9 +7761,9 @@ Keep playing together for more daily rewards.`, 'Aww!');
 const DEFAULT_STEP_HEIGHT = 1.0;
 const NOSTALGIA_GRAPHICS_DEFAULTS = {
     gravity: 0.08,
-    skyColor: '#8b9cab',
-    brightness: 0.45,
-    sunIntensity: 0.62,
+    skyColor: '#bfe4ff',
+    brightness: 0.75,
+    sunIntensity: 0.12,
     fogDistance: 860,
     graphicsQuality: 'performance',
     exposure: 1.0,
@@ -7898,7 +7790,7 @@ const areGlobalShadowsEnabled = (settings = {}) => settings?.globalShadows !== f
 const objectCastsShadow = (objData = {}, settings = {}) => areGlobalShadowsEnabled(settings) && objData?.castsShadow !== false && objData?.type !== 'floatingText';
 const withLegacyShadowDefaults = (obj = {}) => ({ ...obj, castsShadow: obj?.castsShadow !== false && obj?.type !== 'floatingText' });
 let edData = {
-            settings: normalizeNostalgiaWorldSettings({ skyColor: '#8b9cab', brightness: 0.45 }), // Nostalgic default look
+            settings: normalizeNostalgiaWorldSettings({ skyColor: '#bfe4ff', brightness: 0.75, sunIntensity: 0.12 }), // Daylight default look
             spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}},
             objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#6f8a62', material: 'Grass' }],
             uiLayout: [],
@@ -8673,7 +8565,8 @@ document.addEventListener('keydown', (e) => {
                     document.getElementById('prop-name').value = 'Spawn Point';
                     document.getElementById('prop-name').disabled = true;
                     document.getElementById('prop-color').disabled = true;
-                    document.getElementById('prop-material').disabled = true;
+                    const matField = document.getElementById('prop-material');
+                    if (matField) matField.disabled = true;
                     document.getElementById('floating-text-props').style.display = 'none';
                     document.getElementById('smart-props-section').style.display = 'none';
                 } else {
@@ -8685,8 +8578,11 @@ document.addEventListener('keydown', (e) => {
                         document.getElementById('prop-color').value = objData.color || '#3498db';
                         document.getElementById('prop-color').disabled = false;
 
-                        document.getElementById('prop-material').value = objData.material || 'Plastic';
-                        document.getElementById('prop-material').disabled = false;
+                        const matField = document.getElementById('prop-material');
+                        if (matField) {
+                            matField.value = objData.material || 'Plastic';
+                            matField.disabled = false;
+                        }
                         const fTextSection = document.getElementById('floating-text-props');
                         if (objData.type === 'floatingText') {
                             fTextSection.style.display = 'block';
@@ -8744,7 +8640,7 @@ document.addEventListener('keydown', (e) => {
 
             const name = document.getElementById('prop-name').value;
             const color = document.getElementById('prop-color').value;
-            const material = document.getElementById('prop-material').value;
+            const material = 'Plastic';
             const transparency = Math.max(0, Math.min(1, parseFloat((document.getElementById('prop-transparency') || {}).value) || 0));
             const castsShadow = !!((document.getElementById('prop-castshadow') || {}).checked);
             const floatingTextValue = (document.getElementById('prop-ftext') || {}).value || 'Text';
@@ -8762,7 +8658,7 @@ document.addEventListener('keydown', (e) => {
                     localEditedObjectIds.add(objData.id);
                     if (mesh === primary) objData.name = name; // Only rename the main clicked object
                     objData.color = color;
-                    objData.material = material;
+                    objData.material = 'Plastic';
                     objData.transparency = transparency;
                     objData.castsShadow = castsShadow && objData.type !== 'floatingText';
                     if (objData.type === 'floatingText') {
@@ -8997,7 +8893,7 @@ document.addEventListener('keydown', (e) => {
                 const shadow = areGlobalShadowsEnabled(edData.settings);
                 edScene.background = new THREE.Color(edData.settings.skyColor);
                 edScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = edData.settings.brightness; });
-                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.2, edData.settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
+                if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.01, edData.settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
                 const fogDistance = Math.max(320, edData.settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
                 edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.28, fogDistance);
                 if (edRenderer) {
@@ -9929,7 +9825,7 @@ const promptClearEditor = () => {
      const clearEditor = () => {
             currentEditGameId = null;
             localEditedObjectIds.clear();
-            edData = { settings: normalizeNostalgiaWorldSettings({ skyColor: '#8b9cab', brightness: 0.45 }), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#6f8a62', material: 'Grass' }], uiLayout: [] };
+            edData = { settings: normalizeNostalgiaWorldSettings({ skyColor: '#bfe4ff', brightness: 0.75, sunIntensity: 0.12 }), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#6f8a62', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
@@ -10621,6 +10517,97 @@ const downloadPsworld = () => {
     downloadAnchorNode.remove();
 };
 
+const convertHexToRgb = (hex = '#cccccc') => {
+    const safe = String(hex || '#cccccc').replace('#', '').trim();
+    const parsed = safe.length === 3
+        ? safe.split('').map(ch => ch + ch).join('')
+        : safe.padEnd(6, '0').slice(0, 6);
+    const intVal = parseInt(parsed, 16);
+    if (Number.isNaN(intVal)) return { r: 204, g: 204, b: 204 };
+    return { r: (intVal >> 16) & 255, g: (intVal >> 8) & 255, b: intVal & 255 };
+};
+
+const matrixFromEulerXYZ = (rot = { x: 0, y: 0, z: 0 }) => {
+    const e = new THREE.Euler(Number(rot.x) || 0, Number(rot.y) || 0, Number(rot.z) || 0, 'XYZ');
+    const m = new THREE.Matrix4().makeRotationFromEuler(e);
+    const t = m.elements;
+    return {
+        r00: t[0], r01: t[4], r02: t[8],
+        r10: t[1], r11: t[5], r12: t[9],
+        r20: t[2], r21: t[6], r22: t[10]
+    };
+};
+
+const buildRbxlXmlFromBlocks = (world = {}) => {
+    const blocks = (world?.objects || []).filter(o => o && o.type === 'block');
+    const workspaceItems = blocks.map((b, i) => {
+        const pos = b.position || { x: 0, y: 0, z: 0 };
+        const rot = b.rotation || { x: 0, y: 0, z: 0 };
+        const sc = b.scale || { x: 4, y: 1, z: 4 };
+        const m = matrixFromEulerXYZ(rot);
+        const c = convertHexToRgb(b.color || '#cccccc');
+        const anchored = b.isAnchored !== false;
+        const canCollide = b.canCollide !== false && !b.noCollide;
+        const name = String(b.name || `Block_${i + 1}`).replace(/[<&>\"]/g, '');
+        const tr = Math.max(0, Math.min(1, Number(b.transparency) || 0));
+        return `  <Item class="Part" referent="RBX${i + 1}">
+      <Properties>
+        <BinaryString name="AttributesSerialize"></BinaryString>
+        <bool name="Locked">false</bool>
+        <string name="Name">${name}</string>
+        <bool name="Anchored">${anchored ? 'true' : 'false'}</bool>
+        <bool name="CanCollide">${canCollide ? 'true' : 'false'}</bool>
+        <float name="Transparency">${tr.toFixed(4)}</float>
+        <Color3uint8 name="Color3uint8">${c.r}, ${c.g}, ${c.b}</Color3uint8>
+        <int name="Material">256</int>
+        <Vector3 name="size"><X>${Number(sc.x) || 1}</X><Y>${Number(sc.y) || 1}</Y><Z>${Number(sc.z) || 1}</Z></Vector3>
+        <Vector3 name="Position"><X>${Number(pos.x) || 0}</X><Y>${Number(pos.y) || 0}</Y><Z>${Number(pos.z) || 0}</Z></Vector3>
+        <CoordinateFrame name="CFrame">
+          <X>${Number(pos.x) || 0}</X><Y>${Number(pos.y) || 0}</Y><Z>${Number(pos.z) || 0}</Z>
+          <R00>${m.r00}</R00><R01>${m.r01}</R01><R02>${m.r02}</R02>
+          <R10>${m.r10}</R10><R11>${m.r11}</R11><R12>${m.r12}</R12>
+          <R20>${m.r20}</R20><R21>${m.r21}</R21><R22>${m.r22}</R22>
+        </CoordinateFrame>
+        <token name="TopSurface">0</token>
+        <token name="BottomSurface">0</token>
+      </Properties>
+    </Item>`;
+    }).join('\n');
+
+    return `<?xml version="1.0" encoding="utf-8"?>
+<roblox xmlns:xmime="http://www.w3.org/2005/05/xmlmime" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" version="4">
+  <Meta name="ExplicitAutoJoints">true</Meta>
+  <External>null</External>
+  <External>nil</External>
+  <Item class="Workspace" referent="RBX0">
+    <Properties>
+      <string name="Name">Workspace</string>
+      <bool name="StreamingEnabled">false</bool>
+    </Properties>
+${workspaceItems}
+  </Item>
+</roblox>`;
+};
+
+const downloadRbxl = () => {
+    if (!edData || !Array.isArray(edData.objects)) return showModal('Export Error', 'No blocks found to export.');
+    const blockCount = edData.objects.filter(o => o?.type === 'block').length;
+    if (blockCount === 0) return showModal('Export Error', 'This map has no block parts to export.');
+    const xml = buildRbxlXmlFromBlocks(edData);
+    const blob = new Blob([xml], { type: 'application/xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const titleInput = document.getElementById('editor-title');
+    const baseName = (titleInput && titleInput.value ? titleInput.value : 'game').replace(/[^\w\- ]+/g, '').trim() || 'game';
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${baseName}.rbxlx`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 400);
+    showModal('Exported', `Exported ${blockCount} block(s) to ${baseName}.rbxlx`);
+};
+
 // Function to load a .psworld file into the studio
 const loadPsworld = (event) => {
     const file = event.target.files[0];
@@ -10764,7 +10751,7 @@ const applyPlayGraphicsSettings = (settings = {}) => {
             playRenderer.shadowMap.enabled = shadowsEnabled;
             playRenderer.shadowMap.type = THREE.BasicShadowMap;
             if (playDirectionalLight) {
-                playDirectionalLight.intensity = Math.max(0.2, settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
+                playDirectionalLight.intensity = Math.max(0.01, settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
                 playDirectionalLight.castShadow = shadowsEnabled;
                 playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 768 : 512, quality === 'ultra' ? 768 : 512);
                 playDirectionalLight.shadow.radius = 1.4;
