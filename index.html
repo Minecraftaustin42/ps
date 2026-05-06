@@ -10790,6 +10790,8 @@ const startGame = () => {
             if(!playRenderer) {
                 playScene = new THREE.Scene();
                 playCamera = new THREE.PerspectiveCamera(65, 16/9, 0.1, 600);
+                playCamera.position.set(38, 28, 42);
+                playCamera.lookAt(0, 4, 0);
 
                 const ambLight = new THREE.AmbientLight(0xffffff, 0);
                 ambLight.isAmbientLight = true;
@@ -10822,6 +10824,8 @@ window.playControls.enableZoom = false;
 window.playControls.mouseButtons = { LEFT: THREE.MOUSE.ROTATE, MIDDLE: THREE.MOUSE.NONE, RIGHT: THREE.MOUSE.ROTATE };
 window.playControls.minPolarAngle = THREE.MathUtils.degToRad(8);
 window.playControls.maxPolarAngle = THREE.MathUtils.degToRad(82);
+window.playControls.target.set(0, 4, 0);
+window.playControls.update();
 playRenderer.domElement.addEventListener('wheel', (e) => {
     if (!document.getElementById('view-play').classList.contains('active')) return;
     e.preventDefault();
