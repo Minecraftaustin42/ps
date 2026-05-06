@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Roblox 2016 Style Scene</title>
+
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #8fd3ff;
+    }
+
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+<script>
+const scene = new THREE.Scene();
+
+scene.background = new THREE.Color(0x8fd3ff);
+scene.fog = new THREE.Fog(0x8fd3ff, 90, 260);
+
+const camera = new THREE.PerspectiveCamera(
+  65,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  600
+);
+
+camera.position.set(38, 28, 42);
+camera.lookAt(0, 4, 0);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+function plastic(color) {
+  return new THREE.MeshLambertMaterial({ color: color });
+}
+
+const ambient = new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 1.15);
+scene.add(ambient);
+
+const sun = new THREE.DirectionalLight(0xffffff, 1.25);
+sun.position.set(60, 90, 35);
+sun.castShadow = true;
+sun.shadow.mapSize.width = 2048;
+sun.shadow.mapSize.height = 2048;
+scene.add(sun);
+
+const baseplate = new THREE.Mesh(
+  new THREE.BoxGeometry(220, 1, 220),
+  plastic(0x41a748)
+);
+baseplate.position.y = -0.5;
+baseplate.receiveShadow = true;
+scene.add(baseplate);
+
+const gridMaterial = plastic(0x33933d);
+for (let i = -110; i <= 110; i += 10) {
+  const lineA = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, 0.04, 220),
+    gridMaterial
+  );
+  lineA.position.set(i, 0.04, 0);
+  scene.add(lineA);
+
+  const lineB = new THREE.Mesh(
+    new THREE.BoxGeometry(220, 0.04, 0.08),
+    gridMaterial
+  );
+  lineB.position.set(0, 0.05, i);
+  scene.add(lineB);
+}
+
+function block(x, y, z, w, h, d, color) {
+  const mesh = new THREE.Mesh(
+    new THREE.BoxGeometry(w, h, d),
+    plastic(color)
+  );
+
+  mesh.position.set(x, y, z);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+  scene.add(mesh);
+
+  return mesh;
+}
+
+block(0, 1, 0, 12, 2, 12, 0xc73c3c);
+block(18, 2, -3, 8, 4, 8, 0x2e62c9);
+block(-18, 1.5, 2, 14, 3, 7, 0xf0d64a);
+block(0, 0.5, -22, 26, 1, 6, 0x9b9b9b);
+block(0, 4, -22, 7, 7, 7, 0xf2f2f2);
+block(28, 0.75, 18, 16, 1.5, 16, 0x7d7d7d);
+
+const spawn = new THREE.Mesh(
+  new THREE.CylinderGeometry(5, 5, 0.35, 48),
+  plastic(0x777777)
+);
+spawn.position.set(-28, 0.2, -18);
+spawn.receiveShadow = true;
+spawn.castShadow = true;
+scene.add(spawn);
+
+const spawnTop = new THREE.Mesh(
+  new THREE.CylinderGeometry(4.2, 4.2, 0.08, 48),
+  plastic(0x111111)
+);
+spawnTop.position.set(-28, 0.45, -18);
+scene.add(spawnTop);
+
+function animate() {
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+
+</body>
+</html>
