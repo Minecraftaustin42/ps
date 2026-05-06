@@ -5559,6 +5559,8 @@ let customGizmo = null;
 
 
             edScene = new THREE.Scene();
+            edScene.background = new THREE.Color(0x8fd3ff);
+            edScene.fog = new THREE.Fog(0x8fd3ff, 90, 260);
             edCamera = new THREE.PerspectiveCamera(65, 16/9, 0.1, 600);
             edCamera.position.set(38, 28, 42);
             edCamera.lookAt(0, 4, 0);
@@ -7769,7 +7771,7 @@ const NOSTALGIA_GRAPHICS_DEFAULTS = {
     exposure: 1.0,
     globalShadows: true
 };
-const NOSTALGIA_PROFILE_VERSION = 3;
+const NOSTALGIA_PROFILE_VERSION = 4;
 const applyNostalgiaWorldDefaults = (settings = {}) => ({ ...NOSTALGIA_GRAPHICS_DEFAULTS, ...(settings || {}) });
 const normalizeNostalgiaWorldSettings = (settings = {}) => {
     const merged = applyNostalgiaWorldDefaults(settings || {});
@@ -10739,11 +10741,12 @@ const toggleGameLike = async () => {
 
 const applyPlayGraphicsSettings = (settings = {}) => {
             if (!playScene || !playRenderer) return;
-            const quality = settings.graphicsQuality === 'ultra' ? 'ultra' : 'performance';
             const exposure = Math.max(0.75, Math.min(1.05, (settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
             const fogDistance = Math.max(260, settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
+            const sky = settings.skyColor || NOSTALGIA_GRAPHICS_DEFAULTS.skyColor;
 
-            playScene.fog = new THREE.Fog(settings.skyColor || NOSTALGIA_GRAPHICS_DEFAULTS.skyColor, fogDistance * 0.28, fogDistance);
+            playScene.background = new THREE.Color(sky);
+            playScene.fog = new THREE.Fog(sky, 90, fogDistance);
             playRenderer.toneMapping = THREE.NoToneMapping;
             playRenderer.outputEncoding = THREE.sRGBEncoding;
             playRenderer.physicallyCorrectLights = false;
@@ -10789,6 +10792,8 @@ const startGame = () => {
             const container = document.getElementById('play-container-3d');
             if(!playRenderer) {
                 playScene = new THREE.Scene();
+                playScene.background = new THREE.Color(0x8fd3ff);
+                playScene.fog = new THREE.Fog(0x8fd3ff, 90, 260);
                 playCamera = new THREE.PerspectiveCamera(65, 16/9, 0.1, 600);
                 playCamera.position.set(38, 28, 42);
                 playCamera.lookAt(0, 4, 0);
