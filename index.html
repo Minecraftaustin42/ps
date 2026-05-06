@@ -5559,9 +5559,9 @@ let customGizmo = null;
 
 
             edScene = new THREE.Scene();
-            edCamera = new THREE.PerspectiveCamera( 45, 16/9, 1, 10000 );
-            edCamera.position.set( 30, 40, 50 );
-            edCamera.lookAt( 0, 0, 0 );
+            edCamera = new THREE.PerspectiveCamera(65, 16/9, 0.1, 600);
+            edCamera.position.set(38, 28, 42);
+            edCamera.lookAt(0, 4, 0);
 
             raycaster = new THREE.Raycaster();
             mouse = new THREE.Vector2();
@@ -5585,16 +5585,16 @@ let customGizmo = null;
             customGizmo.visible = false;
             edScene.add(customGizmo);
 
-            const ambLight = new THREE.AmbientLight( 0xffffff, NOSTALGIA_GRAPHICS_DEFAULTS.brightness );
+            const ambLight = new THREE.AmbientLight(0xffffff, 0);
             ambLight.isAmbientLight = true;
             edAmbientLight = ambLight;
             edScene.add( ambLight );
-            const hemiLight = new THREE.HemisphereLight(0xffffff, 0xbfc5cc, 0.16);
+            const hemiLight = new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 1.15);
             edScene.add(hemiLight);
             const dirLight = new THREE.DirectionalLight( 0xffffff, NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity );
-            dirLight.position.set( 40, 58, 22 );
+            dirLight.position.set(60, 90, 35);
             dirLight.castShadow = true;
-            dirLight.shadow.mapSize.set(512, 512);
+            dirLight.shadow.mapSize.set(2048, 2048);
             dirLight.shadow.radius = 1.4;
             dirLight.shadow.bias = -0.0012;
             edDirectionalLight = dirLight;
@@ -7761,11 +7761,11 @@ Keep playing together for more daily rewards.`, 'Aww!');
 const DEFAULT_STEP_HEIGHT = 1.0;
 const NOSTALGIA_GRAPHICS_DEFAULTS = {
     gravity: 0.08,
-    skyColor: '#bfe4ff',
-    brightness: 0.75,
-    sunIntensity: 0.12,
-    fogDistance: 860,
-    graphicsQuality: 'performance',
+    skyColor: '#8fd3ff',
+    brightness: 1.15,
+    sunIntensity: 1.25,
+    fogDistance: 260,
+    graphicsQuality: 'ultra',
     exposure: 1.0,
     globalShadows: true
 };
@@ -7790,7 +7790,7 @@ const areGlobalShadowsEnabled = (settings = {}) => settings?.globalShadows !== f
 const objectCastsShadow = (objData = {}, settings = {}) => areGlobalShadowsEnabled(settings) && objData?.castsShadow !== false && objData?.type !== 'floatingText';
 const withLegacyShadowDefaults = (obj = {}) => ({ ...obj, castsShadow: obj?.castsShadow !== false && obj?.type !== 'floatingText' });
 let edData = {
-            settings: normalizeNostalgiaWorldSettings({ skyColor: '#bfe4ff', brightness: 0.75, sunIntensity: 0.12 }), // Daylight default look
+            settings: normalizeNostalgiaWorldSettings({ skyColor: '#8fd3ff', brightness: 1.15, sunIntensity: 1.25, fogDistance: 260, graphicsQuality: 'ultra' }), // Roblox 2016 style daylight defaults
             spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}},
             objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#6f8a62', material: 'Grass' }],
             uiLayout: [],
@@ -9825,7 +9825,7 @@ const promptClearEditor = () => {
      const clearEditor = () => {
             currentEditGameId = null;
             localEditedObjectIds.clear();
-            edData = { settings: normalizeNostalgiaWorldSettings({ skyColor: '#bfe4ff', brightness: 0.75, sunIntensity: 0.12 }), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#6f8a62', material: 'Grass' }], uiLayout: [] };
+            edData = { settings: normalizeNostalgiaWorldSettings({ skyColor: '#8fd3ff', brightness: 1.15, sunIntensity: 1.25, fogDistance: 260, graphicsQuality: 'ultra' }), spawn: {x:0, y:2, z:0, scale:{x:4, y:1, z:4}}, objects: [{ id: crypto.randomUUID(), name: 'Baseplate', type: 'block', position: { x: 0, y: -2, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 100, y: 4, z: 100 }, color: '#6f8a62', material: 'Grass' }], uiLayout: [] };
             historyStack = []; historyIndex = -1;
             (edData.objects || []).forEach(ensureSmartLogicDefaults);
             buildEditorScene(); recordEdit(true);
@@ -10741,7 +10741,7 @@ const applyPlayGraphicsSettings = (settings = {}) => {
             if (!playScene || !playRenderer) return;
             const quality = settings.graphicsQuality === 'ultra' ? 'ultra' : 'performance';
             const exposure = Math.max(0.75, Math.min(1.05, (settings.exposure || NOSTALGIA_GRAPHICS_DEFAULTS.exposure)));
-            const fogDistance = Math.max(320, settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
+            const fogDistance = Math.max(260, settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
 
             playScene.fog = new THREE.Fog(settings.skyColor || NOSTALGIA_GRAPHICS_DEFAULTS.skyColor, fogDistance * 0.28, fogDistance);
             playRenderer.toneMapping = THREE.NoToneMapping;
@@ -10749,11 +10749,11 @@ const applyPlayGraphicsSettings = (settings = {}) => {
             playRenderer.physicallyCorrectLights = false;
             const shadowsEnabled = areGlobalShadowsEnabled(settings);
             playRenderer.shadowMap.enabled = shadowsEnabled;
-            playRenderer.shadowMap.type = THREE.BasicShadowMap;
+            playRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
             if (playDirectionalLight) {
                 playDirectionalLight.intensity = Math.max(0.01, settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
                 playDirectionalLight.castShadow = shadowsEnabled;
-                playDirectionalLight.shadow.mapSize.set(quality === 'ultra' ? 768 : 512, quality === 'ultra' ? 768 : 512);
+                playDirectionalLight.shadow.mapSize.set(2048, 2048);
                 playDirectionalLight.shadow.radius = 1.4;
                 playDirectionalLight.shadow.bias = -0.0012;
                 playDirectionalLight.shadow.normalBias = 0;
@@ -10789,20 +10789,20 @@ const startGame = () => {
             const container = document.getElementById('play-container-3d');
             if(!playRenderer) {
                 playScene = new THREE.Scene();
-                playCamera = new THREE.PerspectiveCamera( 50, 16/9, 1, 2000 );
+                playCamera = new THREE.PerspectiveCamera(65, 16/9, 0.1, 600);
 
-                const ambLight = new THREE.AmbientLight( 0xffffff, NOSTALGIA_GRAPHICS_DEFAULTS.brightness );
+                const ambLight = new THREE.AmbientLight(0xffffff, 0);
                 ambLight.isAmbientLight = true;
                 playAmbientLight = ambLight;
                 playScene.add( ambLight );
 
-                const hemiLight = new THREE.HemisphereLight(0xffffff, 0xbfc5cc, 0.16);
+                const hemiLight = new THREE.HemisphereLight(0xffffff, 0x8d8d8d, 1.15);
                 playScene.add(hemiLight);
 
                 const dirLight = new THREE.DirectionalLight( 0xffffff, NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity );
-                dirLight.position.set( 42, 56, 26 );
+                dirLight.position.set(60, 90, 35);
                 dirLight.castShadow = true;
-                dirLight.shadow.mapSize.set(512, 512);
+                dirLight.shadow.mapSize.set(2048, 2048);
                 dirLight.shadow.radius = 1.4;
                 dirLight.shadow.bias = -0.0012;
                 playDirectionalLight = dirLight;
@@ -13410,7 +13410,7 @@ const groupAsAircraft = () => {
                     brightness: 0.58,
                     sunIntensity: 0.42,
                     fogDistance: 1450,
-                    graphicsQuality: 'performance',
+                    graphicsQuality: 'ultra',
                     exposure: 0.9
                 },
                 spawn: published?.spawn || { x: 0, y: 2, z: 0, scale: { x: 4, y: 1, z: 4 } },
