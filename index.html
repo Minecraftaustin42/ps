@@ -5605,8 +5605,6 @@ let customGizmo = null;
 edRenderer = new THREE.WebGLRenderer( { antialias: true, preserveDrawingBuffer: true } );
 window.EnvironmentEngine.applyRealisticSettings(edRenderer);
 
-window.EnvironmentEngine.generateClouds(edScene, '#ffffff');
-        window.EnvironmentEngine.updateSunAndTime(edScene, edCamera, NOSTALGIA_GRAPHICS_DEFAULTS.skyColor, 12, '#fff9dc', 20);
 
             edRenderer.setPixelRatio(1);
             resizeCanvas(edRenderer, edCamera, 'editor-container-3d');
@@ -8896,18 +8894,17 @@ document.addEventListener('keydown', (e) => {
                 edScene.background = new THREE.Color(edData.settings.skyColor);
                 edScene.children.forEach(c => { if (c.isAmbientLight) c.intensity = edData.settings.brightness; });
                 if (edDirectionalLight) edDirectionalLight.intensity = Math.max(0.01, edData.settings.sunIntensity || NOSTALGIA_GRAPHICS_DEFAULTS.sunIntensity);
-                const fogDistance = Math.max(320, edData.settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
-                edScene.fog = new THREE.Fog(edData.settings.skyColor, fogDistance * 0.28, fogDistance);
+                const fogDistance = Math.max(260, edData.settings.fogDistance || NOSTALGIA_GRAPHICS_DEFAULTS.fogDistance);
+                edScene.fog = new THREE.Fog(edData.settings.skyColor, 90, fogDistance);
                 if (edRenderer) {
-                    const q = (edData.settings.graphicsQuality === 'ultra') ? 'ultra' : 'performance';
                     edRenderer.toneMapping = THREE.NoToneMapping;
                     edRenderer.outputEncoding = THREE.sRGBEncoding;
                     edRenderer.physicallyCorrectLights = false;
                     edRenderer.shadowMap.enabled = shadow;
-                    edRenderer.shadowMap.type = THREE.BasicShadowMap;
+                    edRenderer.shadowMap.type = THREE.PCFSoftShadowMap;
                     if (edDirectionalLight) {
                         edDirectionalLight.castShadow = shadow;
-                        edDirectionalLight.shadow.mapSize.set(q === 'ultra' ? 768 : 512, q === 'ultra' ? 768 : 512);
+                        edDirectionalLight.shadow.mapSize.set(2048, 2048);
                         edDirectionalLight.shadow.radius = 1.4;
                         edDirectionalLight.shadow.bias = -0.0012;
                     }
