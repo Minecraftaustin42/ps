@@ -28,6 +28,8 @@
         .nav-utility-row { display:flex; align-items:center; gap:8px; justify-content:flex-end; flex-wrap:wrap; }
         .nav-chip { background:linear-gradient(135deg,#fff2b8,#ffe2df); color:#5d3fb8; font-weight:700; padding:6px 10px; border-radius:8px; border:1px solid #f3d6a0; }
         .navbar-links { display:flex; gap:6px; align-items:center; justify-content:flex-end; flex-wrap:wrap; }
+        .nav-section { display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:10px; background:rgba(38,30,96,0.3); border:1px solid rgba(255,255,255,0.2); }
+        .nav-section-label { color:#d7d8ff; font-size:11px; font-weight:800; letter-spacing:.7px; text-transform:uppercase; margin-right:2px; }
         .navbar-links a, #nav-logged-out a { color: #f7f4ff; text-decoration: none; font-weight: 700; cursor: pointer; transition: all 0.2s ease; line-height: 1.2; padding: 7px 10px; border-radius: 8px; border: 1px solid transparent; }
         .navbar-links a:hover, .navbar-links a.active, #nav-logged-out a:hover { color: #ffffff; border-color: rgba(255,255,255,0.42); background: rgba(255,255,255,0.15); }
 
@@ -336,6 +338,16 @@
         @keyframes eventPulse { 0%, 100% { transform: scale(1); box-shadow: 0 0 0 rgba(255,210,91,0.4); } 50% { transform: scale(1.04); box-shadow: 0 0 14px rgba(255,210,91,0.75); } }
         .bunny-badge { display:inline-flex; align-items:center; gap:6px; background:#fff7f0; border:1px solid #f7c9a8; color:#a75a2d; border-radius:14px; padding:4px 8px; font-size:12px; font-weight:700; }
         .bunny-icon { width:24px; height:24px; border-radius:50%; background:radial-gradient(circle at 35% 35%, #fff, #ffe8d5 70%); display:inline-flex; align-items:center; justify-content:center; border:1px solid #f6d3ba; }
+        .groups-redesign { background: radial-gradient(circle at top right, #ede9ff 0%, #eff6ff 36%, #ffffff 100%); border:1px solid #dadfff; }
+        .groups-hero { display:flex; justify-content:space-between; gap:16px; flex-wrap:wrap; margin-bottom:18px; padding:16px; border-radius:14px; background:linear-gradient(135deg,#4c1d95,#4f46e5 45%, #2563eb); color:#fff; box-shadow:0 12px 24px rgba(49,46,129,.28); }
+        .groups-hero h2 { margin:0 0 6px 0; color:#fff; }
+        .groups-hero p { margin:0; color:#dbeafe; }
+        .groups-actions { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+        .groups-actions .form-control { background:#f8faff; min-width:220px; }
+        .groups-layout { display:grid; grid-template-columns: 1.25fr .75fr; gap:16px; }
+        .groups-main { display:grid; gap:14px; }
+        .groups-panel { background:#f8f9ff; border:1px solid #dce2ff; border-radius:12px; padding:12px; }
+        .groups-panel h3 { margin:0 0 10px 0; color:#4338ca; border-bottom:1px solid #c7d2fe; padding-bottom:8px; }
 
 
         @media(min-width: 1100px) {
@@ -355,6 +367,7 @@
             .navbar-brand { font-size: 20px; margin-right: 0; }
             #nav-logged-out, #nav-logged-in { width:100%; margin-left:0; }
             .nav-utility-row, .navbar-links { justify-content:flex-start; width:100%; }
+            .nav-section { width:100%; flex-wrap:wrap; }
             .navbar-links a, #nav-logged-out a { padding: 6px 8px; }
             .search-bar { width: 100%; max-width: none; font-size: 16px; }
             .sculpt-coins { font-size: 14px; }
@@ -389,6 +402,7 @@
             #studio-mobile-controls { display:block; }
             #studio-mobile-quick-insert { display:block; }
             .studio-mobile-right { max-width:66%; }
+            .groups-layout { grid-template-columns: 1fr; }
         }
     </style>
 </head>
@@ -735,29 +749,41 @@
                 </div>
             </div>
             <div class="navbar-links">
-                <a onclick="navigate('dashboard')">Dashboard</a>
-                <a onclick="enterSculptCity()">Sculpt City</a>
-                <a onclick="navigate('library')">Library</a>
-                <a onclick="navigate('chat')">Global Chat</a>
-                <a onclick="navigate('groups')">Groups</a>
-                <a onclick="navigate('creator-leagues')">Creator Leagues</a>
-                <a onclick="navigate('events')">Events</a>
-                <a onclick="navigate('create')">Create</a>
-                <a onclick="navigate('shop')">Shop</a>
-                <a onclick="navigate('inventory')">Inventory</a>
-                <a onclick="navigate('avatar')">Avatar</a>
-                <a onclick="navigate('friends')">Friends</a>
-                <a onclick="navigate('messages')">Messages</a>
-                <a id="nav-chat-logs" onclick="navigate('chat-logs')" style="display:none;">Chat Logs</a>
-                <a id="nav-economy-admin" onclick="navigate('economy-admin')" style="display:none;">Economy Admin</a>
-                <a onclick="navigate('academy')">Academy</a>
-                <a onclick="navigate('jams')">Jams</a>
-                <a onclick="navigate('funlab')">Fun Lab</a>
-                <a onclick="navigate('live')">Playsculpt Live</a>
-                <a id="nav-mod-panel" onclick="openModPanel()" style="display:none;">Mod Panel</a>
-                <a onclick="navigateProfile()">Profile</a>
-                <a onclick="navigate('settings')">Settings</a>
-                <a onclick="logout()">Logout</a>
+                <div class="nav-section">
+                    <span class="nav-section-label">Explore</span>
+                    <a onclick="navigate('dashboard')">Dashboard</a>
+                    <a onclick="enterSculptCity()">Sculpt City</a>
+                    <a onclick="navigate('library')">Library</a>
+                    <a onclick="navigate('groups')">Groups</a>
+                    <a onclick="navigate('events')">Events</a>
+                    <a onclick="navigate('live')">Playsculpt Live</a>
+                </div>
+                <div class="nav-section">
+                    <span class="nav-section-label">Community</span>
+                    <a onclick="navigate('chat')">Global Chat</a>
+                    <a onclick="navigate('friends')">Friends</a>
+                    <a onclick="navigate('messages')">Messages</a>
+                    <a onclick="navigate('creator-leagues')">Creator Leagues</a>
+                    <a onclick="navigate('academy')">Academy</a>
+                </div>
+                <div class="nav-section">
+                    <span class="nav-section-label">Create</span>
+                    <a onclick="navigate('create')">Create</a>
+                    <a onclick="navigate('jams')">Jams</a>
+                    <a onclick="navigate('funlab')">Fun Lab</a>
+                    <a onclick="navigate('shop')">Shop</a>
+                    <a onclick="navigate('inventory')">Inventory</a>
+                    <a onclick="navigate('avatar')">Avatar</a>
+                </div>
+                <div class="nav-section">
+                    <span class="nav-section-label">Account</span>
+                    <a onclick="navigateProfile()">Profile</a>
+                    <a onclick="navigate('settings')">Settings</a>
+                    <a id="nav-chat-logs" onclick="navigate('chat-logs')" style="display:none;">Chat Logs</a>
+                    <a id="nav-economy-admin" onclick="navigate('economy-admin')" style="display:none;">Economy Admin</a>
+                    <a id="nav-mod-panel" onclick="openModPanel()" style="display:none;">Mod Panel</a>
+                    <a onclick="logout()">Logout</a>
+                </div>
             </div>
         </div>
     </div>
@@ -945,39 +971,46 @@
 
         <!-- Groups View -->
        <div id="view-groups" class="view">
-            <div class="card">
-                <div class="card-title">
-                    <h2 style="margin: 0;">Discover Groups</h2>
-                    <div class="popup-character-group" style="margin:0;">
-                        <div class="popup-character"></div>
-                        <div class="popup-character alt"></div>
-                        <div class="popup-character"></div>
+            <div class="card groups-redesign">
+                <div class="groups-hero">
+                    <div>
+                        <h2>Discover Groups</h2>
+                        <p>Find active communities, team up, and climb Playtime Wars.</p>
                     </div>
-                    <div style="display: flex; gap: 10px;">
+                    <div class="groups-actions">
                         <input type="text" id="group-search" class="form-control" style="width: 200px;" placeholder="Search Groups..." onkeydown="if(event.key==='Enter') searchGroups()">
                         <button class="btn btn-success btn-sm" onclick="promptCreateGroup()">Create Group</button>
                     </div>
                 </div>
 
                 <div id="group-search-results-container" style="display:none; margin-bottom: 20px;">
-                    <h3 style="border-bottom: 1px solid #eee; padding-bottom: 5px;">Search Results</h3>
+                    <h3 style="border-bottom: 1px solid #eee; padding-bottom: 5px; color:#4338ca;">Search Results</h3>
                     <button class="btn btn-sm btn-info mb-10" onclick="clearGroupSearch()">Clear Search</button>
                     <div id="group-search-grid" class="game-grid"></div>
                 </div>
 
-                <div id="group-discover-container">
-                    <h3 style="border-bottom: 1px solid #eee; padding-bottom: 5px;">Most Active Groups</h3>
-                    <div id="groups-active-grid" class="game-grid mb-10"></div>
-
-                    <h3 style="border-bottom: 1px solid #eee; padding-bottom: 5px;">Most Members</h3>
-                    <div id="groups-members-grid" class="game-grid mb-10"></div>
-
-                    <h3 style="border-bottom: 1px solid #eee; padding-bottom: 5px;">Recently Created</h3>
-                    <div id="groups-recent-grid" class="game-grid mb-10"></div>
-
-                    <h3 style="border-bottom: 1px solid #eee; padding-bottom: 5px;">Playtime Wars</h3>
-                    <p style="font-size:12px; color:#666; margin-top:0;">Track total weekly group playtime. Top groups each week win SculptCoin rewards split across their top 10 contributors.</p>
-                    <div id="playtime-wars-grid" class="game-grid mb-10"></div>
+                <div id="group-discover-container" class="groups-layout">
+                    <div class="groups-main">
+                        <div class="groups-panel">
+                            <h3>Most Active Groups</h3>
+                            <div id="groups-active-grid" class="game-grid mb-10"></div>
+                        </div>
+                        <div class="groups-panel">
+                            <h3>Most Members</h3>
+                            <div id="groups-members-grid" class="game-grid mb-10"></div>
+                        </div>
+                    </div>
+                    <div class="groups-main">
+                        <div class="groups-panel">
+                            <h3>Recently Created</h3>
+                            <div id="groups-recent-grid" class="game-grid mb-10"></div>
+                        </div>
+                        <div class="groups-panel">
+                            <h3>Playtime Wars</h3>
+                            <p style="font-size:12px; color:#5b5b8a; margin-top:0;">Track weekly group playtime. Top groups earn SculptCoin rewards shared across top contributors.</p>
+                            <div id="playtime-wars-grid" class="game-grid mb-10"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
